@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% set path = "/reports/" %}
+
+{% block title %}Reports &mdash; Drift Audit{% endblock %}
+{% block description %}Weekly and monthly plain-English writeups of LLM drift, most recent first.{% endblock %}
+
+{% block main %}
+<article class="page">
+  <h1>Reports</h1>
+  <p class="lede">
+    Plain-English writeups of what changed and why it matters. Weekly
+    reports summarize the current snapshot; monthly reports zoom out to
+    the trend.
+  </p>
+
+  <p>
+    <a href="/feed.xml" rel="alternate" type="application/atom+xml">Subscribe via Atom</a>
+  </p>
+
+  {% for year in reports_by_year | sort(reverse=True) %}
+  <section class="year-block">
+    <h2 id="y{{ year }}">{{ year }}</h2>
+    <ol class="report-list">
+      {% for r in reports_by_year[year] %}
+      <li>
+        <a href="{{ r.canonical_path }}">
+          <strong>{{ r.title }}</strong>
+        </a>
+        <p class="muted">
+          <time datetime="{{ r.date }}">{{ r.date }}</time> &middot;
+          {{ r.kind_label }}
+          {% if r.axes %}
+          &middot; {% for axis in r.axes %}<code>{{ axis }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+          {% endif %}
+        </p>
+        <p>{{ r.summary }}</p>
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+  {% endfor %}
+</article>
+{% endblock %}

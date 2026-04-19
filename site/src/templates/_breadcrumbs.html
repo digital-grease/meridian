@@ -1,0 +1,11 @@
+{% if crumbs %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <ol>
+    {% for c in crumbs %}
+    <li>
+      {% if c.get("href") %}<a href="{{ c.href }}">{{ c.text }}</a>{% else %}<span aria-current="page">{{ c.text }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</nav>
+{% endif %}

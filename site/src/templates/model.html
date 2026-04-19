@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% set path = "/models/" + model.model_id + "/" %}
+
+{% block title %}{{ model.display_name }} — Drift Audit{% endblock %}
+{% block description %}Longitudinal drift metrics for {{ model.display_name }} across the Drift Audit corpus.{% endblock %}
+
+{% block main %}
+{% set crumbs = [
+  {"href": "/", "text": "Home"},
+  {"href": "/models/", "text": "Models"},
+  {"text": model.display_name}
+] %}
+{% include "_breadcrumbs.html" %}
+
+<article class="page">
+  <h1>{{ model.display_name }}</h1>
+  <p class="muted">
+    {{ model.provider }} · <code>{{ model.version_string }}</code>
+    · <a href="{{ path }}{{ manifest.snapshot.week_id }}/">Latest week snapshot</a>
+  </p>
+
+  {% set metric_specs = [
+    {"key": "refusal_rate",   "label": "Refusal rate",   "fmt": "{:.2f}"},
+    {"key": "hedge_density",  "label": "Hedge density",  "fmt": "{:.2f}"},
+    {"key": "length_median",  "label": "Median length",  "fmt": "{:.0f}"}
+  ] %}
+
+  {% for spec in metric_specs %}
+  <section class="metric-section" aria-labelledby="m-{{ spec.key }}">
+    <h2 id="m-{{ spec.key }}">{{ spec.label }}</h2>
+    <table class="metric-table">
+      <caption>
+        Weekly {{ spec.label | lower }} per prompt. Sparkline spans
+        {{ weeks | length }} weeks, oldest at the left.
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Prompt</th>
+          <th scope="col">Axis</th>
+          <th scope="col">Trend</th>
+          <th scope="col">Latest</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in prompts %}
+        {% set ts = timeseries(p.prompt_id, model.model_id, spec.key) %}
+        {% set values = ts | map(attribute=1) | list %}
+        <tr>
+          <th scope="row"><a href="/prompts/{{ p.prompt_id }}/">{{ p.title }}</a></th>
+          <td><a href="/axes/{{ p.axis }}/">{{ p.axis | replace('-', ' ') }}</a></td>
+          <td>{{ values | sparkline(label=p.title, value_format=spec.fmt) }}</td>
+          <td>{% if values %}<code>{{ spec.fmt.format(values[-1]) }}</code>{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endfor %}
+</article>
+{% endblock %}

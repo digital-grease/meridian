@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% set path = "/about/" %}
+
+{% block title %}About &mdash; Drift Audit{% endblock %}
+{% block description %}Who runs Drift Audit, why, and how it&rsquo;s governed.{% endblock %}
+
+{% block main %}
+<article class="page">
+  <h1>About Drift Audit</h1>
+  <p class="lede">
+    Large language models are the default knowledge interface for a growing
+    number of people. What they decline, reframe, caveat, or present as
+    settled shapes public understanding at scale &mdash; and those choices
+    change without notice or changelog. This project is the public record
+    of those changes.
+  </p>
+
+  <h2>What Drift Audit is</h2>
+  <p>
+    A longitudinal measurement: each week we query a fixed prompt corpus
+    against every major commercial LLM, store the responses with full version
+    metadata, and publish statistically rigorous drift reports. The artifact
+    we produce &mdash; a public, timestamped, reproducible record of how
+    frontier models&rsquo; stances, refusals, and framings change over time
+    &mdash; did not previously exist.
+  </p>
+
+  <h2>What it is not</h2>
+  <ul>
+    <li>Not a capability benchmark. HELM and LMSYS Arena measure that.</li>
+    <li>Not a criticism of AI safety work categorically. We distinguish
+      legitimate safety improvements from normative drift and report each
+      separately.</li>
+    <li>Not a jailbreak toolkit. Our prompts are measurement instruments,
+      not attack vectors.</li>
+    <li>Not affiliated with any provider, advocacy organization, or
+      political party.</li>
+  </ul>
+
+  <h2>Governance</h2>
+  <p>
+    Code is MIT-licensed; corpus and data are CC&nbsp;BY-SA&nbsp;4.0. Anyone
+    can run their own instance; forks are encouraged. The canonical instance
+    is maintained by a small group of volunteers whose names and affiliations
+    are public.
+  </p>
+
+  <h2>Conflicts of interest</h2>
+  <p>
+    Contributors disclose employment or consulting relationships with any LLM
+    provider. The project does not accept funding from providers, and no
+    provider gets a preview of a report before publication.
+    See <a href="/funding/">/funding/</a> for the full list of funding sources.
+  </p>
+
+  <h2>Contact</h2>
+  <p>
+    Issues and prompt proposals: <a href="/contribute/">/contribute/</a>.<br>
+    Press inquiries: <code>press@drift-audit.example</code> (placeholder).<br>
+    Security reports: <code>security@drift-audit.example</code> (placeholder).
+  </p>
+</article>
+{% endblock %}

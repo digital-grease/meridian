@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Drift Audit — reports</title>
+  <subtitle>How LLM stances, refusals, and framings change over time.</subtitle>
+  <link href="{{ site_origin }}/feed.xml" rel="self" />
+  <link href="{{ site_origin }}/" />
+  <id>{{ site_origin }}/</id>
+  <updated>{{ feed_updated }}</updated>
+  <author><name>Drift Audit</name></author>
+  <rights>CC BY-SA 4.0</rights>
+  <generator>meridian build.py</generator>
+  {% for r in reports[:50] %}
+  <entry>
+    <title>{{ r.title }}</title>
+    <link href="{{ r.canonical_url }}" />
+    <id>{{ r.canonical_url }}</id>
+    <updated>{{ r.updated_rfc3339 }}</updated>
+    <published>{{ r.updated_rfc3339 }}</published>
+    <summary>{{ r.summary }}</summary>
+    {% for axis in r.axes %}
+    <category term="{{ axis }}" />
+    {% endfor %}
+  </entry>
+  {% endfor %}
+</feed>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" role="img" aria-label="Drift Audit">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#111214"/>
+      <stop offset="100%" stop-color="#1a1c1f"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <g fill="#ededed" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+    <text x="80" y="160" font-size="88" font-weight="700" letter-spacing="-0.02em">Drift Audit</text>
+    <text x="80" y="240" font-size="36" fill="#a8a8a5">How commercial LLMs&#8217; stances, refusals,</text>
+    <text x="80" y="288" font-size="36" fill="#a8a8a5">and framings change over time &#8212; with receipts.</text>
+
+    <g transform="translate(80,380)">
+      <rect width="120" height="10" rx="2" fill="#440154"/>
+      <rect x="130" width="120" height="10" rx="2" fill="#3b528b"/>
+      <rect x="260" width="120" height="10" rx="2" fill="#21918c"/>
+      <rect x="390" width="120" height="10" rx="2" fill="#5ec962"/>
+      <rect x="520" width="120" height="10" rx="2" fill="#fde725"/>
+    </g>
+
+    <text x="80" y="550" font-size="22" fill="#7ab8ff">drift-audit.example</text>
+    <text x="80" y="580" font-size="18" fill="#a8a8a5">CC BY-SA 4.0 &#183; MIT code &#183; No provider funding</text>
+  </g>
+</svg>

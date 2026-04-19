@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% set path = "/data/" %}
+
+{% block title %}Data — Drift Audit{% endblock %}
+{% block description %}Weekly data snapshots: every metric this site reports, in CSV and JSONL, with checksums and a stable license.{% endblock %}
+
+{% block main %}
+{% set crumbs = [
+  {"href": "/", "text": "Home"},
+  {"text": "Data"}
+] %}
+{% include "_breadcrumbs.html" %}
+
+<article class="page">
+  <h1>Data</h1>
+  <p class="lede">
+    Weekly snapshots. Every number on the dashboard is derived from one of
+    these files. License: CC&nbsp;BY-SA&nbsp;4.0.
+  </p>
+
+  <p>
+    <a href="/data/schema/">Schema documentation</a> describes each column
+    and its units.
+  </p>
+
+  <h2>Citing this dataset</h2>
+  <pre><code>@misc{driftaudit_dataset,
+  title        = {{ '{{' }}Drift Audit weekly snapshots{{ '}}' }},
+  author       = {Drift Audit},
+  year         = {{ '{' }}{{ manifest.snapshot.week_id[:4] }}{{ '}' }},
+  howpublished = {\url{https://drift-audit.example/data/}},
+  note         = {CC BY-SA 4.0; accessed YYYY-MM-DD}
+}</code></pre>
+
+  <h2>Snapshots</h2>
+  <table class="metric-table">
+    <caption>All published snapshots, newest first.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Week</th>
+        <th scope="col">Rows</th>
+        <th scope="col">Files</th>
+        <th scope="col">Checksums</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in snapshots %}
+      <tr>
+        <th scope="row">
+          <a href="/data/{{ s.week_id }}/"><code>{{ s.week_id }}</code></a>
+          {% if s.is_current %}<span class="tag">current</span>{% endif %}
+        </th>
+        <td><code>{{ s.row_count }}</code></td>
+        <td>
+          {% for f in s.files %}
+          <a href="/data/{{ s.week_id }}/{{ f.name }}"><code>{{ f.name }}</code></a>
+          <span class="muted">({{ f.size }}&nbsp;B)</span>{% if not loop.last %}, {% endif %}
+          {% endfor %}
+        </td>
+        <td><a href="/data/{{ s.week_id }}/SHA256SUMS"><code>SHA256SUMS</code></a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Raw response bodies</h2>
+  <p>
+    The CSV/JSONL above contains the computed metrics, not the raw responses.
+    Raw response text and JSON are referenced from the manifest by S3 URI; a
+    mirrored <code>responses.jsonl.gz</code> will be published here in a
+    future snapshot.
+  </p>
+
+  <h2>Reproducibility</h2>
+  <p>
+    Every file listed here has a SHA-256 in its snapshot&rsquo;s
+    <code>SHA256SUMS</code>. A stable URL never changes: if you cite
+    <code>/data/2026-W16/metrics.csv</code> today, that exact file will be
+    here tomorrow.
+  </p>
+</article>
+{% endblock %}

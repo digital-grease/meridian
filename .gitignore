@@ -1,0 +1,35 @@
+# Build output
+site/dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Pipeline intermediates (do not check in raw API responses)
+data/raw/
+data/cache/
+metrics/local/
+
+# Secrets
+*.pem
+*.key
+secrets/
+.env.local

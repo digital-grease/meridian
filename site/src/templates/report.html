@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% set path = report.canonical_path %}
+
+{% block title %}{{ report.title }} &mdash; Drift Audit{% endblock %}
+{% block description %}{{ report.summary }}{% endblock %}
+{% block og_type %}article{% endblock %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "{{ report.title }}",
+  "datePublished": "{{ report.date }}",
+  "author": { "@type": "Organization", "name": "Drift Audit" },
+  "publisher": { "@type": "Organization", "name": "Drift Audit" },
+  "mainEntityOfPage": "https://drift-audit.example{{ report.canonical_path }}"
+}
+</script>
+{% endblock %}
+
+{% block main %}
+<article class="report">
+  <header class="report-header">
+    <p class="report-kicker">
+      <a href="/reports/">Reports</a> &middot;
+      <strong>{{ report.kind_label }}</strong> &middot;
+      <time datetime="{{ report.date }}">{{ report.date }}</time>
+    </p>
+    <h1>{{ report.title }}</h1>
+    <p class="lede">{{ report.summary }}</p>
+    {% if report.axes %}
+    <p class="report-tags">
+      {% for axis in report.axes %}
+      <a class="tag" href="/axes/{{ axis }}/">{{ axis | replace('-', ' ') }}</a>
+      {% endfor %}
+    </p>
+    {% endif %}
+  </header>
+
+  {# report.body is a sanitized Markup; no | safe needed #}
+  <div class="report-body">
+    {{ report.body }}
+  </div>
+
+  {% include "_citation.html" %}
+</article>
+{% endblock %}

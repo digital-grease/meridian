@@ -1,0 +1,30 @@
+<section class="citation" aria-labelledby="cite-heading">
+  <h2 id="cite-heading">Cite this</h2>
+  <p class="muted">Permanent URL: <a href="{{ report.canonical_url }}"><code>{{ report.canonical_url }}</code></a></p>
+
+  <details>
+    <summary>BibTeX</summary>
+    <pre><code>@misc{driftaudit{{ report.slug | replace('-', '') }},
+  title        = {{ '{{' }}{{ report.title | striptags }}{{ '}}' }},
+  author       = {Drift Audit},
+  year         = {{ '{' }}{{ report.year }}{{ '}' }},
+  howpublished = {\url{{ '{' }}{{ report.canonical_url }}{{ '}' }}},
+  note         = {Accessed: YYYY-MM-DD}
+}</code></pre>
+  </details>
+
+  <details>
+    <summary>APA</summary>
+    <p>Drift Audit. ({{ report.year }}, {{ report.month_name }} {{ report.day }}). <em>{{ report.title | striptags }}</em>. <a href="{{ report.canonical_url }}">{{ report.canonical_url }}</a></p>
+  </details>
+
+  <details>
+    <summary>Chicago</summary>
+    <p>Drift Audit. &ldquo;{{ report.title | striptags }}.&rdquo; {{ report.date }}. <a href="{{ report.canonical_url }}">{{ report.canonical_url }}</a>.</p>
+  </details>
+
+  <details>
+    <summary>Harvard</summary>
+    <p>Drift Audit ({{ report.year }}) &lsquo;{{ report.title | striptags }}&rsquo;, {{ report.date }}. Available at: <a href="{{ report.canonical_url }}">{{ report.canonical_url }}</a>.</p>
+  </details>
+</section>

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% set path = "/prompts/" %}
+
+{% block title %}Prompts — Drift Audit{% endblock %}
+{% block description %}All prompts in the Drift Audit corpus.{% endblock %}
+
+{% block main %}
+{% set crumbs = [
+  {"href": "/", "text": "Home"},
+  {"text": "Prompts"}
+] %}
+{% include "_breadcrumbs.html" %}
+
+<article class="page">
+  <h1>Prompts</h1>
+  <p class="lede">
+    The full list of prompts in the public corpus. Each links to a
+    per-prompt drill-down with per-model time series. For a grouped view,
+    see <a href="/axes/">axes</a>.
+  </p>
+
+  {% set axes = manifest.prompts | map(attribute='axis') | unique | list | sort %}
+  {% for axis in axes %}
+  {% set axis_prompts = manifest.prompts | selectattr('axis', 'equalto', axis) | list %}
+  <section>
+    <h2 id="axis-{{ axis }}">{{ axis | replace('-', ' ') | capitalize }}</h2>
+    <ul class="prompt-list">
+      {% for p in axis_prompts %}
+      <li>
+        <a href="/prompts/{{ p.prompt_id }}/"><strong>{{ p.title }}</strong></a>
+        <code class="muted">{{ p.prompt_id }}</code>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endfor %}
+</article>
+{% endblock %}

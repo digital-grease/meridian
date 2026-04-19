@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% set path = "/contribute/" %}
+
+{% block title %}Contribute &mdash; Drift Audit{% endblock %}
+{% block description %}How to propose new corpus prompts, report bugs, or help run your own instance.{% endblock %}
+
+{% block main %}
+<article class="page">
+  <h1>Contribute</h1>
+  <p class="lede">
+    The corpus is the measuring instrument. Good contributions to the corpus
+    &mdash; thoughtful prompts in underserved axes &mdash; make the record
+    more useful for everyone.
+  </p>
+
+  <h2>Proposing a prompt</h2>
+  <p>
+    Open an issue on the source repository using the
+    <strong>Prompt proposal</strong> template. Your proposal should include:
+  </p>
+  <ul>
+    <li>The exact prompt text.</li>
+    <li>The <a href="/corpus/">axis</a> you believe it fits (or a new axis
+      with a rationale for why existing axes don&rsquo;t cover it).</li>
+    <li>What drift you think this prompt could expose and why that matters.</li>
+    <li>Any known prior art &mdash; has this prompt been used in a study,
+      benchmark, or news story?</li>
+    <li>Optional: expected stance direction, if any, based on current
+      public discourse.</li>
+  </ul>
+
+  <h2>What we reject</h2>
+  <ul>
+    <li>Prompts designed to embarrass a specific provider. We measure
+      drift; we are not a marketing arm for anyone.</li>
+    <li>Prompts that would put our API keys at risk of takedown or that
+      seek actually-harmful outputs. The
+      <a href="/corpus/#axis-refusal-boundary">refusal-boundary axis</a>
+      covers the gradient at a specificity level short of operational harm.</li>
+    <li>Duplicates of prompts already in the corpus (public or held-out).
+      Maintainers will check.</li>
+  </ul>
+
+  <h2>Reporting bugs</h2>
+  <p>
+    Methodology errors, statistical mistakes, or site bugs: open an issue and
+    cite the specific URL or chart. We fix faster with a reproducible example.
+  </p>
+
+  <h2>Running your own instance</h2>
+  <p>
+    Clone the repository, add your provider API keys, run the pipeline, and
+    build the site:
+  </p>
+  <pre><code>git clone https://github.com/drift-audit/meridian
+cd meridian
+uv sync
+# ... provider setup ...
+uv run python site/src/build.py \
+    --manifest site/fixtures/manifest-2026-W16.json \
+    --out site/dist</code></pre>
+  <p>
+    MIT-licensed code is intended to lower the barrier to running your own
+    instance. Forks that diverge in methodology are welcome; please use a
+    different site name so citations stay clean.
+  </p>
+</article>
+{% endblock %}

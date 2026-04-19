@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% set path = "/funding/" %}
+
+{% block title %}Funding &mdash; Drift Audit{% endblock %}
+{% block description %}Who pays for Drift Audit. Funding sources are public, prominent, and deliberately constrained.{% endblock %}
+
+{% block main %}
+<article class="page">
+  <h1>Funding</h1>
+  <p class="lede">
+    Funding sources are public and prominent because independence is what
+    makes the record credible.
+  </p>
+
+  <h2>Hard rules</h2>
+  <ul>
+    <li>We do not accept funding from any commercial LLM provider, now or ever.</li>
+    <li>We do not accept paid placement, sponsored content, or preferential
+      treatment in analysis.</li>
+    <li>No funder sees a report before it is published.</li>
+    <li>All funding sources are listed on this page.</li>
+  </ul>
+
+  <h2>Current sources</h2>
+  <p>
+    The project is bootstrapped from volunteer labor and out-of-pocket API
+    credits. As the corpus and model coverage grow, funding will likely come
+    from some combination of:
+  </p>
+  <ul>
+    <li>Individual sponsors via GitHub Sponsors or Open Collective.</li>
+    <li>Grants from AI-safety and civil-society foundations.</li>
+    <li>Patronage from journalism or research organizations whose work
+      benefits from the measurements.</li>
+    <li>Institutional subscriptions for deep-access to raw data, while the
+      aggregate dashboard stays free.</li>
+  </ul>
+  <p class="muted">
+    Detailed funding disclosures will be posted here as soon as they exist.
+  </p>
+
+  <h2>Cost transparency</h2>
+  <p>
+    The dominant expense is API costs at the providers we measure. Rough
+    order-of-magnitude for a full roster: ~$12,000 per year at current
+    prices. Infrastructure (GitHub Pages, a small Postgres instance, worker
+    compute) is budgeted at under $500 per month.
+  </p>
+
+  <h2>Sponsor us</h2>
+  <p>
+    We are not currently accepting sponsorship. When we are, the mechanism
+    will be public and described here.
+  </p>
+</article>
+{% endblock %}

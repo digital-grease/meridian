@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% set path = "/404.html" %}
+
+{% block title %}Not found &mdash; Drift Audit{% endblock %}
+{% block description %}That URL isn&rsquo;t here. Try these instead.{% endblock %}
+
+{% block main %}
+<article class="page">
+  <h1>That URL isn&rsquo;t here.</h1>
+  <p class="lede">
+    Our URLs are supposed to be permanent. If one is missing, it&rsquo;s a
+    bug &mdash; please
+    <a href="/contribute/">file an issue</a> with the URL you were trying
+    to reach.
+  </p>
+
+  <h2>Common landing pages</h2>
+  <ul>
+    <li><a href="/">Home</a></li>
+    <li><a href="/reports/">Reports</a> &mdash; weekly and monthly writeups</li>
+    <li><a href="/axes/">Axes</a> &mdash; prompts grouped by what they measure</li>
+    <li><a href="/models/">Models</a> &mdash; per-provider drill-downs</li>
+    <li><a href="/data/">Data</a> &mdash; raw weekly snapshots</li>
+    <li><a href="/methodology/">Methodology</a></li>
+    <li><a href="/corpus/">Corpus</a></li>
+  </ul>
+
+  <h2>Citing this site?</h2>
+  <p>
+    If you followed a citation that went stale, please include the original
+    URL and context when you file an issue. We treat citation-stability bugs
+    as high priority; they&rsquo;re usually fixable by adding a redirect.
+  </p>
+</article>
+{% endblock %}

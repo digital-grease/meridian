@@ -1,0 +1,51 @@
+[project]
+name = "meridian"
+version = "0.1.0"
+description = "Drift Audit — longitudinal measurement of LLM drift. Monorepo: site builder + analysis pipeline."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Drift Audit contributors" }]
+dependencies = [
+  "jinja2>=3.1,<4",
+  "pydantic>=2.7,<3",
+  "markdown>=3.6,<4",
+  "nh3>=0.2,<1",
+  # Pipeline
+  "httpx>=0.27,<1",
+  "pyyaml>=6,<7",
+  "tenacity>=8,<10",
+  "anthropic>=0.40,<1",
+  "openai>=1.40,<2",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8,<9",
+  "pytest-asyncio>=0.23,<1",
+  "respx>=0.21,<1",
+  "ruff>=0.5,<1",
+]
+charts = [
+  "matplotlib>=3.9,<4",
+]
+search = [
+  # Index builder for the progressive-enhancement search (Phase 6).
+  # minisearch itself is client-side JS; this is for building the index.
+  "lunr>=0.7,<1",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF"]
+ignore = ["E501"]  # line-length handled by formatter
+
+[tool.pytest.ini_options]
+testpaths = ["drift_audit/tests", "site/tests"]
+asyncio_mode = "auto"

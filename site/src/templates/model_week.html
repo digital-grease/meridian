@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% set path = "/models/" + model.model_id + "/" + week_id + "/" %}
+
+{% block title %}{{ model.display_name }} · {{ week_id }} — Drift Audit{% endblock %}
+{% block description %}Snapshot of {{ model.display_name }} for week {{ week_id }}: per-prompt refusal, hedge density, and length stats.{% endblock %}
+
+{% block main %}
+{% set crumbs = [
+  {"href": "/", "text": "Home"},
+  {"href": "/models/", "text": "Models"},
+  {"href": "/models/" + model.model_id + "/", "text": model.display_name},
+  {"text": week_id}
+] %}
+{% include "_breadcrumbs.html" %}
+
+<article class="page">
+  <h1>{{ model.display_name }} — {{ week_id }}</h1>
+  <p class="muted">
+    Snapshot generated {{ manifest.snapshot.generated_at }}.
+    Raw samples: <a href="/data/{{ week_id }}/">/data/{{ week_id }}/</a>.
+  </p>
+
+  <table class="metric-table">
+    <caption>All prompts this week, with N=20 per-prompt metrics.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Prompt</th>
+        <th scope="col">Axis</th>
+        <th scope="col">Refusal</th>
+        <th scope="col">CI</th>
+        <th scope="col">Hedge</th>
+        <th scope="col">Median len</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in week_metrics %}
+      {% set p = manifest.prompt_by_id(m.prompt_id) %}
+      <tr>
+        <th scope="row"><a href="/prompts/{{ m.prompt_id }}/">{{ p.title }}</a></th>
+        <td><a href="/axes/{{ p.axis }}/">{{ p.axis | replace('-', ' ') }}</a></td>
+        <td><code>{{ "%.2f" % m.refusal_rate }}</code></td>
+        <td class="muted"><code>[{{ "%.2f" % m.refusal_ci.lower }}, {{ "%.2f" % m.refusal_ci.upper }}]</code></td>
+        <td><code>{{ "%.2f" % m.hedge_density }}</code></td>
+        <td><code>{{ "%.0f" % m.length.median }}</code></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</article>
+{% endblock %}

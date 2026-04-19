@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% set path = "/data/schema/" %}
+
+{% block title %}Data schema — Drift Audit{% endblock %}
+{% block description %}Column definitions, units, and semantics for the Drift Audit weekly metrics dataset.{% endblock %}
+
+{% block main %}
+{% set crumbs = [
+  {"href": "/", "text": "Home"},
+  {"href": "/data/", "text": "Data"},
+  {"text": "Schema"}
+] %}
+{% include "_breadcrumbs.html" %}
+
+<article class="page">
+  <h1>Data schema</h1>
+  <p class="lede">
+    Every snapshot under <a href="/data/"><code>/data/</code></a> follows this
+    schema. Any change that breaks backward compatibility bumps the
+    <code>schema_version</code> field in the manifest (currently
+    <code>1</code>).
+  </p>
+
+  <h2><code>metrics.csv</code> / <code>metrics.jsonl</code></h2>
+  <p>
+    One row per (prompt × model) per week. Sampling is N=20 at the
+    provider&rsquo;s default temperature; see the
+    <a href="/methodology/">methodology</a> for details.
+  </p>
+  <dl class="metric-glossary">
+    <dt><code>week_id</code></dt><dd>ISO 8601 week identifier, e.g. <code>2026-W16</code>.</dd>
+    <dt><code>prompt_id</code></dt><dd>Stable slug; see <a href="/corpus/">/corpus/</a>.</dd>
+    <dt><code>model_id</code></dt><dd>Stable slug per observed model.</dd>
+    <dt><code>n_samples</code></dt><dd>Number of samples in the aggregate (integer).</dd>
+    <dt><code>refusal_rate</code></dt><dd>Fraction of samples that declined to answer, in [0, 1].</dd>
+    <dt><code>refusal_ci_lower</code>, <code>refusal_ci_upper</code></dt><dd>Bootstrap 95% CI on refusal rate, in [0, 1].</dd>
+    <dt><code>hedge_density</code></dt><dd>Hedging markers per 100 tokens.</dd>
+    <dt><code>length_median</code></dt><dd>Median response length in tokens.</dd>
+    <dt><code>length_p25</code>, <code>length_p75</code></dt><dd>25th / 75th percentile lengths.</dd>
+    <dt><code>stance</code></dt><dd>Pro / anti / neutral / n/a. Applied only to stance-bearing prompts.</dd>
+    <dt><code>stance_confidence</code></dt><dd>Classifier confidence for stance, in [0, 1]. Empty where stance is n/a.</dd>
+    <dt><code>embedding_centroid_shift</code></dt><dd>Cosine distance of this week&rsquo;s embedding centroid from the prior week&rsquo;s, ≥ 0.</dd>
+    <dt><code>flagged_for_review</code></dt><dd>Boolean: human review flagged this row.</dd>
+    <dt><code>flag_reason</code></dt><dd>Free-text note; empty when not flagged.</dd>
+  </dl>
+
+  <h2><code>manifest.json</code></h2>
+  <p>
+    Present in the <em>current</em> snapshot directory. Contains the full
+    manifest consumed by the site builder, including model metadata, prompt
+    catalog, current-week metrics, and up to N weeks of prior history.
+    The machine-readable JSON Schema is at
+    <code>site/schemas/manifest.schema.json</code> in the source repository.
+  </p>
+
+  <h2>Versioning</h2>
+  <p>
+    The schema version is advertised in <code>manifest.json.schema_version</code>.
+    Column-level additions never bump the version. Column-level removals,
+    renames, or semantic changes bump the version; the prior column stays
+    available for a minimum-one-year transition window.
+  </p>
+
+  <h2>License</h2>
+  <p>
+    CC&nbsp;BY-SA&nbsp;4.0 for all data files. Attribution: Drift Audit,
+    with a link to the snapshot URL.
+  </p>
+</article>
+{% endblock %}

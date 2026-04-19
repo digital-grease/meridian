@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% set path = "/methodology/" %}
+
+{% block title %}Methodology &mdash; Drift Audit{% endblock %}
+{% block description %}How the Drift Audit corpus is built, how metrics are computed, and how any chart on this site can be reproduced from the raw data.{% endblock %}
+
+{% block main %}
+<article class="page">
+  <h1>Methodology</h1>
+  <p class="lede">
+    Every chart on this site is derived from a public, reproducible pipeline.
+    This page documents how we choose prompts, sample responses, compute metrics,
+    and guard against the ways this kind of project can go wrong.
+  </p>
+
+  <nav class="toc" aria-label="On this page">
+    <ul>
+      <li><a href="#corpus">Corpus design</a></li>
+      <li><a href="#sampling">Sampling</a></li>
+      <li><a href="#metrics">Metrics</a></li>
+      <li><a href="#statistics">Statistical rigor</a></li>
+      <li><a href="#reproduce">Reproducing a chart</a></li>
+      <li><a href="#limits">Limitations and hard problems</a></li>
+    </ul>
+  </nav>
+
+  <h2 id="corpus">Corpus design</h2>
+  <p>
+    The corpus spans six axes chosen for their different modes of drift:
+    <strong>political</strong>, <strong>historical-contested</strong>,
+    <strong>scientific-consensus</strong>, <strong>refusal-boundary</strong>,
+    <strong>neutral-control</strong>, and <strong>factual-stability</strong>.
+  </p>
+  <p>
+    Each prompt is versioned and hashed. We never edit prompts in place; a
+    revision supersedes the prior version and both run during a transition period
+    so longitudinal comparisons remain clean.
+  </p>
+  <p>
+    Roughly 30&ndash;70% of the corpus is held-out and never published. Drift
+    measured on the held-out split is compared against the public split: if
+    public prompts drift markedly less than held-out prompts, that is evidence
+    of benchmark-targeting and is itself publishable.
+  </p>
+
+  <h2 id="sampling">Sampling</h2>
+  <p>
+    For each <code>(prompt &times; model &times; week)</code> we capture
+    <strong>N = 20</strong> samples at provider-default temperature and
+    <strong>N = 5</strong> samples at temperature 0 (where supported). Full
+    metadata is logged: the exact model version string, API version, timestamp,
+    token counts, stop reason, and any provider-reported safety flags.
+  </p>
+  <p>
+    Responses are stored append-only. The raw log is never overwritten or
+    rewritten &mdash; only extended.
+  </p>
+
+  <h2 id="metrics">Metrics</h2>
+  <dl class="metric-glossary">
+    <dt>Refusal rate</dt>
+    <dd>Fraction of the <em>N</em> samples that declined to answer. Classified
+      by a hand-labeled model validated at &ge; 95% F1 across providers.</dd>
+
+    <dt>Hedge density</dt>
+    <dd>Count of hedging markers per 100 tokens (&ldquo;it&rsquo;s important to
+      note,&rdquo; &ldquo;some people argue,&rdquo; &hellip;). A measure of
+      framing.</dd>
+
+    <dt>Embedding centroid shift</dt>
+    <dd>Week-over-week movement of the mean sentence-embedding centroid.
+      Spikes flag candidates for human review.</dd>
+
+    <dt>Stance score</dt>
+    <dd>Zero-shot pro / anti / neutral classification, applied only to
+      stance-bearing prompts. Periodically re-validated by hand.</dd>
+
+    <dt>Length distribution</dt>
+    <dd>Median and interquartile range of response length in tokens.
+      Significant shifts often accompany policy updates.</dd>
+  </dl>
+
+  <h2 id="statistics">Statistical rigor</h2>
+  <ul>
+    <li>Bootstrap <strong>confidence intervals</strong> on every reported metric.</li>
+    <li><strong>Benjamini&ndash;Hochberg</strong> correction for multiple testing
+      &mdash; with hundreds of prompts tested weekly, false positives are
+      otherwise guaranteed.</li>
+    <li><strong>Change-point detection</strong> (PELT) on time series rather than
+      naive thresholds.</li>
+    <li><strong>Pre-registered</strong> hypotheses for major analyses, timestamped
+      in the public repo before the data is seen.</li>
+  </ul>
+
+  <h2 id="reproduce">Reproducing a chart</h2>
+  <ol>
+    <li>Every rendered page carries a footer line with the build&rsquo;s git
+      commit SHA and a link to the data snapshot it was rendered from.</li>
+    <li>Fetch the snapshot from
+      <a href="/data/">/data/{iso-week}/</a> (CSV, JSON, and Parquet).</li>
+    <li>Clone the repository at the stated commit and run
+      <code>uv run python site/src/build.py --manifest &lt;snapshot&gt;</code>.</li>
+    <li>The output is byte-identical to what this site served, modulo the
+      build timestamp surfaced in <code>build.json</code>.</li>
+  </ol>
+
+  <h2 id="limits">Limitations and hard problems</h2>
+  <ul>
+    <li>Providers sometimes update model weights without changing the version
+      string. We detect this via distribution shift on the neutral-control
+      axis and flag it prominently when it occurs.</li>
+    <li>Different users may receive different system prompts from the provider.
+      We cannot fully control for this; we document the ambiguity.</li>
+    <li>&ldquo;Legitimate safety improvement&rdquo; and &ldquo;normative drift&rdquo;
+      are reported separately. Changes on clearly-harmful prompts are treated
+      differently from changes on contested ones.</li>
+  </ul>
+
+  <p class="callout">
+    If you find a flaw in this methodology, open an issue. Transparency is the
+    point; corrections make the record stronger.
+  </p>
+</article>
+{% endblock %}

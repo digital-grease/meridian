@@ -1,0 +1,371 @@
+{
+  "$defs": {
+    "ConfidenceInterval": {
+      "additionalProperties": false,
+      "properties": {
+        "lower": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Lower",
+          "type": "number"
+        },
+        "upper": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Upper",
+          "type": "number"
+        }
+      },
+      "required": [
+        "lower",
+        "upper"
+      ],
+      "title": "ConfidenceInterval",
+      "type": "object"
+    },
+    "HistorySnapshot": {
+      "additionalProperties": false,
+      "description": "A prior week's metrics. Models and prompts are referenced by id\ninto the current manifest; the history field carries just the numbers.",
+      "properties": {
+        "generated_at": {
+          "format": "date-time",
+          "title": "Generated At",
+          "type": "string"
+        },
+        "metrics": {
+          "items": {
+            "$ref": "#/$defs/MetricRecord"
+          },
+          "title": "Metrics",
+          "type": "array"
+        },
+        "week_id": {
+          "title": "Week Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "week_id",
+        "generated_at",
+        "metrics"
+      ],
+      "title": "HistorySnapshot",
+      "type": "object"
+    },
+    "LengthStats": {
+      "additionalProperties": false,
+      "properties": {
+        "median": {
+          "minimum": 0.0,
+          "title": "Median",
+          "type": "number"
+        },
+        "n": {
+          "minimum": 0,
+          "title": "N",
+          "type": "integer"
+        },
+        "p25": {
+          "minimum": 0.0,
+          "title": "P25",
+          "type": "number"
+        },
+        "p75": {
+          "minimum": 0.0,
+          "title": "P75",
+          "type": "number"
+        }
+      },
+      "required": [
+        "median",
+        "p25",
+        "p75",
+        "n"
+      ],
+      "title": "LengthStats",
+      "type": "object"
+    },
+    "MetricRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "embedding_centroid_shift": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Embedding Centroid Shift"
+        },
+        "flag_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Flag Reason"
+        },
+        "flagged_for_review": {
+          "default": false,
+          "title": "Flagged For Review",
+          "type": "boolean"
+        },
+        "hedge_density": {
+          "minimum": 0.0,
+          "title": "Hedge Density",
+          "type": "number"
+        },
+        "length": {
+          "$ref": "#/$defs/LengthStats"
+        },
+        "model_id": {
+          "title": "Model Id",
+          "type": "string"
+        },
+        "n_samples": {
+          "minimum": 0,
+          "title": "N Samples",
+          "type": "integer"
+        },
+        "prompt_id": {
+          "title": "Prompt Id",
+          "type": "string"
+        },
+        "refusal_ci": {
+          "$ref": "#/$defs/ConfidenceInterval"
+        },
+        "refusal_rate": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Refusal Rate",
+          "type": "number"
+        },
+        "sample_s3_uris": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Sample S3 Uris",
+          "type": "array"
+        },
+        "stance": {
+          "default": "na",
+          "enum": [
+            "pro",
+            "anti",
+            "neutral",
+            "na"
+          ],
+          "title": "Stance",
+          "type": "string"
+        },
+        "stance_confidence": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stance Confidence"
+        }
+      },
+      "required": [
+        "prompt_id",
+        "model_id",
+        "n_samples",
+        "refusal_rate",
+        "refusal_ci",
+        "hedge_density",
+        "length"
+      ],
+      "title": "MetricRecord",
+      "type": "object"
+    },
+    "ModelRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "available": {
+          "default": true,
+          "title": "Available",
+          "type": "boolean"
+        },
+        "display_name": {
+          "title": "Display Name",
+          "type": "string"
+        },
+        "model_id": {
+          "title": "Model Id",
+          "type": "string"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "version_string": {
+          "title": "Version String",
+          "type": "string"
+        }
+      },
+      "required": [
+        "model_id",
+        "display_name",
+        "provider",
+        "version_string"
+      ],
+      "title": "ModelRecord",
+      "type": "object"
+    },
+    "PromptRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "axis": {
+          "enum": [
+            "political",
+            "historical-contested",
+            "scientific-consensus",
+            "refusal-boundary",
+            "neutral-control",
+            "factual-stability"
+          ],
+          "title": "Axis",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "held_out": {
+          "default": false,
+          "title": "Held Out",
+          "type": "boolean"
+        },
+        "prompt_id": {
+          "title": "Prompt Id",
+          "type": "string"
+        },
+        "text_hash": {
+          "title": "Text Hash",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "prompt_id",
+        "axis",
+        "title",
+        "text_hash"
+      ],
+      "title": "PromptRecord",
+      "type": "object"
+    },
+    "Snapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "corpus_git_sha": {
+          "title": "Corpus Git Sha",
+          "type": "string"
+        },
+        "generated_at": {
+          "format": "date-time",
+          "title": "Generated At",
+          "type": "string"
+        },
+        "pipeline_version": {
+          "title": "Pipeline Version",
+          "type": "string"
+        },
+        "week_id": {
+          "title": "Week Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "week_id",
+        "generated_at",
+        "corpus_git_sha",
+        "pipeline_version"
+      ],
+      "title": "Snapshot",
+      "type": "object"
+    }
+  },
+  "$id": "https://drift-audit.example/schemas/manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "flagged": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Flagged",
+      "type": "array"
+    },
+    "history": {
+      "items": {
+        "$ref": "#/$defs/HistorySnapshot"
+      },
+      "title": "History",
+      "type": "array"
+    },
+    "metrics": {
+      "items": {
+        "$ref": "#/$defs/MetricRecord"
+      },
+      "title": "Metrics",
+      "type": "array"
+    },
+    "models": {
+      "items": {
+        "$ref": "#/$defs/ModelRecord"
+      },
+      "title": "Models",
+      "type": "array"
+    },
+    "prompts": {
+      "items": {
+        "$ref": "#/$defs/PromptRecord"
+      },
+      "title": "Prompts",
+      "type": "array"
+    },
+    "schema_version": {
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "snapshot": {
+      "$ref": "#/$defs/Snapshot"
+    }
+  },
+  "required": [
+    "schema_version",
+    "snapshot",
+    "models",
+    "prompts",
+    "metrics"
+  ],
+  "title": "Drift Audit manifest (v1)",
+  "type": "object"
+}

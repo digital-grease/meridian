@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% set path = "/" %}
+
+{% block title %}Drift Audit &mdash; how LLM stances shift over time{% endblock %}
+
+{% block main %}
+<section class="hero">
+  <h1>How is the machine&rsquo;s mind changing?</h1>
+  <p class="lede">
+    A public, timestamped, reproducible record of how frontier large language models&rsquo;
+    stances, refusals, and framings shift on contested topics &mdash; measured weekly,
+    with receipts.
+  </p>
+  <p>
+    {{ manifest.models | length }} models observed across
+    {{ manifest.prompts | length }} prompts spanning
+    {{ manifest.prompts | map(attribute='axis') | unique | list | length }} axes.
+    Latest snapshot: <strong>{{ manifest.snapshot.week_id }}</strong>.
+  </p>
+</section>
+
+<section class="axes-index" aria-labelledby="axes-heading">
+  <h2 id="axes-heading">Explore by axis</h2>
+  <ul class="axes-list">
+    {% set axes = manifest.prompts | map(attribute='axis') | unique | list | sort %}
+    {% for axis in axes %}
+    {% set count = manifest.prompts | selectattr('axis', 'equalto', axis) | list | length %}
+    <li>
+      <a href="/axes/{{ axis }}/">
+        <strong>{{ axis | replace('-', ' ') | capitalize }}</strong>
+        <span class="muted">{{ count }} prompt{{ 's' if count != 1 else '' }}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section class="models-index" aria-labelledby="models-heading">
+  <h2 id="models-heading">Observed models</h2>
+  <ul class="models-list">
+    {% for m in manifest.models %}
+    <li>
+      <a href="/models/{{ m.model_id }}/">
+        <strong>{{ m.display_name }}</strong>
+        <span class="muted">{{ m.provider }} &middot; <code>{{ m.version_string }}</code></span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section class="how-to-read" aria-labelledby="read-heading">
+  <h2 id="read-heading">How to read this site</h2>
+  <ol>
+    <li>
+      <a href="/reports/">Reports</a> are plain-English writeups of notable changes,
+      written for a general audience.
+    </li>
+    <li>
+      <a href="/axes/">Axes</a> group prompts by the kind of drift they measure
+      (political, historical, scientific, refusal-boundary).
+    </li>
+    <li>
+      <a href="/models/">Models</a> lets you drill into a single provider over time.
+    </li>
+    <li>
+      <a href="/data/">Data</a> gives you the raw weekly snapshots in CSV, JSON, and Parquet.
+    </li>
+    <li>
+      <a href="/methodology/">Methodology</a> documents how the corpus is built,
+      how metrics are computed, and how to reproduce any chart on this site.
+    </li>
+  </ol>
+</section>
+{% endblock %}

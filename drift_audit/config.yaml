@@ -1,0 +1,32 @@
+# Drift Audit pipeline configuration.
+#
+# API keys are NEVER in this file; they are read from env vars at runtime:
+#   ANTHROPIC_API_KEY, OPENAI_API_KEY.
+# Ollama needs no key (local).
+
+sampling:
+  n_default_temp: 20
+  n_zero_temp: 5
+  default_temperature: 1.0
+  zero_temperature: 0.0
+  max_tokens: 1024
+  concurrency_per_provider: 4
+
+storage:
+  raw_dir: "data/raw"
+
+runners:
+  # Local baseline / control group. Enabled by default because it costs nothing.
+  - provider: ollama
+    model_id: "llama3.2:3b"
+    enabled: true
+
+  # Commercial providers. Disabled by default so a fresh clone does not
+  # silently start spending money. Enable + set API keys to run for real.
+  - provider: anthropic
+    model_id: "claude-opus-4-7"
+    enabled: false
+
+  - provider: openai
+    model_id: "gpt-5-preview"
+    enabled: false

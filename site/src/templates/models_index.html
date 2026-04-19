@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% set path = "/models/" %}
+
+{% block title %}Models — Drift Audit{% endblock %}
+{% block description %}All models observed by Drift Audit, with links to per-model drift histories.{% endblock %}
+
+{% block main %}
+{% set crumbs = [
+  {"href": "/", "text": "Home"},
+  {"text": "Models"}
+] %}
+{% include "_breadcrumbs.html" %}
+
+<article class="page">
+  <h1>Models</h1>
+  <p class="lede">Models currently observed in the Drift Audit rotation.</p>
+
+  <ul class="models-list">
+    {% for m in models %}
+    <li>
+      <a href="/models/{{ m.model_id }}/">
+        <strong>{{ m.display_name }}</strong>
+        <span class="muted">{{ m.provider }} · <code>{{ m.version_string }}</code></span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+
+  <p class="muted">
+    Observations span weeks {{ manifest.all_weeks | first }} through
+    {{ manifest.all_weeks | last }}.
+  </p>
+</article>
+{% endblock %}

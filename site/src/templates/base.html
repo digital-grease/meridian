@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+
+  {% block head_title %}
+  <title>{% block title %}{{ site_title }}{% endblock %}</title>
+  {% endblock %}
+
+  <meta name="description" content="{% block description %}A public, timestamped, reproducible record of how commercial large language models&rsquo; stances, refusals, and framings change over time on contested topics.{% endblock %}">
+  <link rel="canonical" href="{% block canonical %}https://drift-audit.example{{ path | default('/') }}{% endblock %}">
+
+  <link rel="stylesheet" href="/static/css/base.css">
+  <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
+  <link rel="alternate" type="application/rss+xml" title="Drift Audit reports" href="/feed.xml">
+
+  <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+  <meta property="og:site_name" content="Drift Audit">
+  <meta property="og:title" content="{% block og_title %}{{ self.title() }}{% endblock %}">
+  <meta property="og:description" content="{% block og_description %}{{ self.description() }}{% endblock %}">
+  <meta property="og:url" content="{{ self.canonical() }}">
+  {% block og_image %}
+  {# v1: SVG placeholder. Per-page PNG OG images deferred to v1.1 (needs matplotlib). #}
+  <meta property="og:image" content="https://drift-audit.example/static/images/og-default.svg">
+  {% endblock %}
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ self.og_title() }}">
+  <meta name="twitter:description" content="{{ self.og_description() }}">
+
+  {% block structured_data %}
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "ResearchProject",
+    "name": "Drift Audit",
+    "description": "Longitudinal measurement of political, epistemic, and behavioral drift in deployed commercial large language models.",
+    "url": "https://drift-audit.example/"
+  }
+  </script>
+  {% endblock %}
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap">
+      <a class="site-logo" href="/"><strong>Drift Audit</strong></a>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="/reports/">Reports</a>
+        <a href="/axes/">Axes</a>
+        <a href="/models/">Models</a>
+        <a href="/data/">Data</a>
+        <a href="/methodology/">Methodology</a>
+        <a href="/about/">About</a>
+      </nav>
+      <div id="site-search" class="site-search"></div>
+    </div>
+  </header>
+
+  <main id="main" class="site-main">
+    <div class="wrap">
+      {% block main %}{% endblock %}
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p class="footer-note">
+        Licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC&nbsp;BY-SA&nbsp;4.0</a>
+        for data and reports; <a href="https://opensource.org/license/mit/">MIT</a> for code.
+        Not affiliated with any LLM provider. <a href="/funding/">Funding disclosures</a>.
+      </p>
+      <p class="build-prov" aria-label="Build provenance">
+        <span>Snapshot <code>{{ build.manifest_week }}</code></span>
+        &middot;
+        <span>Built <time datetime="{{ build.built_at }}">{{ build.built_at }}</time></span>
+        &middot;
+        <span>Site commit <code>{{ build.git_sha[:7] }}</code></span>
+      </p>
+    </div>
+  </footer>
+
+  <script src="/static/js/search.js" defer></script>
+  <script src="/static/js/citations.js" defer></script>
+  <script src="/static/js/filters.js" defer></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

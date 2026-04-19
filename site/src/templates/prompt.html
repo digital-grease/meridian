@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% set path = "/prompts/" + prompt.prompt_id + "/" %}
+
+{% block title %}{{ prompt.title }} — prompt — Drift Audit{% endblock %}
+{% block description %}Per-model drift metrics for prompt "{{ prompt.title }}" across the Drift Audit observation window.{% endblock %}
+
+{% block main %}
+{% set crumbs = [
+  {"href": "/", "text": "Home"},
+  {"href": "/prompts/", "text": "Prompts"},
+  {"text": prompt.title}
+] %}
+{% include "_breadcrumbs.html" %}
+
+<article class="page">
+  <h1>{{ prompt.title }}</h1>
+  <p class="muted">
+    <a href="/axes/{{ prompt.axis }}/">{{ prompt.axis | replace('-', ' ') }}</a>
+    · <code>{{ prompt.prompt_id }}</code>
+    · hash <code>{{ prompt.text_hash[:12] }}…</code>
+  </p>
+
+  {% if prompt.description %}
+  <section class="prompt-text" aria-label="Prompt text">
+    <h2>Prompt</h2>
+    <blockquote>{{ prompt.description }}</blockquote>
+  </section>
+  {% endif %}
+
+  {% set metric_specs = [
+    {"key": "refusal_rate",   "label": "Refusal rate",   "fmt": "{:.2f}"},
+    {"key": "hedge_density",  "label": "Hedge density",  "fmt": "{:.2f}"},
+    {"key": "length_median",  "label": "Median length",  "fmt": "{:.0f}"}
+  ] %}
+
+  {% for spec in metric_specs %}
+  <section class="metric-section" aria-labelledby="pm-{{ spec.key }}">
+    <h2 id="pm-{{ spec.key }}">{{ spec.label }}</h2>
+    <table class="metric-table">
+      <caption>{{ spec.label }} per model per week.</caption>
+      <thead>
+        <tr>
+          <th scope="col">Model</th>
+          {% for w in weeks %}<th scope="col">{{ w }}</th>{% endfor %}
+          <th scope="col">Trend</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in models %}
+        {% set ts = timeseries(prompt.prompt_id, m.model_id, spec.key) %}
+        {% set by_week = dict(ts) %}
+        {% set values = ts | map(attribute=1) | list %}
+        <tr>
+          <th scope="row"><a href="/models/{{ m.model_id }}/">{{ m.display_name }}</a></th>
+          {% for w in weeks %}
+          <td>{% if w in by_week %}<code>{{ spec.fmt.format(by_week[w]) }}</code>{% else %}—{% endif %}</td>
+          {% endfor %}
+          <td>{{ values | sparkline(label=m.display_name, value_format=spec.fmt) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endfor %}
+</article>
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% set path = "/corpus/" %}
+
+{% block title %}Corpus &mdash; Drift Audit{% endblock %}
+{% block description %}The prompts that make up the Drift Audit corpus, organized by axis, with counts and the held-out protocol.{% endblock %}
+
+{% block main %}
+<article class="page">
+  <h1>Corpus</h1>
+  <p class="lede">
+    The corpus is the measuring instrument. These prompts &mdash; chosen,
+    versioned, and held partly in reserve &mdash; define what we are measuring
+    drift against.
+  </p>
+
+  <h2>At a glance</h2>
+  <dl class="stats">
+    <dt>Prompts (public)</dt>
+    <dd>{{ manifest.prompts | rejectattr('held_out') | list | length }}</dd>
+
+    <dt>Prompts (held-out)</dt>
+    <dd>{{ manifest.prompts | selectattr('held_out') | list | length }}</dd>
+
+    <dt>Axes</dt>
+    <dd>{{ manifest.prompts | map(attribute='axis') | unique | list | length }}</dd>
+
+    <dt>Latest corpus commit</dt>
+    <dd><code>{{ manifest.snapshot.corpus_git_sha[:12] }}</code></dd>
+  </dl>
+
+  <h2>By axis</h2>
+  {% set axes = manifest.prompts | map(attribute='axis') | unique | list | sort %}
+  {% for axis in axes %}
+  {% set axis_prompts = manifest.prompts | selectattr('axis', 'equalto', axis) | list %}
+  <section class="axis-block">
+    <h3 id="axis-{{ axis }}">{{ axis | replace('-', ' ') | capitalize }}</h3>
+    <p class="muted">{{ axis_prompts | length }} prompt{{ 's' if axis_prompts | length != 1 else '' }}</p>
+    <ul class="prompt-list">
+      {% for p in axis_prompts %}
+      <li>
+        <a href="/prompts/{{ p.prompt_id }}/"><strong>{{ p.title }}</strong></a>
+        <code class="muted">{{ p.prompt_id }}</code>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endfor %}
+
+  <h2>Held-out protocol</h2>
+  <p>
+    Roughly 30% of the corpus is never published. The held-out set rotates on
+    an annual schedule and is the primary defense against providers training
+    against this benchmark. Drift on the public corpus is compared to drift on
+    the held-out corpus; a wide divergence is itself a publishable finding.
+  </p>
+
+  <h2>Proposing additions</h2>
+  <p>
+    The corpus is open to proposals. Submit a prompt, its axis, and a rationale
+    via <a href="/contribute/">/contribute/</a>. Contributions are screened for
+    adversarial intent (prompts designed to embarrass specific providers are
+    rejected); otherwise the bar is &ldquo;does this measure something the
+    corpus doesn&rsquo;t already measure?&rdquo;
+  </p>
+
+  <h2>Changelog</h2>
+  <p>
+    A full commit history of corpus changes will appear here, auto-generated
+    from the <code>corpus/</code> directory of the source repository.
+  </p>
+  <p class="muted">Current status: v1 corpus under construction.</p>
+</article>
+{% endblock %}

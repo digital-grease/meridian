@@ -1,0 +1,106 @@
+name: Weekly build and deploy
+
+on:
+  schedule:
+    # Sunday 00:00 UTC. The analysis pipeline is expected to have published
+    # the week's manifest to site/fixtures/ (or a well-known S3 URI fetched
+    # as a prior step, once the pipeline is wired in).
+    - cron: "0 0 * * 0"
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "scripts/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/weekly-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout previously published site (for link-rot diff)
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: .previous-gh-pages
+        continue-on-error: true
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --frozen || uv sync
+
+      - name: Build site
+        run: |
+          uv run python site/src/build.py \
+            --manifest site/fixtures/manifest-2026-W16.json \
+            --out site/dist
+
+      - name: Link-rot guard
+        run: |
+          if [ -f .previous-gh-pages/urls.txt ]; then
+            uv run python scripts/check_linkrot.py \
+              --current site/dist \
+              --previous .previous-gh-pages
+          else
+            echo "No previous urls.txt on gh-pages; skipping link-rot guard (first deploy)"
+          fi
+
+      - name: Site size guard (fail above 800 MB)
+        run: |
+          size_kb=$(du -sk site/dist | cut -f1)
+          echo "dist size: ${size_kb} KB"
+          if [ "$size_kb" -gt 819200 ]; then
+            echo "::error::dist/ exceeds 800 MB soft cap. Offload old weeks to R2 or prune."
+            exit 1
+          fi
+
+      - name: Accessibility audit (axe-core)
+        continue-on-error: true  # soft gate in v1; hard gate before public launch
+        run: |
+          npx --yes -p @axe-core/cli@4 axe \
+            "file://$(pwd)/site/dist/index.html" \
+            "file://$(pwd)/site/dist/about/index.html" \
+            "file://$(pwd)/site/dist/methodology/index.html" \
+            "file://$(pwd)/site/dist/reports/2026-W16/index.html" \
+            "file://$(pwd)/site/dist/axes/political/index.html" \
+            "file://$(pwd)/site/dist/models/claude-opus-4-7/index.html" \
+            --exit
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
