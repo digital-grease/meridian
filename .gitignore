@@ -49,3 +49,13 @@ drift_audit/corpus/held_out.local.yaml
 # Internal manifests that include held-out metrics. Never published.
 data/internal/
 .devloop
+
+# Terraform state, plan output, and provider binaries. State goes in a
+# remote backend (not committed); provider plugins regenerate on init.
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+*.tfplan
+*.auto.tfvars
+*.auto.tfvars.json

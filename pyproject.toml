@@ -47,6 +47,16 @@ parquet = [
   # /data/{week}/metrics.parquet emission. Optional; adds ~20 MB.
   "pyarrow>=15,<21",
 ]
+storage-s3 = [
+  # S3 archival of raw samples + published manifests. Config-gated in
+  # drift_audit/config.yaml; when disabled, not needed at runtime.
+  "boto3>=1.34,<2",
+  "botocore>=1.34,<2",
+]
+storage-s3-dev = [
+  # moto provides an in-process S3 mock for the uploader tests.
+  "moto[s3]>=5,<6",
+]
 
 [tool.uv]
 package = false

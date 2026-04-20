@@ -62,9 +62,26 @@ class SamplingSpec(BaseModel):
     concurrency_per_provider: int = 4
 
 
+class S3StorageSpec(BaseModel):
+    """Optional S3 archival target for raw samples and published manifests.
+
+    When absent from the config, S3 upload is disabled entirely. AWS
+    credentials come from the environment via boto3's default provider
+    chain (env vars, instance profile, OIDC, etc.) — never from this
+    file. Terraform module for the target bucket lives at
+    ``infra/terraform/s3``.
+    """
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    bucket: str
+    region: str | None = None          # boto3 falls back to AWS_REGION env
+    prefix: str = ""                   # e.g. "drift-audit/" to namespace
+    publish_latest_pointer: bool = True  # write manifests/latest.json
+
+
 class StorageSpec(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     raw_dir: str = "data/raw"
+    s3: S3StorageSpec | None = None
 
 
 class PipelineConfig(BaseModel):

@@ -25,6 +25,7 @@ import argparse
 import asyncio
 import logging
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import json
@@ -38,11 +39,13 @@ from drift_audit.pipeline.manifest_writer import (
     build_manifest,
     write_manifest,
 )
-from drift_audit.pipeline.run_log import read_run_log
+from drift_audit.pipeline.run_log import append_run_log, read_run_log
+from drift_audit.sampling.cost import compute_actual_cost
 from drift_audit.sampling.orchestrator import Orchestrator, SamplingPlan
 from drift_audit.sampling.pricing import estimate_cost
 from drift_audit.sampling.weeks import iso_week_for
 from drift_audit.storage import LocalSampleStore
+from drift_audit.storage.s3 import maybe_build_uploader
 
 _log = logging.getLogger("drift_audit")
 
@@ -120,8 +123,10 @@ async def _cmd_run(args: argparse.Namespace) -> int:
     if not args.yes and est.total > 0.0:
         print("(use --yes to proceed without confirmation)")
 
+    started_at = datetime.now(timezone.utc)
     orch = Orchestrator(runners, store, corpus, plan)
     outcome = await orch.run(force=args.force)
+    finished_at = datetime.now(timezone.utc)
     print(
         f"\n{week_id}: wrote {outcome.total_samples_written} sample(s) "
         f"across {outcome.pairs_complete} pair(s), "
@@ -132,6 +137,20 @@ async def _cmd_run(args: argparse.Namespace) -> int:
     for err in outcome.errors[:10]:
         print(f"  [{err.error_type}] {err.provider}/{err.model_id}/{err.prompt_id}: {err.message}",
               file=sys.stderr)
+
+    # Record this run in the append-only log BEFORE manifest writes and
+    # S3 archival. The log's purpose is operational truth about what the
+    # orchestrator did; downstream artifacts are a separate concern and
+    # should not gate the audit trail.
+    _append_run_log_entry(
+        config=config,
+        store=store,
+        week_id=week_id,
+        started_at=started_at,
+        finished_at=finished_at,
+        outcome=outcome,
+        estimated_cost_usd=est.total,
+    )
 
     display_info = _display_info_for(config)
     manifest = build_manifest(
@@ -150,7 +169,73 @@ async def _cmd_run(args: argparse.Namespace) -> int:
         write_manifest(internal, [internal_path])
         print(f"wrote internal (with held-out) manifest to {internal_path}")
 
+    _maybe_archive_to_s3(config, store, week_id, paths[0])
+
     return 1 if outcome.pairs_failed > 0 else 0
+
+
+def _append_run_log_entry(
+    *,
+    config: PipelineConfig,
+    store: LocalSampleStore,
+    week_id: str,
+    started_at: datetime,
+    finished_at: datetime,
+    outcome,
+    estimated_cost_usd: float,
+) -> None:
+    """Write one RunLogEntry to data/run_log.jsonl for this invocation.
+
+    Actual cost is summed across every sample stored under ``week_id``
+    — including pairs from prior runs in the same week if resume was
+    used — matching the runbook's "cost spent on this week's data"
+    interpretation.
+    """
+    all_samples = []
+    for model_id in store.models_for_week(week_id):
+        for prompt_id in store.prompts_for(week_id, model_id):
+            all_samples.extend(store.read(week_id, model_id, prompt_id))
+    cost_report = compute_actual_cost(all_samples)
+
+    log_path = REPO_ROOT / "data" / "run_log.jsonl"
+    append_run_log(
+        log_path,
+        started_at=started_at,
+        finished_at=finished_at,
+        week_id=week_id,
+        config=config,
+        outcome=outcome,
+        estimated_cost_usd=estimated_cost_usd,
+        actual_cost_usd=cost_report.total_usd,
+    )
+    print(
+        f"run log: estimated ${estimated_cost_usd:.2f} / "
+        f"actual ${cost_report.total_usd:.2f} "
+        f"({cost_report.samples_priced} priced, "
+        f"{cost_report.samples_skipped_no_tokens} skipped)"
+    )
+
+
+def _maybe_archive_to_s3(
+    config: PipelineConfig,
+    store: LocalSampleStore,
+    week_id: str,
+    public_manifest_path: Path,
+) -> None:
+    """Opt-in S3 mirror for raw samples + the public manifest.
+
+    Non-fatal: an archive failure logs to stderr but the pipeline still
+    reports success. The authoritative copy stays on local disk.
+    """
+    uploader = maybe_build_uploader(config.storage.s3)
+    if uploader is None:
+        return
+    raw_report = uploader.upload_week(store, week_id)
+    print(f"s3: raw samples — {raw_report.pretty()}")
+    manifest_report = uploader.upload_manifest(public_manifest_path, week_id)
+    print(f"s3: manifest    — {manifest_report.pretty()}")
+    for err in raw_report.errors + manifest_report.errors:
+        print(f"  s3 error: {err}", file=sys.stderr)
 
 
 class _RunnerSpecShim:
