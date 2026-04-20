@@ -268,6 +268,36 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
 .chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+/* "Buy me a coffee" button. Self-styled (no remote image) to honor the
+ * site's no-third-party-resources rule. The CSS replicates BMC's
+ * signature red pill with an accessible color-contrast margin. */
+.bmc-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  padding: 0.55em 1.1em;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #fff;
+  background: #ff5f5f;
+  border: 1px solid #e94b4b;
+  border-radius: 999px;
+  text-decoration: none;
+  line-height: 1.2;
+  transition: transform 120ms ease, background 120ms ease;
+}
+.bmc-button:visited { color: #fff; }
+.bmc-button:hover,
+.bmc-button:focus-visible {
+  background: #e94b4b;
+  color: #fff;
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+.bmc-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.bmc-button .cup { font-size: 1.2em; line-height: 1; }
+
 /* Copy-citation button */
 .copy-btn {
   font: inherit;
@@ -299,6 +329,27 @@ th, td {
   border-bottom: 1px solid var(--border);
 }
 caption { text-align: left; color: var(--fg-muted); margin-bottom: 0.3em; }
+
+/* ---------- Stance badges ---------- */
+.stance {
+  display: inline-block;
+  padding: 0.1em 0.55em;
+  border-radius: 3px;
+  font-size: 0.88em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--fg);
+}
+.stance-pro      { background: #1a4d2e; color: #e8f4eb; border-color: #2d7346; }
+.stance-anti     { background: #5c1f1f; color: #f7e5e5; border-color: #8a3636; }
+.stance-neutral  { background: var(--bg-subtle); color: var(--fg); }
+
+/* ---------- Semantic-drift cell ---------- */
+.semantic-drift-cell { font-variant-numeric: tabular-nums; }
+.semantic-drift-cell .magnitude { font-weight: 600; }
+.semantic-drift-cell .hint { color: var(--fg-muted); font-size: 0.85em; }
 
 /* ---------- Print ---------- */
 @media print {

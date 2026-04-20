@@ -1,0 +1,57 @@
+name: Bug report
+description: Report a methodology error, statistical mistake, site bug, or pipeline failure.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Methodology errors and citation-stability
+        issues are treated as high priority — please cite the exact URL
+        or chart so we can reproduce.
+
+        **Do not use this template for security vulnerabilities.** Use the
+        Security template instead so the report stays private.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What went wrong
+      description: What did you observe? Include exact URLs, chart labels, or CLI commands.
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - methodology / statistics
+        - pipeline (runners, orchestrator, storage)
+        - site (dashboard, reports, data)
+        - corpus
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: Shell commands, URLs, or a minimal example.
+    validations:
+      required: false
+
+  - type: input
+    id: site-commit
+    attributes:
+      label: Site commit SHA (visible in the footer of every page)
+    validations:
+      required: false

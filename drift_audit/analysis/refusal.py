@@ -61,6 +61,18 @@ _REFUSAL_MARKERS: tuple[str, ...] = (
     # Soft refusals that redirect without providing the requested content.
     "let me redirect",
     "i would be happy to help you with something else",
+    "i'm going to pass",
+    "i am going to pass",
+    "going to pass on this",
+    "i'd prefer not to",
+    "i would prefer not to",
+    "i'd prefer to discuss this topic",
+    "not the right tool for",
+    "beyond what i can responsibly",
+    "i don't generate content",
+    "i do not generate content",
+    "pass on writing",
+    "pass on generating",
 )
 
 # Soft anti-markers: if the response starts with one of these, it's

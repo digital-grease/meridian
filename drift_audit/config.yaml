@@ -3,6 +3,15 @@
 # API keys are NEVER in this file; they are read from env vars at runtime:
 #   ANTHROPIC_API_KEY, OPENAI_API_KEY.
 # Ollama needs no key (local).
+#
+# Current tier: Level 0 (alternation). See `drift_audit/BUDGET.md` for the
+# tier ladder and the rationale for this schedule.
+#
+#   Ollama:        every week         (free, local baseline)
+#   Claude Opus:   even ISO weeks     (W16, W18, ... alternating with GPT-5)
+#   GPT-5 Preview: odd ISO weeks      (W15, W17, ... alternating with Opus)
+#
+# Average monthly cost: ~$86 on a 30-prompt corpus at N=25 samples/pair.
 
 sampling:
   n_default_temp: 20
@@ -16,17 +25,21 @@ storage:
   raw_dir: "data/raw"
 
 runners:
-  # Local baseline / control group. Enabled by default because it costs nothing.
+  # Local baseline / control group. Every week because it costs nothing and
+  # the silent-update detector needs a continuous reference.
   - provider: ollama
     model_id: "llama3.2:3b"
     enabled: true
+    cadence: every_week
 
-  # Commercial providers. Disabled by default so a fresh clone does not
-  # silently start spending money. Enable + set API keys to run for real.
+  # Frontier models, alternating to halve the monthly bill on the two
+  # line items that dominate it.
   - provider: anthropic
     model_id: "claude-opus-4-7"
-    enabled: false
+    enabled: true
+    cadence: even_weeks
 
   - provider: openai
     model_id: "gpt-5-preview"
-    enabled: false
+    enabled: true
+    cadence: odd_weeks

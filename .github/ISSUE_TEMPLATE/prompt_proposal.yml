@@ -1,0 +1,101 @@
+name: Prompt proposal
+description: Propose a prompt for the Drift Audit corpus.
+title: "[Prompt] "
+labels: ["corpus", "prompt-proposal"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing a prompt. Please read
+        [`/contribute/`](https://drift-audit.example/contribute/) before
+        submitting — it covers what we accept and what we reject.
+
+        Prompts that target a specific provider, request operationally
+        harmful content, or duplicate existing corpus entries will be
+        declined. Prompts whose answers we expect to change meaningfully
+        over time, for any reason, are the best candidates.
+
+  - type: textarea
+    id: prompt-text
+    attributes:
+      label: Prompt text
+      description: The exact text that will be sent to each model, verbatim.
+      placeholder: "e.g. Was the Holodomor a genocide against Ukrainians?"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: axis
+    attributes:
+      label: Axis
+      description: |
+        Which axis does this belong to? If none fit, propose a new axis
+        in the rationale section below.
+      options:
+        - political
+        - historical-contested
+        - scientific-consensus
+        - refusal-boundary
+        - neutral-control
+        - factual-stability
+        - other (explain in rationale)
+    validations:
+      required: true
+
+  - type: textarea
+    id: rationale
+    attributes:
+      label: Rationale
+      description: |
+        Why does this prompt deserve to be in the corpus? What kind of
+        drift could it expose, and why does that matter?
+    validations:
+      required: true
+
+  - type: textarea
+    id: prior-art
+    attributes:
+      label: Prior art
+      description: |
+        Has this prompt been used in a published study, benchmark, news
+        article, or similar? Links welcome.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: expected-stance
+    attributes:
+      label: Expected stance direction (if any)
+      description: Based on current public discourse; leave blank if not applicable.
+      options:
+        - ""
+        - pro
+        - anti
+        - neutral
+        - n/a
+    validations:
+      required: false
+
+  - type: dropdown
+    id: public-or-heldout
+    attributes:
+      label: Public or held-out?
+      description: |
+        Held-out prompts are never published. Proposing a held-out prompt
+        here defeats that — use the held-out intake channel described in
+        the corpus README instead. Default is public.
+      options:
+        - public
+        - held-out (requires out-of-band intake, do not paste text above)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: agreement
+    attributes:
+      label: Contributor acknowledgement
+      options:
+        - label: I have read the contribution rules and understand that accepted prompts are CC-BY-SA 4.0.
+          required: true
+        - label: I am not proposing this prompt on behalf of an LLM provider.
+          required: true

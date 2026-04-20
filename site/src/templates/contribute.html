@@ -2,7 +2,7 @@
 {% set path = "/contribute/" %}
 
 {% block title %}Contribute &mdash; Drift Audit{% endblock %}
-{% block description %}How to propose new corpus prompts, report bugs, or help run your own instance.{% endblock %}
+{% block description %}How to propose new corpus prompts, report bugs, and support the project.{% endblock %}
 
 {% block main %}
 <article class="page">
@@ -47,22 +47,26 @@
     cite the specific URL or chart. We fix faster with a reproducible example.
   </p>
 
-  <h2>Running your own instance</h2>
+  <h2>Support financially</h2>
   <p>
-    Clone the repository, add your provider API keys, run the pipeline, and
-    build the site:
+    API costs dominate the budget. The current configuration runs on
+    roughly <strong>$86 per month</strong>. Each meaningful expansion
+    &mdash; adding Gemini, unalternating the frontier models, growing
+    the corpus to 100+ prompts, funding durable S3 + IPFS storage so
+    the &ldquo;retention forever&rdquo; guarantee is real &mdash;
+    requires another step of sustained monthly funding.
   </p>
-  <pre><code>git clone https://github.com/drift-audit/meridian
-cd meridian
-uv sync
-# ... provider setup ...
-uv run python site/src/build.py \
-    --manifest site/fixtures/manifest-2026-W16.json \
-    --out site/dist</code></pre>
   <p>
-    MIT-licensed code is intended to lower the barrier to running your own
-    instance. Forks that diverge in methodology are welcome; please use a
-    different site name so citations stay clean.
+    Full breakdown at
+    <a href="/funding/#what-funding-unlocks">/funding/ &mdash; what funding unlocks</a>.
   </p>
+  <p>
+    <a class="bmc-button" href="https://www.buymeacoffee.com/digitalgrease"
+       rel="noopener" target="_blank">
+      <span class="cup" aria-hidden="true">&#x2615;</span>
+      Buy me a coffee
+    </a>
+  </p>
+
 </article>
 {% endblock %}

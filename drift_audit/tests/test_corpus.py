@@ -10,7 +10,7 @@ def test_corpus_loads_with_expected_shape():
     corpus = load_corpus()
     assert corpus.schema_version == 1
     assert corpus.corpus_version.startswith("2026.")
-    assert len(corpus.prompts) == 20
+    assert len(corpus.prompts) == 30
 
 
 def test_corpus_axis_distribution():
@@ -21,6 +21,8 @@ def test_corpus_axis_distribution():
         "historical-contested",
         "scientific-consensus",
         "refusal-boundary",
+        "neutral-control",
+        "factual-stability",
     }
     for axis in axes:
         assert len(corpus.by_axis(axis)) == 5, f"{axis} should have 5 prompts"

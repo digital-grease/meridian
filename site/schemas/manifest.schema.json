@@ -1,5 +1,34 @@
 {
   "$defs": {
+    "ChangePointsSummary": {
+      "additionalProperties": false,
+      "description": "Precomputed PELT change-point indices per metric time series.\n\nIndices point into the oldest-first series returned by\n:meth:`Manifest.timeseries`. A non-terminal segment boundary at\nposition ``k`` means the metric changed regime starting at week\n``series[k]``. Computed once by the pipeline; the site consumes\nthese indices directly rather than invoking the analysis code at\nrender time.",
+      "properties": {
+        "hedge_density": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Hedge Density",
+          "type": "array"
+        },
+        "length_median": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Length Median",
+          "type": "array"
+        },
+        "refusal_rate": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Refusal Rate",
+          "type": "array"
+        }
+      },
+      "title": "ChangePointsSummary",
+      "type": "object"
+    },
     "ConfidenceInterval": {
       "additionalProperties": false,
       "properties": {
@@ -21,6 +50,35 @@
         "upper"
       ],
       "title": "ConfidenceInterval",
+      "type": "object"
+    },
+    "DriftTest": {
+      "additionalProperties": false,
+      "description": "Two-sample drift test result for one metric on one (prompt \u00d7 model).\n\nPopulated only when a prior week's samples are available. The\n``adjusted_p_value`` and ``significant_after_bh`` fields are filled\nin by the within-week Benjamini\u2013Hochberg pass in\n``drift_audit.pipeline.manifest_writer``; ``p_value`` alone is the\nraw output of ``drift_audit.analysis.drift_tests``.",
+      "properties": {
+        "adjusted_p_value": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Adjusted P Value",
+          "type": "number"
+        },
+        "p_value": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "P Value",
+          "type": "number"
+        },
+        "significant_after_bh": {
+          "title": "Significant After Bh",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "p_value",
+        "adjusted_p_value",
+        "significant_after_bh"
+      ],
+      "title": "DriftTest",
       "type": "object"
     },
     "HistorySnapshot": {
@@ -88,6 +146,9 @@
     "MetricRecord": {
       "additionalProperties": false,
       "properties": {
+        "change_points": {
+          "$ref": "#/$defs/ChangePointsSummary"
+        },
         "embedding_centroid_shift": {
           "anyOf": [
             {
@@ -123,8 +184,30 @@
           "title": "Hedge Density",
           "type": "number"
         },
+        "hedge_drift": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DriftTest"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "length": {
           "$ref": "#/$defs/LengthStats"
+        },
+        "length_drift": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DriftTest"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "model_id": {
           "title": "Model Id",
@@ -141,6 +224,17 @@
         },
         "refusal_ci": {
           "$ref": "#/$defs/ConfidenceInterval"
+        },
+        "refusal_drift": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DriftTest"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "refusal_rate": {
           "maximum": 1.0,
@@ -281,6 +375,66 @@
       "title": "PromptRecord",
       "type": "object"
     },
+    "SilentUpdateWarning": {
+      "additionalProperties": false,
+      "description": "Candidate silent-model-update event on the neutral-control axis.\n\nFlagged when a model's axis-level metric shifts week-over-week by\nmore than ``drift_audit.analysis.silent_update`` thresholds. These\nare *candidates*, not proven updates \u2014 the public report should say\n\"appears to have updated\" and invite human review.",
+      "properties": {
+        "axis": {
+          "title": "Axis",
+          "type": "string"
+        },
+        "delta": {
+          "title": "Delta",
+          "type": "number"
+        },
+        "from_value": {
+          "title": "From Value",
+          "type": "number"
+        },
+        "from_week": {
+          "title": "From Week",
+          "type": "string"
+        },
+        "metric": {
+          "title": "Metric",
+          "type": "string"
+        },
+        "model_id": {
+          "title": "Model Id",
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "to_value": {
+          "title": "To Value",
+          "type": "number"
+        },
+        "to_week": {
+          "title": "To Week",
+          "type": "string"
+        }
+      },
+      "required": [
+        "model_id",
+        "from_week",
+        "to_week",
+        "axis",
+        "metric",
+        "from_value",
+        "to_value",
+        "delta",
+        "severity"
+      ],
+      "title": "SilentUpdateWarning",
+      "type": "object"
+    },
     "Snapshot": {
       "additionalProperties": false,
       "properties": {
@@ -355,6 +509,13 @@
       "title": "Schema Version",
       "type": "integer"
     },
+    "silent_update_warnings": {
+      "items": {
+        "$ref": "#/$defs/SilentUpdateWarning"
+      },
+      "title": "Silent Update Warnings",
+      "type": "array"
+    },
     "snapshot": {
       "$ref": "#/$defs/Snapshot"
     }
@@ -366,6 +527,6 @@
     "prompts",
     "metrics"
   ],
-  "title": "Drift Audit manifest (v1)",
+  "title": "Drift Audit manifest (v2)",
   "type": "object"
 }

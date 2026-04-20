@@ -29,10 +29,23 @@ dev = [
 charts = [
   "matplotlib>=3.9,<4",
 ]
+analysis-heavy = [
+  # Embedding-based drift analysis (Phase 1.5). Heavy to install; optional.
+  "sentence-transformers>=3.0,<5",
+  "numpy>=1.26,<3",
+]
+changepoint = [
+  # PELT implementation used by drift_audit.analysis.change_point.
+  "ruptures>=1.1,<2",
+]
 search = [
   # Index builder for the progressive-enhancement search (Phase 6).
   # minisearch itself is client-side JS; this is for building the index.
   "lunr>=0.7,<1",
+]
+parquet = [
+  # /data/{week}/metrics.parquet emission. Optional; adds ~20 MB.
+  "pyarrow>=15,<21",
 ]
 
 [tool.uv]

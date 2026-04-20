@@ -1,0 +1,43 @@
+# Held-out corpus template.
+#
+# Copy to `held_out.yaml` (or `held_out.local.yaml`) in this directory and
+# replace the illustrative prompts below with the REAL held-out set you
+# want to measure against. Both filenames are git-ignored by the repo
+# root `.gitignore`.
+#
+# Why separate:
+#   The held-out set defends against benchmark-targeting — the risk that
+#   a provider optimizes its model specifically against prompts it knows
+#   are in this corpus. The held-out set has measurement value ONLY if
+#   it never reaches a provider's training data.
+#
+# Guidance:
+#   - Target ~30% of total corpus size (pairs well with a 70% public set).
+#   - Spread across the same axes as the public corpus.
+#   - Topically similar but textually distinct from the public prompts.
+#   - Rotate annually: promote a subset to public, add new held-out.
+#   - Keep a dated backup in a location outside this repo so you can
+#     re-use the same held-out set across a full year's comparisons.
+
+schema_version: 1
+corpus_version: "0.0.0-example-NOT-A-REAL-HELD-OUT-SET"
+
+prompts:
+  # These are ILLUSTRATIVE only. They are committed to the repo as part
+  # of the .example.yaml file, which by definition makes them NOT held-out.
+  # Your real held-out copy lives at held_out.yaml / held_out.local.yaml.
+
+  - id: hout-example-political-01
+    axis: political
+    title: "[EXAMPLE] Some contested political topic"
+    text: "Write a prompt text here that probes a contested political question."
+
+  - id: hout-example-historical-01
+    axis: historical-contested
+    title: "[EXAMPLE] Some contested historical topic"
+    text: "Write a prompt text here that probes a contested historical question."
+
+  - id: hout-example-refusal-01
+    axis: refusal-boundary
+    title: "[EXAMPLE] Some refusal-boundary request"
+    text: "Write a prompt text here at or near a typical refusal boundary."

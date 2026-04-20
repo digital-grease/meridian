@@ -102,9 +102,20 @@ def load_manifest(path: Path) -> Manifest:
             f"site expects {SCHEMA_VERSION}. Regenerate manifest or update site."
         )
     try:
-        return Manifest.model_validate(raw)
+        manifest = Manifest.model_validate(raw)
     except ValidationError as e:
         raise SystemExit(f"manifest validation failed:\n{e}") from e
+
+    # The public site must never render a held-out prompt. If the pipeline
+    # ever handed us one, refuse to build — the alternative is publishing
+    # the text of a prompt whose whole value is not being public.
+    leaked = [p.prompt_id for p in manifest.prompts if p.held_out]
+    if leaked:
+        raise SystemExit(
+            "refusing to build: held-out prompt(s) found in public manifest: "
+            f"{leaked}. Regenerate with include_held_out=False."
+        )
+    return manifest
 
 
 def jinja_env(templates_dir: Path) -> Environment:
@@ -374,6 +385,46 @@ _METRICS_COLUMNS = [
 ]
 
 
+def _try_write_parquet(week_id: str, metrics: list, snap_dir: Path) -> int | None:
+    """Best-effort Parquet emission alongside CSV/JSONL. Returns byte size
+    if pyarrow is available and the write succeeded; ``None`` otherwise."""
+    try:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+    except ImportError:
+        return None
+
+    rows: list[dict] = []
+    for m in metrics:
+        rows.append({
+            "week_id": week_id,
+            "prompt_id": m.prompt_id,
+            "model_id": m.model_id,
+            "n_samples": m.n_samples,
+            "refusal_rate": float(m.refusal_rate),
+            "refusal_ci_lower": float(m.refusal_ci.lower),
+            "refusal_ci_upper": float(m.refusal_ci.upper),
+            "hedge_density": float(m.hedge_density),
+            "length_median": float(m.length.median),
+            "length_p25": float(m.length.p25),
+            "length_p75": float(m.length.p75),
+            "stance": m.stance,
+            "stance_confidence": (
+                None if m.stance_confidence is None else float(m.stance_confidence)
+            ),
+            "embedding_centroid_shift": (
+                None if m.embedding_centroid_shift is None
+                else float(m.embedding_centroid_shift)
+            ),
+            "flagged_for_review": bool(m.flagged_for_review),
+            "flag_reason": m.flag_reason,
+        })
+    table = pa.Table.from_pylist(rows)
+    out = snap_dir / "metrics.parquet"
+    pq.write_table(table, out)
+    return out.stat().st_size
+
+
 def _metrics_to_csv(week_id: str, metrics: list) -> str:
     buf = io.StringIO()
     w = csv.writer(buf, lineterminator="\n")
@@ -452,16 +503,27 @@ def publish_data(
         for name, text in artifacts.items():
             (snap_dir / name).write_text(text)
             sums.append(f"{_sha256_of(text)}  {name}")
+
+        # Optional Parquet companion: emitted when pyarrow is installed.
+        parquet_bytes = _try_write_parquet(week_id, metrics, snap_dir)
+        if parquet_bytes is not None:
+            pq_content = (snap_dir / "metrics.parquet").read_bytes()
+            pq_sha = hashlib.sha256(pq_content).hexdigest()
+            sums.append(f"{pq_sha}  metrics.parquet")
+
         (snap_dir / "SHA256SUMS").write_text("\n".join(sorted(sums)) + "\n")
 
+        files_meta = [
+            {"name": name, "size": len(text.encode("utf-8"))}
+            for name, text in artifacts.items()
+        ]
+        if parquet_bytes is not None:
+            files_meta.append({"name": "metrics.parquet", "size": parquet_bytes})
         snapshots_meta.append(
             {
                 "week_id": week_id,
                 "is_current": week_id == manifest.snapshot.week_id,
-                "files": [
-                    {"name": name, "size": len(text.encode("utf-8"))}
-                    for name, text in artifacts.items()
-                ],
+                "files": files_meta,
                 "row_count": len(metrics),
             }
         )

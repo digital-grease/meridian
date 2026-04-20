@@ -24,33 +24,103 @@
   <h2>Current sources</h2>
   <p>
     The project is bootstrapped from volunteer labor and out-of-pocket API
-    credits. As the corpus and model coverage grow, funding will likely come
-    from some combination of:
+    credits. We accept:
   </p>
   <ul>
-    <li>Individual sponsors via GitHub Sponsors or Open Collective.</li>
-    <li>Grants from AI-safety and civil-society foundations.</li>
+    <li><strong>Individual donations via Buy Me a Coffee</strong>. Donors
+      are listed by BMC unless anonymous. No editorial influence attaches
+      to a donation &mdash; we do not know who has donated when writing
+      reports, and would not change a report&rsquo;s content if we did.</li>
+    <li>Grants from AI-safety and civil-society foundations, once we apply.</li>
     <li>Patronage from journalism or research organizations whose work
       benefits from the measurements.</li>
     <li>Institutional subscriptions for deep-access to raw data, while the
       aggregate dashboard stays free.</li>
   </ul>
+  <p>
+    <a class="bmc-button" href="https://www.buymeacoffee.com/digitalgrease"
+       rel="noopener" target="_blank">
+      <span class="cup" aria-hidden="true">&#x2615;</span>
+      Buy me a coffee
+    </a>
+  </p>
   <p class="muted">
-    Detailed funding disclosures will be posted here as soon as they exist.
+    Detailed funding disclosures will be posted here once there is
+    anything beyond volunteer labor to disclose.
   </p>
 
   <h2>Cost transparency</h2>
   <p>
-    The dominant expense is API costs at the providers we measure. Rough
-    order-of-magnitude for a full roster: ~$12,000 per year at current
-    prices. Infrastructure (GitHub Pages, a small Postgres instance, worker
-    compute) is budgeted at under $500 per month.
+    The dominant expense is API costs at the providers we measure.
+    Current monthly burn is <strong>~$86</strong> on the Level 0
+    configuration: 30 prompts, Claude Opus and GPT-5 Preview
+    alternating biweekly, Ollama baseline every week. That&rsquo;s
+    volunteer-sustainable and is what we&rsquo;re running today.
+  </p>
+  <p>
+    Infrastructure (GitHub Pages, storage, worker compute) is
+    currently absorbed by the maintainer.
   </p>
 
-  <h2>Sponsor us</h2>
+  <h2 id="what-funding-unlocks">What funding unlocks</h2>
   <p>
-    We are not currently accepting sponsorship. When we are, the mechanism
-    will be public and described here.
+    The project started deliberately narrow. We want to broaden. Each
+    step up requires sustained monthly funding; sponsors move the
+    project up this ladder.
+  </p>
+  <dl class="metric-glossary">
+    <dt>Now &middot; ~$86 / mo</dt>
+    <dd>
+      30 prompts. Opus and GPT-5 Preview alternating biweekly. Ollama
+      every week. Current volunteer-sustained operation.
+    </dd>
+
+    <dt>+$150 / mo</dt>
+    <dd>
+      Add Google Gemini 2.5 Pro on a biweekly cadence. First time we
+      cover all three major providers weekly at the frontier tier.
+    </dd>
+
+    <dt>+$300 / mo</dt>
+    <dd>
+      Unalternate: Opus, GPT-5, and Gemini all run every week. Weekly
+      time-resolution on every frontier model.
+    </dd>
+
+    <dt>+$800 / mo</dt>
+    <dd>
+      Expand the corpus from 30 to ~100 prompts. Hits the coverage
+      the methodology calls for and makes per-axis analysis
+      statistically robust.
+    </dd>
+
+    <dt>+$1,500 / mo</dt>
+    <dd>
+      Full <a href="/methodology/">methodology-spec</a> corpus
+      (150&ndash;200 prompts), full roster weekly, held-out set fully
+      populated, plus durable storage (S3 + IPFS pinning for the
+      &ldquo;retention forever&rdquo; guarantee).
+    </dd>
+
+    <dt>+$2,500 / mo</dt>
+    <dd>
+      200&ndash;300 prompt corpus at full sampling density. Trained
+      refusal classifier. Postgres index for researcher queries.
+      Scheduled orchestration. Upper end of what the project can
+      productively spend.
+    </dd>
+  </dl>
+  <p>
+    <a class="bmc-button" href="https://www.buymeacoffee.com/digitalgrease"
+       rel="noopener" target="_blank">
+      <span class="cup" aria-hidden="true">&#x2615;</span>
+      Buy me a coffee
+    </a>
+  </p>
+  <p class="muted">
+    One coffee (~$5) funds roughly a week of the current Level 0
+    configuration, or about an hour of measurement on the frontier
+    tier at Level 1.
   </p>
 </article>
 {% endblock %}

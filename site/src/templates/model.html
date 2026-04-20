@@ -48,7 +48,7 @@
         <tr>
           <th scope="row"><a href="/prompts/{{ p.prompt_id }}/">{{ p.title }}</a></th>
           <td><a href="/axes/{{ p.axis }}/">{{ p.axis | replace('-', ' ') }}</a></td>
-          <td>{{ values | sparkline(label=p.title, value_format=spec.fmt) }}</td>
+          <td>{{ values | sparkline(label=p.title, value_format=spec.fmt, change_point_indices=manifest.change_points_for(p.prompt_id, model.model_id, spec.key)) }}</td>
           <td>{% if values %}<code>{{ spec.fmt.format(values[-1]) }}</code>{% else %}—{% endif %}</td>
         </tr>
         {% endfor %}
@@ -56,5 +56,79 @@
     </table>
   </section>
   {% endfor %}
+
+  {% set drift_rows = [] %}
+  {% for p in prompts %}
+    {% set mx = manifest.current_metric(p.prompt_id, model.model_id) %}
+    {% if mx and mx.embedding_centroid_shift is not none %}
+      {% set _ = drift_rows.append((p, mx)) %}
+    {% endif %}
+  {% endfor %}
+  {% if drift_rows %}
+  <section class="metric-section" aria-labelledby="m-semdrift">
+    <h2 id="m-semdrift">Semantic drift</h2>
+    <p class="muted">
+      L2 distance between the mean response embedding this week and last week.
+      Higher = more semantic shift. <a href="/methodology/#embedding">How this is measured</a>.
+    </p>
+    <table class="metric-table">
+      <caption>Embedding centroid shift vs. prior week, {{ manifest.snapshot.week_id }}.</caption>
+      <thead>
+        <tr>
+          <th scope="col">Prompt</th>
+          <th scope="col">Axis</th>
+          <th scope="col">Shift</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p, mx in drift_rows %}
+        <tr>
+          <th scope="row"><a href="/prompts/{{ p.prompt_id }}/">{{ p.title }}</a></th>
+          <td><a href="/axes/{{ p.axis }}/">{{ p.axis | replace('-', ' ') }}</a></td>
+          <td class="semantic-drift-cell"><code class="magnitude">{{ '{:.4f}'.format(mx.embedding_centroid_shift) }}</code></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+
+  {% set stance_rows = [] %}
+  {% for p in prompts %}
+    {% set mx = manifest.current_metric(p.prompt_id, model.model_id) %}
+    {% if mx and mx.stance != 'na' %}
+      {% set _ = stance_rows.append((p, mx)) %}
+    {% endif %}
+  {% endfor %}
+  {% if stance_rows %}
+  <section class="metric-section" aria-labelledby="m-stance">
+    <h2 id="m-stance">Stance</h2>
+    <p class="muted">
+      Zero-shot classifier output on stance-bearing prompts for the latest week.
+      <a href="/methodology/#stance">How this is measured</a>.
+    </p>
+    <table class="metric-table">
+      <caption>Model stance on stance-bearing prompts, {{ manifest.snapshot.week_id }}.</caption>
+      <thead>
+        <tr>
+          <th scope="col">Prompt</th>
+          <th scope="col">Axis</th>
+          <th scope="col">Stance</th>
+          <th scope="col">Confidence</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p, mx in stance_rows %}
+        <tr>
+          <th scope="row"><a href="/prompts/{{ p.prompt_id }}/">{{ p.title }}</a></th>
+          <td><a href="/axes/{{ p.axis }}/">{{ p.axis | replace('-', ' ') }}</a></td>
+          <td><span class="stance stance-{{ mx.stance }}">{{ mx.stance }}</span></td>
+          <td>{% if mx.stance_confidence is not none %}<code>{{ '{:.0%}'.format(mx.stance_confidence) }}</code>{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
 </article>
 {% endblock %}

@@ -20,6 +20,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 Provider = Literal["anthropic", "openai", "ollama"]
 
+# A runner's schedule. v0.1 supports three patterns; cron expressions are
+# a v0.2 concern if we ever need finer control than "every / even / odd".
+Cadence = Literal["every_week", "even_weeks", "odd_weeks"]
+
 
 class RunnerSpec(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -27,6 +31,25 @@ class RunnerSpec(BaseModel):
     model_id: str
     base_url: str | None = None   # for ollama / self-hosted
     enabled: bool = True
+    cadence: Cadence = "every_week"
+
+
+def should_run_in_week(cadence: Cadence, week_id: str) -> bool:
+    """Does a runner with ``cadence`` belong in the run for ``week_id``?
+
+    ``week_id`` is an ISO format string like ``"2026-W16"``.
+    """
+    if cadence == "every_week":
+        return True
+    try:
+        week_num = int(week_id.rsplit("-W", 1)[1])
+    except (IndexError, ValueError) as e:
+        raise ValueError(f"unparseable week_id: {week_id!r}") from e
+    if cadence == "even_weeks":
+        return week_num % 2 == 0
+    if cadence == "odd_weeks":
+        return week_num % 2 == 1
+    raise ValueError(f"unknown cadence: {cadence!r}")
 
 
 class SamplingSpec(BaseModel):
@@ -62,8 +85,14 @@ def load_config(path: Path | None = None) -> PipelineConfig:
     return PipelineConfig.model_validate(data)
 
 
-def build_runners(config: PipelineConfig):
-    """Instantiate runners from config, pulling API keys from env."""
+def build_runners(config: PipelineConfig, *, week_id: str | None = None):
+    """Instantiate enabled runners from config.
+
+    If ``week_id`` is given, runners whose cadence excludes that week are
+    also filtered out. Passing ``None`` disables cadence filtering and
+    returns every enabled runner (useful for the ``estimate`` subcommand's
+    "monthly average" view).
+    """
     from drift_audit.runners.anthropic import AnthropicRunner
     from drift_audit.runners.openai import OpenAIRunner
     from drift_audit.runners.ollama import OllamaRunner
@@ -71,6 +100,8 @@ def build_runners(config: PipelineConfig):
     out = []
     for spec in config.runners:
         if not spec.enabled:
+            continue
+        if week_id is not None and not should_run_in_week(spec.cadence, week_id):
             continue
         if spec.provider == "anthropic":
             out.append(AnthropicRunner(spec.model_id, api_key=os.environ.get("ANTHROPIC_API_KEY")))

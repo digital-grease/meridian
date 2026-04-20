@@ -1,0 +1,124 @@
+name: Weekly pipeline run
+
+# Runs the sampling pipeline Sunday 01:00 UTC, one hour before the site
+# build workflow. If this succeeds, the site workflow picks up the fresh
+# manifest; if this fails, an issue is opened for the maintainers.
+#
+# Secrets required in the repository settings:
+#   ANTHROPIC_API_KEY (optional — set to enable the Anthropic runner)
+#   OPENAI_API_KEY    (optional — same)
+# Ollama is not available in GitHub's hosted runners; enable only the
+# providers you have keys for in drift_audit/config.yaml.
+
+on:
+  schedule:
+    - cron: "0 1 * * 0"
+  workflow_dispatch:
+    inputs:
+      week:
+        description: "ISO week id (optional — defaults to this week)"
+        required: false
+        type: string
+      force:
+        description: "Re-sample pairs that already have complete counts"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # needed to commit the updated manifest back to main
+  issues: write     # to open a failure issue on error
+
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+jobs:
+  sample:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        # Pinned patch version keeps weekly pipeline output reproducible
+        # across minor CPython updates. Bump deliberately, not via drift.
+        run: uv python install 3.12.7
+
+      - name: Install deps
+        run: uv sync --frozen || uv sync
+
+      - name: Verify at least one provider secret is set
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        # A silently-missing secret would produce a partial manifest with
+        # no failure signal. Fail here instead, loudly.
+        run: |
+          set -euo pipefail
+          if [ -z "${ANTHROPIC_API_KEY}" ] && [ -z "${OPENAI_API_KEY}" ]; then
+            echo "::error::No provider API keys are set. Configure ANTHROPIC_API_KEY and/or OPENAI_API_KEY in repository secrets before running." >&2
+            exit 2
+          fi
+          if [ -z "${ANTHROPIC_API_KEY}" ]; then
+            echo "::warning::ANTHROPIC_API_KEY is not set — the Anthropic runner will be skipped."
+          fi
+          if [ -z "${OPENAI_API_KEY}" ]; then
+            echo "::warning::OPENAI_API_KEY is not set — the OpenAI runner will be skipped."
+          fi
+
+      - name: Run pipeline
+        id: run
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          WEEK_ARG=""
+          if [ -n "${{ inputs.week }}" ]; then WEEK_ARG="--week ${{ inputs.week }}"; fi
+          FORCE_ARG=""
+          if [ "${{ inputs.force }}" = "true" ]; then FORCE_ARG="--force"; fi
+          uv run python -m drift_audit.pipeline.cli run --yes ${WEEK_ARG} ${FORCE_ARG}
+
+      - name: Commit fresh manifest
+        if: success()
+        run: |
+          git config user.name "drift-audit[bot]"
+          git config user.email "drift-audit-bot@users.noreply.github.com"
+          git add site/fixtures/ data/manifests/ data/run_log.jsonl || true
+          if git diff --cached --quiet; then
+            echo "no manifest changes to commit"
+          else
+            git commit -m "chore(pipeline): weekly run for $(date -u +'%Y-W%V')"
+            git push
+          fi
+
+      - name: Open issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const iso = new Date().toISOString().slice(0, 10);
+            const run_url = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Pipeline failure: ${iso}`,
+              body: [
+                `The weekly pipeline run failed.`,
+                ``,
+                `Run: ${run_url}`,
+                ``,
+                `Tail of \`data/run_log.jsonl\` (if persisted) may have details.`,
+                `Re-run via the \`workflow_dispatch\` button on this workflow.`,
+              ].join("\n"),
+              labels: ["pipeline", "automated", "bug"],
+            });

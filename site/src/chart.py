@@ -33,12 +33,13 @@ def sparkline(
     color: str = "currentColor",
     label: str = "",
     value_format: str = "{:.2f}",
+    change_point_indices: list[int] | None = None,
 ) -> Markup:
     """Inline SVG sparkline.
 
-    Accessibility: sets ``role="img"``, ``aria-label``, and a ``<title>``
-    with every value so screen readers announce the series. Templates
-    should follow up with a data table for full programmatic access.
+    ``change_point_indices`` draws vertical dashed markers at the given
+    indices. Indices are validated as integers in range; any other value
+    is silently dropped to keep the SVG injection-safe.
     """
     if not values:
         return Markup('<span class="muted">no data</span>')
@@ -48,18 +49,41 @@ def sparkline(
     n = len(values)
     if n == 1:
         points = f"0,{height / 2:.1f} {width},{height / 2:.1f}"
+        step_size = 0.0
     else:
-        step = width / (n - 1)
+        step_size = width / (n - 1)
         points = " ".join(
-            f"{i * step:.1f},{height - ((v - lo) / span) * height:.1f}"
+            f"{i * step_size:.1f},{height - ((v - lo) / span) * height:.1f}"
             for i, v in enumerate(values)
         )
-    title = escape(label or "sparkline")
+
+    # Build change-point markers from VALIDATED integer indices only.
+    # Everything composed into the SVG here is numeric after validation.
+    marker_parts: list[str] = []
+    if change_point_indices:
+        for raw_idx in change_point_indices:
+            if not isinstance(raw_idx, int):
+                continue
+            if not (0 < raw_idx < n):
+                continue
+            x = float(raw_idx) * step_size
+            marker_parts.append(
+                f'<line x1="{x:.1f}" y1="0" x2="{x:.1f}" y2="{height}" '
+                f'stroke="#d55e00" stroke-width="1" stroke-dasharray="2,2" />'
+            )
+    markers_svg = "".join(marker_parts)
+
+    # Compose the human-readable label, then escape exactly once.
+    base_label = label or "sparkline"
+    if marker_parts:
+        base_label = f"{base_label} (change-point marked)"
+    title = escape(base_label)
     values_text = escape(", ".join(value_format.format(v) for v in values))
     return Markup(
         f'<svg class="sparkline" role="img" viewBox="0 0 {width} {height}" '
         f'width="{width}" height="{height}" aria-label="{title}: {values_text}">'
         f"<title>{title}: {values_text}</title>"
+        f"{markers_svg}"
         f'<polyline fill="none" stroke="{color}" stroke-width="1.5" '
         f'stroke-linecap="round" stroke-linejoin="round" '
         f'points="{points}" /></svg>'

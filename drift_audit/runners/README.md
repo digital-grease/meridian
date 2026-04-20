@@ -70,7 +70,7 @@ asyncio.run(main())
 "
 ```
 
-## Hard rules (from `CLAUDE.md`)
+## Hard rules
 
 - **Append-only storage**: runners must not modify or rewrite prior
   samples. The storage layer enforces this, but a runner that re-uses

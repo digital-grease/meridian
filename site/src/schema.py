@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 Axis = Literal[
     "political",
@@ -39,6 +39,35 @@ class LengthStats(Frozen):
     p25: float = Field(ge=0.0)
     p75: float = Field(ge=0.0)
     n: int = Field(ge=0)
+
+
+class DriftTest(Frozen):
+    """Two-sample drift test result for one metric on one (prompt × model).
+
+    Populated only when a prior week's samples are available. The
+    ``adjusted_p_value`` and ``significant_after_bh`` fields are filled
+    in by the within-week Benjamini–Hochberg pass in
+    ``drift_audit.pipeline.manifest_writer``; ``p_value`` alone is the
+    raw output of ``drift_audit.analysis.drift_tests``.
+    """
+    p_value: float = Field(ge=0.0, le=1.0)
+    adjusted_p_value: float = Field(ge=0.0, le=1.0)
+    significant_after_bh: bool
+
+
+class ChangePointsSummary(Frozen):
+    """Precomputed PELT change-point indices per metric time series.
+
+    Indices point into the oldest-first series returned by
+    :meth:`Manifest.timeseries`. A non-terminal segment boundary at
+    position ``k`` means the metric changed regime starting at week
+    ``series[k]``. Computed once by the pipeline; the site consumes
+    these indices directly rather than invoking the analysis code at
+    render time.
+    """
+    refusal_rate: list[int] = Field(default_factory=list)
+    hedge_density: list[int] = Field(default_factory=list)
+    length_median: list[int] = Field(default_factory=list)
 
 
 class PromptRecord(Frozen):
@@ -69,6 +98,10 @@ class MetricRecord(Frozen):
     stance: Stance = "na"
     stance_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     embedding_centroid_shift: float | None = Field(default=None, ge=0.0)
+    refusal_drift: DriftTest | None = None
+    hedge_drift: DriftTest | None = None
+    length_drift: DriftTest | None = None
+    change_points: ChangePointsSummary = Field(default_factory=ChangePointsSummary)
     sample_s3_uris: list[str] = Field(default_factory=list)
     flagged_for_review: bool = False
     flag_reason: str | None = None
@@ -89,6 +122,25 @@ class HistorySnapshot(Frozen):
     metrics: list[MetricRecord]
 
 
+class SilentUpdateWarning(Frozen):
+    """Candidate silent-model-update event on the neutral-control axis.
+
+    Flagged when a model's axis-level metric shifts week-over-week by
+    more than ``drift_audit.analysis.silent_update`` thresholds. These
+    are *candidates*, not proven updates — the public report should say
+    "appears to have updated" and invite human review.
+    """
+    model_id: str
+    from_week: str
+    to_week: str
+    axis: str
+    metric: str
+    from_value: float
+    to_value: float
+    delta: float
+    severity: Literal["low", "medium", "high"]
+
+
 class Manifest(Frozen):
     schema_version: int
     snapshot: Snapshot
@@ -97,6 +149,7 @@ class Manifest(Frozen):
     metrics: list[MetricRecord]
     history: list[HistorySnapshot] = Field(default_factory=list)  # oldest-first
     flagged: list[str] = Field(default_factory=list)
+    silent_update_warnings: list[SilentUpdateWarning] = Field(default_factory=list)
 
     def prompt_by_id(self, pid: str) -> PromptRecord | None:
         return next((p for p in self.prompts if p.prompt_id == pid), None)
@@ -114,6 +167,26 @@ class Manifest(Frozen):
     def all_weeks(self) -> list[str]:
         """All week_ids present (history + current), oldest-first."""
         return [h.week_id for h in self.history] + [self.snapshot.week_id]
+
+    def current_metric(self, prompt_id: str, model_id: str) -> MetricRecord | None:
+        """The current-week MetricRecord for a (prompt, model) pair, if any."""
+        for m in self.metrics:
+            if m.prompt_id == prompt_id and m.model_id == model_id:
+                return m
+        return None
+
+    def change_points_for(self, prompt_id: str, model_id: str, metric: str) -> list[int]:
+        """Precomputed change-point indices for a (prompt × model × metric) series.
+
+        Returns indices into :meth:`timeseries` output for the same
+        triple. ``metric`` is one of ``'refusal_rate'``, ``'hedge_density'``,
+        ``'length_median'``. Empty list when no change points were
+        detected or the series is too short.
+        """
+        for m in self.metrics:
+            if m.prompt_id == prompt_id and m.model_id == model_id:
+                return list(getattr(m.change_points, metric))
+        return []
 
     def timeseries(self, prompt_id: str, model_id: str, metric: str) -> list[tuple[str, float]]:
         """(week_id, value) points for a given (prompt, model, metric), oldest-first.

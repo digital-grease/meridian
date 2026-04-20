@@ -82,7 +82,10 @@ class Orchestrator:
         prompts: list[Prompt] | None = None,
         force: bool = False,
     ) -> RunOutcome:
-        prompts = prompts if prompts is not None else self.corpus.public()
+        # Default samples BOTH public and held-out — the whole point of the
+        # held-out set is to measure against it. The manifest writer is
+        # what decides which ones cross the boundary into the public site.
+        prompts = prompts if prompts is not None else self.corpus.all()
         outcome = RunOutcome(week_id=self.plan.week_id)
 
         async def run_one_runner(runner: Runner) -> None:

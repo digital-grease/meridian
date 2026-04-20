@@ -60,25 +60,79 @@ class Corpus(BaseModel):
     def held_out(self) -> list[Prompt]:
         return [p for p in self.prompts if p.held_out]
 
+    def all(self) -> list[Prompt]:
+        return list(self.prompts)
 
-_DEFAULT_PATH = Path(__file__).resolve().parent / "prompts.yaml"
+    @property
+    def has_held_out(self) -> bool:
+        return any(p.held_out for p in self.prompts)
 
 
-def load_corpus(path: Path | None = None) -> Corpus:
+_CORPUS_DIR = Path(__file__).resolve().parent
+_DEFAULT_PATH = _CORPUS_DIR / "prompts.yaml"
+# Searched in order. Both paths are gitignored so the held-out set never
+# lands in public git history. ``.local.yaml`` is the preferred filename
+# for single-machine maintainer copies.
+_DEFAULT_HELD_OUT_PATHS: tuple[Path, ...] = (
+    _CORPUS_DIR / "held_out.local.yaml",
+    _CORPUS_DIR / "held_out.yaml",
+)
+
+
+def _load_prompts_file(path: Path, force_held_out: bool) -> list[Prompt]:
+    data = yaml.safe_load(path.read_text()) or {}
+    prompts: list[Prompt] = []
+    for raw in data.get("prompts", []) or []:
+        # Held-out files override any held_out flag in the YAML so a
+        # misplaced ``held_out: false`` cannot cause a leak.
+        if force_held_out:
+            raw = {**raw, "held_out": True}
+        prompts.append(Prompt.model_validate(raw))
+    return prompts
+
+
+def load_corpus(
+    path: Path | None = None,
+    *,
+    held_out_path: Path | None = None,
+) -> Corpus:
     """Load and validate the corpus from YAML.
 
-    Duplicates in ``id`` are a hard error; axes must match the site's
-    schema.py ``Axis`` literal; ``schema_version`` is checked but not
-    mapped — migrations are a v0.2 concern.
+    Args:
+        path: public prompts file. Defaults to ``prompts.yaml`` in this dir.
+        held_out_path: optional held-out prompts file. If omitted, the
+            default held-out paths are probed and the first existing file is
+            used. If none exist, the corpus ships without a held-out set
+            (valid — the held-out comparison simply produces no output).
+
+    Held-out prompts are force-flagged ``held_out=True`` regardless of what
+    the YAML says, so the flag can never accidentally be false in storage.
     """
-    p = path or _DEFAULT_PATH
-    data = yaml.safe_load(p.read_text())
-    corpus = Corpus.model_validate(data)
+    public_path = path or _DEFAULT_PATH
+    data = yaml.safe_load(public_path.read_text()) or {}
+    public_prompts = _load_prompts_file(public_path, force_held_out=False)
+
+    held_out_prompts: list[Prompt] = []
+    if held_out_path is not None:
+        if held_out_path.exists():
+            held_out_prompts = _load_prompts_file(held_out_path, force_held_out=True)
+    else:
+        for candidate in _DEFAULT_HELD_OUT_PATHS:
+            if candidate.exists():
+                held_out_prompts = _load_prompts_file(candidate, force_held_out=True)
+                break
+
+    all_prompts = public_prompts + held_out_prompts
 
     seen: set[str] = set()
-    for prompt in corpus.prompts:
+    for prompt in all_prompts:
         if prompt.id in seen:
             raise ValueError(f"duplicate prompt id: {prompt.id}")
         seen.add(prompt.id)
 
+    corpus = Corpus(
+        schema_version=data["schema_version"],
+        corpus_version=data["corpus_version"],
+        prompts=all_prompts,
+    )
     return corpus
