@@ -17,7 +17,16 @@
     <ul>
       <li><a href="#corpus">Corpus design</a></li>
       <li><a href="#sampling">Sampling</a></li>
-      <li><a href="#metrics">Metrics</a></li>
+      <li><a href="#metrics">Metrics</a>
+        <ul>
+          <li><a href="#refusal-rate">Refusal rate</a></li>
+          <li><a href="#hedge-density">Hedge density</a></li>
+          <li><a href="#embedding">Embedding centroid shift</a></li>
+          <li><a href="#stance">Stance</a></li>
+          <li><a href="#length-distribution">Length distribution</a></li>
+          <li><a href="#silent-update">Silent-update candidates</a></li>
+        </ul>
+      </li>
       <li><a href="#statistics">Statistical rigor</a></li>
       <li><a href="#reproduce">Reproducing a chart</a></li>
       <li><a href="#limits">Limitations and hard problems</a></li>
@@ -58,36 +67,59 @@
 
   <h2 id="metrics">Metrics</h2>
   <dl class="metric-glossary">
-    <dt>Refusal rate</dt>
+    <dt id="refusal-rate">Refusal rate</dt>
     <dd>Fraction of the <em>N</em> samples that declined to answer. Classified
       by a hand-labeled model validated at &ge; 95% F1 across providers.</dd>
 
-    <dt>Hedge density</dt>
+    <dt id="hedge-density">Hedge density</dt>
     <dd>Count of hedging markers per 100 tokens (&ldquo;it&rsquo;s important to
       note,&rdquo; &ldquo;some people argue,&rdquo; &hellip;). A measure of
       framing.</dd>
 
-    <dt>Embedding centroid shift</dt>
-    <dd>Week-over-week movement of the mean sentence-embedding centroid.
-      Spikes flag candidates for human review.</dd>
+    <dt id="embedding">Embedding centroid shift</dt>
+    <dd>L2 distance between the mean sentence-embedding centroid this week and
+      last week, per <code>(prompt &times; model)</code>. Higher = more semantic
+      shift in how the model is responding. In practice, shifts below 0.05 are
+      sampling noise; shifts above 0.15 warrant human review. The embedder
+      defaults to
+      <code>sentence-transformers/all-mpnet-base-v2</code>; the pipeline exposes
+      a Protocol so alternative models can be swapped in without changing the
+      manifest contract.</dd>
 
-    <dt>Stance score</dt>
-    <dd>Zero-shot pro / anti / neutral classification, applied only to
-      stance-bearing prompts. Periodically re-validated by hand.</dd>
+    <dt id="stance">Stance</dt>
+    <dd>Zero-shot classification of each response as pro / anti / neutral / na,
+      applied only to stance-bearing axes (<em>political</em> and
+      <em>historical-contested</em>). The current classifier is LLM-backed with
+      on-disk caching; classifications are periodically re-validated against
+      hand-labeled samples. Every other axis returns <code>na</code> without
+      calling the classifier.</dd>
 
-    <dt>Length distribution</dt>
+    <dt id="length-distribution">Length distribution</dt>
     <dd>Median and interquartile range of response length in tokens.
       Significant shifts often accompany policy updates.</dd>
+
+    <dt id="silent-update">Silent-update candidates</dt>
+    <dd>Week-over-week axis-level shifts on the <em>neutral-control</em> axis,
+      surfaced as advisory warnings on the current manifest. Neutral-control
+      prompts should never drift; anything that does is a candidate for
+      &ldquo;the model itself changed between weeks.&rdquo; These are
+      candidates, not proven updates &mdash; the report invites human review
+      rather than claiming certainty.</dd>
   </dl>
 
   <h2 id="statistics">Statistical rigor</h2>
   <ul>
     <li>Bootstrap <strong>confidence intervals</strong> on every reported metric.</li>
-    <li><strong>Benjamini&ndash;Hochberg</strong> correction for multiple testing
-      &mdash; with hundreds of prompts tested weekly, false positives are
-      otherwise guaranteed.</li>
+    <li><strong>Benjamini&ndash;Hochberg</strong> correction for multiple testing,
+      applied within each week across the full
+      <code>(prompt &times; model &times; metric)</code> family at FDR 0.05.
+      Per-metric p-values come from permutation two-sample tests against the
+      prior week&rsquo;s samples. Full spec in
+      <code>drift_audit/analysis/STATISTICS.md</code>.</li>
     <li><strong>Change-point detection</strong> (PELT) on time series rather than
-      naive thresholds.</li>
+      naive thresholds. Change points are precomputed by the pipeline and
+      published on the current-week manifest, so researchers reading the data
+      export see the same annotations the sparklines display.</li>
     <li><strong>Pre-registered</strong> hypotheses for major analyses, timestamped
       in the public repo before the data is seen.</li>
   </ul>

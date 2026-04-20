@@ -19,6 +19,48 @@
   </p>
 </section>
 
+{% if manifest.silent_update_warnings %}
+<section class="silent-updates" aria-labelledby="silent-updates-heading">
+  <h2 id="silent-updates-heading">Silent-update candidates this week</h2>
+  <p class="muted">
+    Neutral-control prompts shifted between these weeks for a given model. That
+    axis is constructed to be stable, so any movement is a candidate for
+    &ldquo;the model itself changed between weeks.&rdquo; These are candidates
+    for human review, not proven updates.
+    <a href="/methodology/#silent-update">How this is detected</a>.
+  </p>
+  <table class="metric-table">
+    <caption>Advisory warnings only. Latest snapshot: {{ manifest.snapshot.week_id }}.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Model</th>
+        <th scope="col">Axis</th>
+        <th scope="col">Metric</th>
+        <th scope="col">Transition</th>
+        <th scope="col">Δ</th>
+        <th scope="col">Severity</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for w in manifest.silent_update_warnings %}
+      <tr>
+        {% set m = manifest.model_by_id(w.model_id) %}
+        <td>
+          {% if m %}<a href="/models/{{ m.model_id }}/">{{ m.display_name }}</a>
+          {% else %}<code>{{ w.model_id }}</code>{% endif %}
+        </td>
+        <td>{{ w.axis | replace('-', ' ') }}</td>
+        <td>{{ w.metric | replace('_', ' ') }}</td>
+        <td><code>{{ w.from_week }}</code> → <code>{{ w.to_week }}</code></td>
+        <td><code>{{ '{:+.3f}'.format(w.delta) }}</code></td>
+        <td><span class="severity severity-{{ w.severity }}">{{ w.severity }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
 <section class="axes-index" aria-labelledby="axes-heading">
   <h2 id="axes-heading">Explore by axis</h2>
   <ul class="axes-list">

@@ -346,6 +346,21 @@ caption { text-align: left; color: var(--fg-muted); margin-bottom: 0.3em; }
 .stance-anti     { background: #5c1f1f; color: #f7e5e5; border-color: #8a3636; }
 .stance-neutral  { background: var(--bg-subtle); color: var(--fg); }
 
+/* ---------- Severity badges (silent-update warnings) ---------- */
+.severity {
+  display: inline-block;
+  padding: 0.1em 0.55em;
+  border-radius: 3px;
+  font-size: 0.88em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--border);
+  text-transform: uppercase;
+}
+.severity-low    { background: var(--bg-subtle); color: var(--fg-muted); }
+.severity-medium { background: #7a5c1f; color: #faf0db; border-color: #a68132; }
+.severity-high   { background: #5c1f1f; color: #f7e5e5; border-color: #8a3636; }
+
 /* ---------- Semantic-drift cell ---------- */
 .semantic-drift-cell { font-variant-numeric: tabular-nums; }
 .semantic-drift-cell .magnitude { font-weight: 600; }
