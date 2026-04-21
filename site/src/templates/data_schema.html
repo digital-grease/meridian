@@ -18,7 +18,7 @@
     Every snapshot under <a href="/data/"><code>/data/</code></a> follows this
     schema. Any change that breaks backward compatibility bumps the
     <code>schema_version</code> field in the manifest (currently
-    <code>1</code>).
+    <code>{{ manifest.schema_version }}</code>).
   </p>
 
   <h2><code>metrics.csv</code> / <code>metrics.jsonl</code></h2>
@@ -51,6 +51,41 @@
     catalog, current-week metrics, and up to N weeks of prior history.
     The machine-readable JSON Schema is at
     <code>site/schemas/manifest.schema.json</code> in the source repository.
+  </p>
+
+  <h2><code>responses.jsonl.gz</code></h2>
+  <p>
+    One gzipped JSON object per line. Each line is a serialized
+    <code>Sample</code> record &mdash; the same object the pipeline stores on
+    disk at capture time. Fields:
+  </p>
+  <dl class="metric-glossary">
+    <dt><code>prompt_id</code>, <code>model_id</code>, <code>provider</code></dt>
+    <dd>Identifiers matching the manifest and the metrics CSV.</dd>
+    <dt><code>request_index</code></dt>
+    <dd>Monotonic integer per (prompt × model × week); enables deterministic
+      ordering even under resume.</dd>
+    <dt><code>temperature</code>, <code>max_tokens</code></dt>
+    <dd>The sampling parameters requested from the provider.</dd>
+    <dt><code>text</code></dt><dd>Raw response body, as returned by the provider.</dd>
+    <dt><code>model_version_string</code></dt>
+    <dd>Exact provider-reported version string at capture time. Changes here
+      over time are the primary silent-update signal.</dd>
+    <dt><code>stop_reason</code></dt>
+    <dd>Provider-reported reason for termination (<code>stop</code>,
+      <code>length</code>, <code>refusal</code>, &hellip;).</dd>
+    <dt><code>input_tokens</code>, <code>output_tokens</code></dt>
+    <dd>Token counts as billed by the provider, where reported. May be
+      <code>null</code> for providers that do not return token usage.</dd>
+    <dt><code>latency_ms</code></dt>
+    <dd>Round-trip latency of the single sample request.</dd>
+    <dt><code>captured_at</code></dt>
+    <dd>RFC 3339 UTC timestamp of capture.</dd>
+  </dl>
+  <p class="muted">
+    Only public (non-held-out) prompts appear in this file. Held-out prompts
+    are never published; see the <a href="/methodology/#corpus">corpus
+    design</a> for why.
   </p>
 
   <h2>Versioning</h2>

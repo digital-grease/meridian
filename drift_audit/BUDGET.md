@@ -149,3 +149,36 @@ this ladder.
 - No preferential treatment to funders in analysis.
 - API is the measurement surface. Browser-surface scraping is not a
   cost-reduction avenue — see `.devloop/spikes/browser-surface.md`.
+
+---
+
+## Storage-size ceiling on in-repo weekly snapshots
+
+The pipeline emits `data/snapshots/{week}/responses.jsonl.gz` each run
+and the weekly-pipeline workflow commits it back to `main`. For the
+current Level-0 corpus this is ~1&ndash;3&nbsp;MB per week, trivially
+manageable in git.
+
+At larger corpus sizes the in-repo approach stops scaling:
+
+| Level | Per-week gzip | Per-year accumulation |
+|---|---:|---:|
+| 0 &mdash; 30 prompts, 3 models | ~1&ndash;3&nbsp;MB | ~50&ndash;150&nbsp;MB |
+| 3 &mdash; 75 prompts, 6 models | ~5&ndash;15&nbsp;MB | ~250&ndash;780&nbsp;MB |
+| 4 &mdash; 150 prompts, 6 models | ~10&ndash;30&nbsp;MB | ~500&nbsp;MB&ndash;1.5&nbsp;GB |
+| 5 &mdash; 300 prompts, 6 models | ~20&ndash;60&nbsp;MB | ~1&ndash;3&nbsp;GB |
+
+GitHub&rsquo;s soft repo-size limit is 1&nbsp;GB; the hard limit is
+about 5&nbsp;GB. We need to migrate snapshots out of git before Level 4
+lands. The two ready-made options:
+
+1. GitHub Actions artifacts passed between `weekly-pipeline` and
+   `weekly-build` (native, no new infra).
+2. S3 archival bucket (already provisioned via `infra/terraform/s3`).
+   The bucket is currently private; serving publicly either means
+   opening a prefix or having `weekly-build` pull via OIDC and re-host
+   on GitHub Pages.
+
+Either path is a ~1-day change when the scale trigger hits. Track the
+repo&rsquo;s `.git` size at each level-jump; migrate preemptively when
+the 12-month projection crosses 700&nbsp;MB.

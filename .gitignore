@@ -28,6 +28,12 @@ data/raw/
 data/cache/
 metrics/local/
 
+# data/snapshots/ is NOT ignored. It carries the weekly
+# responses.jsonl.gz that the site build copies into dist/data/{week}/
+# for public distribution. The weekly-pipeline workflow commits it back
+# to main so the downstream weekly-build workflow can find it. See
+# drift_audit/BUDGET.md for the scale ceiling on this approach.
+
 # Secrets
 *.pem
 *.key

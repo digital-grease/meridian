@@ -174,6 +174,23 @@ class S3SampleUploader:
             )
         return report
 
+    def upload_responses_snapshot(
+        self, gzip_path: Path, week_id: str
+    ) -> UploadReport:
+        """Archive the public responses gzip under
+        ``snapshots/{week_id}/responses.jsonl.gz``. Missing local file is
+        a no-op (the emission step decides whether one exists)."""
+        report = UploadReport()
+        if not gzip_path.exists():
+            return report
+        self._put_file(
+            gzip_path,
+            _s3_key(self.spec.prefix, "snapshots", week_id, "responses.jsonl.gz"),
+            report=report,
+            content_type="application/gzip",
+        )
+        return report
+
 
 def maybe_build_uploader(spec: S3StorageSpec | None) -> S3SampleUploader | None:
     """Construct an uploader when ``spec`` is present, else ``None``.

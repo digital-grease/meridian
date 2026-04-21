@@ -40,8 +40,9 @@
   --seq-3: #5ec962;
   --seq-4: #fde725;
 
-  /* Typography stack. Inter + IBM Plex Mono loaded via @font-face in a
-     future task; for now, use system fonts so nothing loads from the network. */
+  /* Typography stack. Inter and IBM Plex Mono are self-hosted WOFF2
+     files (see static/fonts/). System fonts remain as the fallback for
+     any connection where the variable font hasn't loaded yet. */
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
 
@@ -62,6 +63,44 @@
     --link-hover: #b3d4ff;
     --accent: #ff7a6b;
   }
+}
+
+/* ---------- Self-hosted fonts ----------
+   Variable Inter covers every weight in one file. IBM Plex Mono ships
+   per-weight files; we only bundle Regular + Bold since nothing in the
+   templates asks for italics or other weights on the mono face.
+   font-display:swap lets text render immediately in a system fallback
+   rather than waiting on font download — important on low-bandwidth
+   connections and for progressive-enhancement. */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/static/fonts/InterVariable.woff2") format("woff2-variations"),
+       url("/static/fonts/InterVariable.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/static/fonts/InterVariable-Italic.woff2") format("woff2-variations"),
+       url("/static/fonts/InterVariable-Italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/static/fonts/IBMPlexMono-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/static/fonts/IBMPlexMono-Bold.woff2") format("woff2");
 }
 
 /* ---------- Reset ---------- */

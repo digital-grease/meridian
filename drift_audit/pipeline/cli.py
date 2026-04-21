@@ -40,6 +40,7 @@ from drift_audit.pipeline.manifest_writer import (
     write_manifest,
 )
 from drift_audit.pipeline.run_log import append_run_log, read_run_log
+from drift_audit.pipeline.snapshot import emit_responses_snapshot, snapshot_path
 from drift_audit.sampling.cost import compute_actual_cost
 from drift_audit.sampling.orchestrator import Orchestrator, SamplingPlan
 from drift_audit.sampling.pricing import estimate_cost
@@ -169,9 +170,32 @@ async def _cmd_run(args: argparse.Namespace) -> int:
         write_manifest(internal, [internal_path])
         print(f"wrote internal (with held-out) manifest to {internal_path}")
 
-    _maybe_archive_to_s3(config, store, week_id, paths[0])
+    responses_gz = _emit_public_responses_snapshot(store, corpus, week_id)
+    _maybe_archive_to_s3(
+        config, store, week_id, paths[0],
+        responses_path=responses_gz,
+    )
 
     return 1 if outcome.pairs_failed > 0 else 0
+
+
+def _emit_public_responses_snapshot(
+    store: LocalSampleStore,
+    corpus: Corpus,
+    week_id: str,
+) -> Path | None:
+    """Write ``data/snapshots/{week}/responses.jsonl.gz`` for site
+    distribution + S3 archival.
+
+    Held-out samples are excluded by :func:`emit_responses_snapshot`.
+    """
+    out = snapshot_path(REPO_ROOT, week_id)
+    report = emit_responses_snapshot(store, corpus, week_id, out)
+    if report.sample_count == 0:
+        print(f"responses snapshot: {out.name} (empty — no public samples stored)")
+    else:
+        print(f"responses snapshot: {report.pretty()}")
+    return out
 
 
 def _append_run_log_entry(
@@ -221,8 +245,11 @@ def _maybe_archive_to_s3(
     store: LocalSampleStore,
     week_id: str,
     public_manifest_path: Path,
+    *,
+    responses_path: Path | None = None,
 ) -> None:
-    """Opt-in S3 mirror for raw samples + the public manifest.
+    """Opt-in S3 mirror for raw samples + the public manifest + the
+    week's public responses gzip.
 
     Non-fatal: an archive failure logs to stderr but the pipeline still
     reports success. The authoritative copy stays on local disk.
@@ -234,8 +261,14 @@ def _maybe_archive_to_s3(
     print(f"s3: raw samples — {raw_report.pretty()}")
     manifest_report = uploader.upload_manifest(public_manifest_path, week_id)
     print(f"s3: manifest    — {manifest_report.pretty()}")
-    for err in raw_report.errors + manifest_report.errors:
-        print(f"  s3 error: {err}", file=sys.stderr)
+    reports = [raw_report, manifest_report]
+    if responses_path is not None:
+        responses_report = uploader.upload_responses_snapshot(responses_path, week_id)
+        print(f"s3: responses   — {responses_report.pretty()}")
+        reports.append(responses_report)
+    for r in reports:
+        for err in r.errors:
+            print(f"  s3 error: {err}", file=sys.stderr)
 
 
 class _RunnerSpecShim:
@@ -320,6 +353,10 @@ def _cmd_build_manifest(args: argparse.Namespace) -> int:
         internal_path = _internal_manifest_path(week_id)
         write_manifest(internal, [internal_path])
         print(f"  {internal_path}  (held-out included)")
+    # Responses snapshot is an output of manifest rebuilds too — a
+    # researcher re-deriving metrics from a past week should also get
+    # refreshed raw-responses gzip alongside.
+    _emit_public_responses_snapshot(store, corpus, week_id)
     return 0
 
 

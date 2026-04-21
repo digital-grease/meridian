@@ -65,10 +65,18 @@
 
   <h2>Raw response bodies</h2>
   <p>
-    The CSV/JSONL above contains the computed metrics, not the raw responses.
-    Raw response text and JSON are referenced from the manifest by S3 URI; a
-    mirrored <code>responses.jsonl.gz</code> will be published here in a
-    future snapshot.
+    Each weekly snapshot carries a <code>responses.jsonl.gz</code> alongside
+    the computed metrics when the pipeline emitted one. The gzip is the
+    concatenation of every public (non-held-out) prompt&rsquo;s
+    <code>Sample</code> records for that week &mdash; full response text,
+    token counts, stop reasons, and provider metadata. A researcher can
+    recompute any dashboard metric from <code>prompts.yaml</code> +
+    <code>responses.jsonl.gz</code>.
+  </p>
+  <p class="muted">
+    Held-out prompts are excluded by construction. Older snapshots that
+    predate this feature omit the file; the snapshot index above flags
+    which weeks have it.
   </p>
 
   <h2>Reproducibility</h2>

@@ -26,6 +26,7 @@ from pathlib import Path
 
 import markdown
 import nh3
+import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 from markupsafe import Markup
 from pydantic import ValidationError
@@ -79,6 +80,8 @@ STATIC_PAGES: list[tuple[str, str]] = [
     ("funding.html", "funding/index.html"),
     ("contribute.html", "contribute/index.html"),
     ("404.html", "404.html"),
+    # Small JSON manifest for install-to-home-screen on mobile.
+    ("site.webmanifest", "site.webmanifest"),
 ]
 
 
@@ -156,7 +159,10 @@ def copy_static(static_dir: Path, out_dir: Path) -> None:
     shutil.copytree(
         static_dir,
         dest,
-        ignore=shutil.ignore_patterns(".gitkeep"),
+        # README.md files inside /static/ are repo-side provenance notes
+        # (see e.g. static/fonts/README.md for font licenses); they don't
+        # belong in the served output.
+        ignore=shutil.ignore_patterns(".gitkeep", "README.md"),
     )
 
 
@@ -385,6 +391,50 @@ _METRICS_COLUMNS = [
 ]
 
 
+def _per_week_readme(week_id: str) -> str:
+    return (
+        f"# Drift Audit snapshot: {week_id}\n\n"
+        f"ISO week {week_id}. Contains computed metrics plus the raw\n"
+        f"response samples they were derived from.\n\n"
+        f"## Files\n\n"
+        f"- `metrics.csv` / `metrics.jsonl` — one row per (prompt × model).\n"
+        f"- `metrics.parquet` — same data, columnar; present when the site\n"
+        f"  builder had `pyarrow` installed.\n"
+        f"- `manifest.json` — present on the current-week snapshot only;\n"
+        f"  the full schema-validated manifest the site renders from.\n"
+        f"- `responses.jsonl.gz` — gzipped stream of raw\n"
+        f"  :class:`drift_audit.runners.base.Sample` records for every\n"
+        f"  public prompt captured this week. Held-out prompt responses\n"
+        f"  are excluded. Present when the pipeline emitted one;\n"
+        f"  `SHA256SUMS` lists it when it is.\n"
+        f"- `SHA256SUMS` — hex digests for integrity verification.\n\n"
+        f"## License\n\n"
+        f"CC-BY-SA 4.0. See /data/schema/ for full column definitions.\n"
+        f"Citation: https://drift-audit.example/data/{week_id}/\n"
+    )
+
+
+def _copy_responses_snapshot(week_id: str, snap_dir: Path) -> dict | None:
+    """Copy ``data/snapshots/{week}/responses.jsonl.gz`` into the
+    published snapshot dir.
+
+    Returns ``{"size": int, "sha256": str}`` when the source file
+    exists, else ``None``. Missing source is not an error — older weeks
+    may predate the snapshot-emission feature, and tests that do not
+    seed raw samples still need to build the site cleanly.
+    """
+    src = REPO_ROOT / "data" / "snapshots" / week_id / "responses.jsonl.gz"
+    if not src.exists():
+        return None
+    content = src.read_bytes()
+    dest = snap_dir / "responses.jsonl.gz"
+    dest.write_bytes(content)
+    return {
+        "size": len(content),
+        "sha256": hashlib.sha256(content).hexdigest(),
+    }
+
+
 def _try_write_parquet(week_id: str, metrics: list, snap_dir: Path) -> int | None:
     """Best-effort Parquet emission alongside CSV/JSONL. Returns byte size
     if pyarrow is available and the write succeeded; ``None`` otherwise."""
@@ -482,14 +532,7 @@ def publish_data(
 
         csv_text = _metrics_to_csv(week_id, metrics)
         jsonl_text = _metrics_to_jsonl(week_id, metrics)
-        readme_text = (
-            f"# Drift Audit snapshot: {week_id}\n\n"
-            f"Contains metrics for {len(metrics)} (prompt x model) observations "
-            f"captured during ISO week {week_id}.\n\n"
-            f"Columns: {', '.join(_METRICS_COLUMNS)}\n\n"
-            f"License: CC-BY-SA 4.0. See /data/schema/ for full column definitions.\n"
-            f"Citation: https://drift-audit.example/data/{week_id}/\n"
-        )
+        readme_text = _per_week_readme(week_id)
 
         artifacts = {
             "metrics.csv": csv_text,
@@ -511,6 +554,10 @@ def publish_data(
             pq_sha = hashlib.sha256(pq_content).hexdigest()
             sums.append(f"{pq_sha}  metrics.parquet")
 
+        responses_meta = _copy_responses_snapshot(week_id, snap_dir)
+        if responses_meta is not None:
+            sums.append(f"{responses_meta['sha256']}  responses.jsonl.gz")
+
         (snap_dir / "SHA256SUMS").write_text("\n".join(sorted(sums)) + "\n")
 
         files_meta = [
@@ -519,12 +566,17 @@ def publish_data(
         ]
         if parquet_bytes is not None:
             files_meta.append({"name": "metrics.parquet", "size": parquet_bytes})
+        if responses_meta is not None:
+            files_meta.append(
+                {"name": "responses.jsonl.gz", "size": responses_meta["size"]}
+            )
         snapshots_meta.append(
             {
                 "week_id": week_id,
                 "is_current": week_id == manifest.snapshot.week_id,
                 "files": files_meta,
                 "row_count": len(metrics),
+                "has_responses": responses_meta is not None,
             }
         )
 
@@ -581,6 +633,52 @@ def write_search_index(
     out = out_dir / "static" / "search-index.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(records, separators=(",", ":")))
+
+
+def write_redirects(
+    env: Environment,
+    redirects_path: Path,
+    out_dir: Path,
+    base_context: dict,
+) -> int:
+    """Emit a redirect HTML page for every entry in ``site/redirects.yaml``.
+
+    The emitted pages participate in ``urls.txt`` (and therefore in the
+    link-rot guard) just like any other page — the whole point is that a
+    moved URL remains served rather than 404-ing. Returns the number of
+    redirects written, mostly for the build summary.
+    """
+    if not redirects_path.exists():
+        return 0
+    raw = yaml.safe_load(redirects_path.read_text()) or {}
+    entries = raw.get("redirects") or []
+    written = 0
+    for entry in entries:
+        src = entry["from"].strip()
+        dst = entry["to"].strip()
+        if not src.startswith("/") or not dst.startswith("/"):
+            raise SystemExit(
+                f"redirects.yaml: from/to must be site-root-relative paths; "
+                f"got from={src!r} to={dst!r}"
+            )
+        if src == dst:
+            raise SystemExit(
+                f"redirects.yaml: self-redirect on {src!r}; remove or fix"
+            )
+        reason = entry.get("reason")
+
+        # Canonicalize the output path: /foo/ -> foo/index.html; /foo.html -> foo.html.
+        rel = src[1:]
+        if rel.endswith("/") or rel == "":
+            out_path = out_dir / (rel + "index.html")
+        else:
+            out_path = out_dir / rel
+            if not out_path.suffix:
+                out_path = out_path / "index.html"
+        ctx = dict(base_context, from_path=src, to=dst, reason=reason)
+        render_page(env, "redirect.html", out_path, ctx)
+        written += 1
+    return written
 
 
 def write_robots(out_dir: Path) -> None:
@@ -674,6 +772,11 @@ def build(manifest_path: Path, out_dir: Path) -> dict:
 
     render_dashboard(env, out_dir, manifest, base_context)
     publish_data(env, out_dir, manifest_path, manifest, base_context)
+
+    redirects_path = REPO_ROOT / "site" / "redirects.yaml"
+    redirects_written = write_redirects(env, redirects_path, out_dir, base_context)
+    if redirects_written:
+        print(f"emitted {redirects_written} redirect page(s)")
 
     write_robots(out_dir)
     write_humans(out_dir, build_meta)

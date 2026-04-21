@@ -1,0 +1,28 @@
+# Drift Audit permanent URL redirects.
+#
+# The hard rule: a published URL must never 404. When a page is renamed,
+# moved, or restructured, add a row here instead of dropping the old URL.
+# The site builder emits an HTML page at each `from` path that:
+#   - meta-refreshes to the `to` path (for browsers)
+#   - sets rel=canonical on the `to` URL (for search engines)
+#   - shows a visible "This page has moved" link (for anyone whose browser
+#     blocks meta-refresh, including screen readers on older gateways)
+#
+# Format:
+#   redirects:
+#     - from: /old/path/
+#       to:   /new/path/
+#       reason: "short free-text explanation — surfaces in PR review"
+#
+# Guidelines:
+#   - `from` and `to` are site-root-relative paths. Use trailing slashes
+#     for directory-indexed pages (most Drift Audit pages).
+#   - Never redirect away from a path that still carries a useful URL.
+#     If the content is gone entirely, use `.allow-missing-urls` instead
+#     (see scripts/check_linkrot.py) — redirects are for renames, not
+#     deletions.
+#   - Never redirect from a /data/{week}/ or /prompts/ path; those
+#     citations go into academic papers. Rewrite the site around them.
+#   - Entries are append-only. Removing an entry re-breaks the URL.
+
+redirects: []

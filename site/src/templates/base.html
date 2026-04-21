@@ -13,7 +13,13 @@
   <link rel="canonical" href="{% block canonical %}https://drift-audit.example{{ path | default('/') }}{% endblock %}">
 
   <link rel="stylesheet" href="/static/css/base.css">
+  {# Favicon set. Modern browsers prefer the SVG; everything else falls
+     back to PNGs generated from the same source (see scripts/generate_favicons.py). #}
   <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/static/images/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="icon" href="/static/images/favicon-16.png" type="image/png" sizes="16x16">
+  <link rel="apple-touch-icon" href="/static/images/favicon-180.png" sizes="180x180">
+  <link rel="manifest" href="/site.webmanifest">
   <link rel="alternate" type="application/rss+xml" title="Drift Audit reports" href="/feed.xml">
 
   <meta property="og:type" content="{% block og_type %}website{% endblock %}">

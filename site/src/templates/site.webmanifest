@@ -1,0 +1,14 @@
+{
+  "name": "Drift Audit",
+  "short_name": "Drift Audit",
+  "description": "Longitudinal measurement of political, epistemic, and behavioral drift in commercial large language models.",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#0b2545",
+  "theme_color": "#0b2545",
+  "icons": [
+    { "src": "/static/images/favicon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/static/images/favicon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/static/images/favicon.svg",     "sizes": "any",      "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
