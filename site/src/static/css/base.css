@@ -337,7 +337,19 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
 .bmc-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .bmc-button .cup { font-size: 1.2em; line-height: 1; }
 
-/* Copy-citation button */
+/* Citation entries. Wraps <details> + injected .copy-btn so the button
+ * is a sibling of <summary>, not nested inside it (nested interactive
+ * elements fail WCAG; see _citation.html and citations.js). */
+.citation-entry {
+  position: relative;
+  margin-bottom: 0.8em;
+}
+.citation-entry .copy-btn {
+  position: absolute;
+  top: 0.2em;
+  right: 0.2em;
+}
+
 .copy-btn {
   font: inherit;
   font-size: 0.8rem;

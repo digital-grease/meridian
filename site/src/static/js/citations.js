@@ -8,15 +8,14 @@
   "use strict";
   if (!navigator.clipboard) return;
 
-  var sections = document.querySelectorAll(".citation");
-  for (var s = 0; s < sections.length; s++) {
-    var blocks = sections[s].querySelectorAll("details");
-    for (var i = 0; i < blocks.length; i++) {
-      attach(blocks[i]);
-    }
+  var entries = document.querySelectorAll(".citation .citation-entry");
+  for (var i = 0; i < entries.length; i++) {
+    attach(entries[i]);
   }
 
-  function attach(detailsEl) {
+  function attach(entry) {
+    var detailsEl = entry.querySelector("details");
+    if (!detailsEl) return;
     var content = detailsEl.querySelector("pre, p");
     if (!content) return;
 
@@ -38,10 +37,6 @@
         .catch(function () { btn.textContent = "Copy failed"; });
     });
 
-    var summary = detailsEl.querySelector("summary");
-    if (summary) {
-      summary.appendChild(document.createTextNode(" "));
-      summary.appendChild(btn);
-    }
+    entry.appendChild(btn);
   }
 })();

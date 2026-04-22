@@ -34,6 +34,11 @@ from pydantic import ValidationError
 _HERE = Path(__file__).resolve().parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
+# Repo root too, so `from drift_audit...` imports resolve when the
+# script is launched as `python site/src/build.py`.
+_REPO_ROOT_FOR_IMPORTS = _HERE.parent.parent
+if str(_REPO_ROOT_FOR_IMPORTS) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT_FOR_IMPORTS))
 
 from chart import OKABE_ITO, heatmap_cell_style, sparkline, viridis_color  # noqa: E402
 from schema import SCHEMA_VERSION, Manifest  # noqa: E402
@@ -79,6 +84,12 @@ STATIC_PAGES: list[tuple[str, str]] = [
     ("about.html", "about/index.html"),
     ("funding.html", "funding/index.html"),
     ("contribute.html", "contribute/index.html"),
+    # Internal triage surface for silent-update + insufficient-data flags.
+    # Unlinked from public nav; template sets <meta name="robots" content="noindex">.
+    ("review.html", "review/index.html"),
+    # Internal pipeline-health dashboard. Consumes data/run_log.jsonl;
+    # template renders empty-state copy when the log is absent.
+    ("internal/health.html", "internal/health/index.html"),
     ("404.html", "404.html"),
     # Small JSON manifest for install-to-home-screen on mobile.
     ("site.webmanifest", "site.webmanifest"),
@@ -267,7 +278,7 @@ def render_reports(
     env: Environment, out_dir: Path, reports: list[Report], base_context: dict
 ) -> None:
     for r in reports:
-        ctx = dict(base_context, report=r)
+        ctx = dict(base_context, report=r, og_slug=f"report-{r.slug}")
         render_page(
             env, "report.html", out_dir / "reports" / r.slug / "index.html", ctx
         )
@@ -318,6 +329,7 @@ def render_dashboard(
             prompts=manifest.prompts,
             manifest=manifest,
             timeseries=manifest.timeseries,
+            og_slug=f"model-{m.model_id}",
         )
         render_page(
             env, "model.html",
@@ -348,6 +360,7 @@ def render_dashboard(
             axis_prompts=axis_prompts,
             manifest=manifest,
             timeseries=manifest.timeseries,
+            og_slug=f"axis-{axis}",
         )
         render_page(
             env, "axis.html",
@@ -369,6 +382,7 @@ def render_dashboard(
             weeks=weeks,
             manifest=manifest,
             timeseries=manifest.timeseries,
+            og_slug=f"prompt-{p.prompt_id}",
         )
         render_page(
             env, "prompt.html",
@@ -747,6 +761,98 @@ def collect_urls(out_dir: Path) -> set[str]:
     return urls
 
 
+def load_run_log_summary(repo_root: Path) -> list:
+    """Return WeeklySummary rows for the internal health page.
+
+    Graceful when the log doesn't exist yet (empty list).
+    """
+    from drift_audit.pipeline.run_log import read_run_log
+    from drift_audit.pipeline.run_log_summary import summarize_weekly
+
+    log_path = repo_root / "data" / "run_log.jsonl"
+    return summarize_weekly(read_run_log(log_path))
+
+
+def og_available() -> bool:
+    """True when `site/src/og.py` can render PNGs.
+
+    Called before render_page() so base.html knows whether to emit
+    `<meta og:image>` URLs pointing at PNGs or fall back to the default
+    SVG. The matplotlib import is the real gate; doing it here avoids
+    committing to a PNG URL in HTML that never gets written to disk."""
+    try:
+        import matplotlib  # noqa: F401
+        from og import render_og_png  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def publish_og_images(
+    out_dir: Path,
+    manifest: Manifest,
+    reports: list[Report],
+) -> int:
+    """Best-effort OG PNG generation for the minimum-coverage page set.
+
+    Returns the number of PNGs written. 0 means matplotlib is missing
+    (warning printed to stderr); the site still builds and falls back
+    to the default SVG placeholder per base.html.
+    """
+    try:
+        from og import render_og_png
+    except ImportError:
+        print(
+            "[og] skipping: site/src/og.py import failed",
+            file=sys.stderr,
+        )
+        return 0
+
+    axes = sorted({p.axis for p in manifest.prompts})
+    specs: list[tuple[str, str, str]] = [
+        ("index", "Drift Audit",
+         "A public record of how commercial LLMs change over time"),
+        ("methodology", "Methodology",
+         "How Drift Audit measures drift on contested topics"),
+    ]
+    for r in reports:
+        specs.append((
+            f"report-{r.slug}",
+            r.title,
+            r.summary or "Drift Audit report",
+        ))
+    for m in manifest.models:
+        specs.append((
+            f"model-{m.model_id}",
+            m.display_name,
+            f"{m.provider} · {m.version_string}",
+        ))
+    for p in manifest.prompts:
+        specs.append((
+            f"prompt-{p.prompt_id}",
+            p.title,
+            f"Prompt on axis: {p.axis.replace('-', ' ')}",
+        ))
+    for axis in axes:
+        specs.append((
+            f"axis-{axis}",
+            axis.replace("-", " ").capitalize(),
+            "Drift Audit prompt axis",
+        ))
+
+    og_dir = out_dir / "static" / "og"
+    og_dir.mkdir(parents=True, exist_ok=True)
+    written = 0
+    for slug, title, subtitle in specs:
+        try:
+            render_og_png(title, subtitle, og_dir / f"{slug}.png")
+            written += 1
+        except RuntimeError as e:
+            print(f"[og] skipping {slug!r}: {e}", file=sys.stderr)
+            return written
+    return written
+
+
 def build(manifest_path: Path, out_dir: Path) -> dict:
     manifest = load_manifest(manifest_path)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -759,13 +865,38 @@ def build(manifest_path: Path, out_dir: Path) -> dict:
         "manifest_path": manifest_path.name,
         "schema_version": SCHEMA_VERSION,
     }
-    base_context = {"manifest": manifest, "build": build_meta, "site_title": "Drift Audit"}
+    reports = load_reports(CONTENT_REPORTS)
+
+    # Probe OG availability up-front so base.html only emits PNG URLs
+    # when PNGs will actually land on disk. Actual emission happens
+    # after copy_static (which wipes dist/static/).
+    og_ok = og_available()
+
+    # og_slug is inherited by every template. Pages that need a custom
+    # OG image override it; base.html checks og_available to decide
+    # between the PNG and the SVG fallback.
+    base_context = {
+        "manifest": manifest, "build": build_meta,
+        "site_title": "Drift Audit",
+        "og_slug": None, "og_available": og_ok,
+        "weekly_summaries": load_run_log_summary(REPO_ROOT),
+    }
+
+    # Pages in STATIC_PAGES that get their own OG PNG. Tuple of
+    # (template_name, og_slug).
+    _STATIC_OG_SLUGS = {
+        "index.html": "index",
+        "methodology.html": "methodology",
+    }
 
     for template_name, out_path in STATIC_PAGES:
         if (TEMPLATES_DIR / template_name).exists():
-            render_page(env, template_name, out_dir / out_path, base_context)
+            ctx = base_context
+            slug = _STATIC_OG_SLUGS.get(template_name)
+            if slug is not None:
+                ctx = dict(base_context, og_slug=slug)
+            render_page(env, template_name, out_dir / out_path, ctx)
 
-    reports = load_reports(CONTENT_REPORTS)
     if reports:
         render_reports(env, out_dir, reports, base_context)
         write_atom_feed(env, out_dir, reports, base_context)
@@ -785,6 +916,10 @@ def build(manifest_path: Path, out_dir: Path) -> dict:
     copy_static(STATIC_DIR, out_dir)
     # Must run after copy_static, which wipes and repopulates dist/static/.
     write_search_index(out_dir, manifest, reports)
+    if og_ok:
+        og_written = publish_og_images(out_dir, manifest, reports)
+        if og_written:
+            print(f"emitted {og_written} OG PNG(s)")
     (out_dir / "build.json").write_text(
         json.dumps(build_meta, indent=2, sort_keys=True) + "\n"
     )

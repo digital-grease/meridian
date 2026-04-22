@@ -1,0 +1,128 @@
+"""Accessibility (axe-core) contract test.
+
+Runs axe-core 4.x against a local HTTP-served build and asserts zero
+violations on the representative page list. The GitHub Actions workflow
+at .github/workflows/weekly-build.yml is the runtime tripwire; this test
+is the local fast-path so violations surface before push.
+
+Marked @pytest.mark.slow: the first npx run downloads @axe-core/cli
+(~20 s); subsequent runs are cached (~5 s for nine pages). Skipped
+automatically when npx is not installed.
+
+Note on file:// vs http://: templates reference /static/... with
+root-relative paths. Under file:// those resolve to the filesystem root
+and the stylesheet never loads — axe then evaluates Chromium UA defaults
+and produces ~440 spurious color-contrast violations. We serve dist over
+a local HTTP server so axe sees the real rendering.
+"""
+from __future__ import annotations
+
+import http.server
+import json
+import shutil
+import socket
+import socketserver
+import subprocess
+import threading
+from contextlib import closing
+from functools import partial
+from pathlib import Path
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+# Representative pages: every distinct template in site/src/templates/.
+# `/data/` is the data index (the per-week `/data/{week}/` is a raw
+# artifact directory with no index.html).
+PAGE_PATHS = [
+    "/",
+    "/about/",
+    "/methodology/",
+    "/reports/2026-W16/",
+    "/axes/political/",
+    "/models/claude-opus-4-7/",
+    "/prompts/fact-moon-landing/",
+    "/data/",
+]
+
+
+def _free_port() -> int:
+    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+class _QuietHandler(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, *args, **kwargs) -> None:  # noqa: D401
+        return
+
+
+@pytest.fixture(scope="module")
+def built_dist(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    dist = tmp_path_factory.mktemp("axe-dist")
+    manifest = REPO_ROOT / "site" / "fixtures" / "manifest-2026-W16.json"
+    result = subprocess.run(
+        [
+            "uv", "run", "python",
+            str(REPO_ROOT / "site" / "src" / "build.py"),
+            "--manifest", str(manifest),
+            "--out", str(dist),
+        ],
+        capture_output=True, text=True, cwd=REPO_ROOT,
+    )
+    assert result.returncode == 0, (
+        f"site build failed: {result.stderr}\n{result.stdout}"
+    )
+    return dist
+
+
+@pytest.fixture(scope="module")
+def axe_server(built_dist: Path):
+    port = _free_port()
+    handler = partial(_QuietHandler, directory=str(built_dist))
+    httpd = socketserver.TCPServer(("127.0.0.1", port), handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+@pytest.mark.slow
+def test_axe_no_violations(axe_server: str, tmp_path: Path) -> None:
+    if shutil.which("npx") is None:
+        pytest.skip("npx not available; CI workflow runs the hard gate")
+
+    urls = [axe_server + p for p in PAGE_PATHS]
+    # axe-core/cli 4.x resolves --save as cwd-relative and strips leading
+    # slashes, so we run from tmp_path and pass a bare filename.
+    out_json = tmp_path / "axe.json"
+    result = subprocess.run(
+        [
+            "npx", "--yes", "-p", "@axe-core/cli@4", "axe",
+            *urls,
+            "--save", out_json.name,
+        ],
+        capture_output=True, text=True, cwd=tmp_path,
+        timeout=300,
+    )
+    assert out_json.exists(), (
+        "axe produced no JSON. "
+        f"returncode={result.returncode}\nstdout:\n{result.stdout}\n"
+        f"stderr:\n{result.stderr}"
+    )
+
+    data = json.loads(out_json.read_text())
+    if isinstance(data, dict):
+        data = [data]
+    failures: list[str] = []
+    for page in data:
+        for v in page.get("violations", []):
+            for n in v.get("nodes", []):
+                failures.append(
+                    f"{page['url']} — {v['id']} ({v['impact']}): {n['target']}"
+                )
+    assert not failures, "axe-core violations:\n  " + "\n  ".join(failures)

@@ -78,15 +78,32 @@ jobs:
           fi
 
       - name: Accessibility audit (axe-core)
-        continue-on-error: true  # soft gate in v1; hard gate before public launch
+        # Hard gate. Local fast-path lives at
+        # drift_audit/tests/test_accessibility.py (@pytest.mark.slow,
+        # run with `uv run python -m pytest -m slow`).
+        #
+        # Pages are served over a local HTTP server because templates
+        # reference /static/... as root-relative paths; under file://
+        # those 404 and axe evaluates Chromium UA defaults (~440
+        # spurious color-contrast violations). See .devloop archive
+        # for the audit that established this.
         run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory site/dist &
+          SERVER_PID=$!
+          trap "kill $SERVER_PID 2>/dev/null || true" EXIT
+          for _ in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:8765/ -o /dev/null; then break; fi
+            sleep 0.25
+          done
           npx --yes -p @axe-core/cli@4 axe \
-            "file://$(pwd)/site/dist/index.html" \
-            "file://$(pwd)/site/dist/about/index.html" \
-            "file://$(pwd)/site/dist/methodology/index.html" \
-            "file://$(pwd)/site/dist/reports/2026-W16/index.html" \
-            "file://$(pwd)/site/dist/axes/political/index.html" \
-            "file://$(pwd)/site/dist/models/claude-opus-4-7/index.html" \
+            "http://127.0.0.1:8765/" \
+            "http://127.0.0.1:8765/about/" \
+            "http://127.0.0.1:8765/methodology/" \
+            "http://127.0.0.1:8765/reports/2026-W16/" \
+            "http://127.0.0.1:8765/axes/political/" \
+            "http://127.0.0.1:8765/models/claude-opus-4-7/" \
+            "http://127.0.0.1:8765/prompts/fact-moon-landing/" \
+            "http://127.0.0.1:8765/data/" \
             --exit
 
       - name: Upload Pages artifact

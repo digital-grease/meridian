@@ -72,3 +72,9 @@ ignore = ["E501"]  # line-length handled by formatter
 [tool.pytest.ini_options]
 testpaths = ["drift_audit/tests", "site/tests"]
 asyncio_mode = "auto"
+# Default run skips @pytest.mark.slow; CI opts in via `pytest -m slow`
+# (or `-m ""` to run everything).
+addopts = "-m 'not slow'"
+markers = [
+  "slow: tests that exceed ~2 s. Explicitly opt in via `pytest -m slow`.",
+]

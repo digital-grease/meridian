@@ -28,13 +28,18 @@
   <meta property="og:description" content="{% block og_description %}{{ self.description() }}{% endblock %}">
   <meta property="og:url" content="{{ self.canonical() }}">
   {% block og_image %}
-  {# v1: SVG placeholder. Per-page PNG OG images deferred to v1.1 (needs matplotlib). #}
+  {% if og_slug and og_available %}
+  <meta property="og:image" content="https://drift-audit.example/static/og/{{ og_slug }}.png">
+  {% else %}
   <meta property="og:image" content="https://drift-audit.example/static/images/og-default.svg">
+  {% endif %}
   {% endblock %}
 
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="{{ self.og_title() }}">
   <meta name="twitter:description" content="{{ self.og_description() }}">
+
+  {% block head_extra %}{% endblock %}
 
   {% block structured_data %}
   <script type="application/ld+json">

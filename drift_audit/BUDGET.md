@@ -182,3 +182,23 @@ lands. The two ready-made options:
 Either path is a ~1-day change when the scale trigger hits. Track the
 repo&rsquo;s `.git` size at each level-jump; migrate preemptively when
 the 12-month projection crosses 700&nbsp;MB.
+
+---
+
+## Site weight (built `dist/`)
+
+`.github/workflows/weekly-build.yml` fails the build when `site/dist`
+exceeds 800&nbsp;MB. Current contribution breakdown:
+
+| Asset | Current | At Level 4 (150 prompts) | Notes |
+|---|---:|---:|---|
+| OG PNGs (1200&times;630) | ~1.5&nbsp;MB (44 images) | ~5&nbsp;MB (~170 images) | One per prompt/model/axis/report plus index &amp; methodology. See `site/src/og.py`; emission is best-effort and skips when matplotlib is missing. |
+| Self-hosted fonts (Inter&nbsp;+&nbsp;Plex) | ~0.7&nbsp;MB | ~0.7&nbsp;MB | Fixed; all weights in one variable WOFF2 each. |
+| Per-week `/data/{week}/*` | ~50&nbsp;KB&ndash;3&nbsp;MB | ~5&ndash;30&nbsp;MB | Grows linearly in corpus size &times; week count. |
+| HTML (all pages) | ~2&nbsp;MB | ~8&nbsp;MB | Primarily prompt and model pages. |
+
+The per-week artifact is the only linearly-growing axis; everything
+else is proportional to corpus breadth, not run count. The OG-image
+contribution stays well under the cap even at Level 5 (~300 prompts,
+~5&ndash;10&nbsp;MB of PNG). Revisit when the 12-month `dist/`
+projection crosses 500&nbsp;MB.

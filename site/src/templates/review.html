@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% set path = "/review/" %}
+
+{% block title %}Review queue &mdash; Drift Audit{% endblock %}
+{% block description %}Internal triage view for silent-update candidates and insufficient-data flags from the latest manifest.{% endblock %}
+
+{% block head_extra %}
+  <meta name="robots" content="noindex">
+{% endblock %}
+
+{% block main %}
+<article class="page">
+  <h1>Review queue</h1>
+  <p class="lede">
+    Human-review surface for the latest snapshot
+    (<code>{{ manifest.snapshot.week_id }}</code>). Advisory flags only;
+    belongs behind editorial workflow once we have one.
+  </p>
+
+  <section aria-labelledby="silent-heading">
+    <h2 id="silent-heading">Silent-update candidates</h2>
+    {% if manifest.silent_update_warnings %}
+    <p class="muted">
+      Neutral-control prompts shifted between these weeks for a given model.
+      That axis is constructed to be stable, so any movement is a candidate
+      for &ldquo;the model itself changed between weeks.&rdquo;
+      <a href="/methodology/#silent-update">How this is detected</a>.
+    </p>
+    <table class="metric-table">
+      <caption>All candidates, no row limit. Total: {{ manifest.silent_update_warnings | length }}.</caption>
+      <thead>
+        <tr>
+          <th scope="col">Model</th>
+          <th scope="col">Transition</th>
+          <th scope="col">Axis</th>
+          <th scope="col">Metric</th>
+          <th scope="col">Δ</th>
+          <th scope="col">Severity</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for w in manifest.silent_update_warnings %}
+        <tr>
+          {% set m = manifest.model_by_id(w.model_id) %}
+          <td>
+            {% if m %}<a href="/models/{{ m.model_id }}/">{{ m.display_name }}</a>
+            {% else %}<code>{{ w.model_id }}</code>{% endif %}
+          </td>
+          <td><code>{{ w.from_week }}</code> → <code>{{ w.to_week }}</code></td>
+          <td>{{ w.axis | replace('-', ' ') }}</td>
+          <td>{{ w.metric | replace('_', ' ') }}</td>
+          <td><code>{{ '{:+.3f}'.format(w.delta) }}</code></td>
+          <td><span class="severity severity-{{ w.severity }}">{{ w.severity }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No candidates this week.</p>
+    {% endif %}
+  </section>
+
+  {% set flagged_metrics = manifest.metrics | selectattr('flagged_for_review') | list %}
+  <section aria-labelledby="insufficient-heading">
+    <h2 id="insufficient-heading">Insufficient-data flags</h2>
+    {% if flagged_metrics %}
+    <p class="muted">
+      Metric rows the pipeline flagged because sample counts fell below the
+      publication threshold. Treat numbers as provisional until the week
+      accumulates enough samples.
+    </p>
+    <table class="metric-table">
+      <caption>All flagged rows. Total: {{ flagged_metrics | length }}.</caption>
+      <thead>
+        <tr>
+          <th scope="col">Prompt</th>
+          <th scope="col">Model</th>
+          <th scope="col">n_samples</th>
+          <th scope="col">Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for metric in flagged_metrics %}
+        <tr>
+          {% set p = manifest.prompt_by_id(metric.prompt_id) %}
+          {% set m = manifest.model_by_id(metric.model_id) %}
+          <td>
+            {% if p %}<a href="/prompts/{{ p.prompt_id }}/">{{ p.prompt_id }}</a>
+            {% else %}<code>{{ metric.prompt_id }}</code>{% endif %}
+          </td>
+          <td>
+            {% if m %}<a href="/models/{{ m.model_id }}/">{{ m.display_name }}</a>
+            {% else %}<code>{{ metric.model_id }}</code>{% endif %}
+          </td>
+          <td><code>{{ metric.n_samples }}</code></td>
+          <td>{{ metric.flag_reason or '&mdash;' | safe }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No insufficient-data flags this week.</p>
+    {% endif %}
+  </section>
+
+  <section aria-labelledby="howto-heading">
+    <h2 id="howto-heading">How to use this page</h2>
+    <p>
+      These are advisory flags surfaced by the pipeline, not decisions.
+      Silent-update candidates invite investigation &mdash; e.g. inspecting
+      the raw responses for the weeks involved &mdash; and belong in
+      <code>notes/</code> under a future editorial workflow. Insufficient-data
+      flags mark metric rows where sample counts fell short of the
+      publication threshold; treat their numbers as provisional.
+    </p>
+    <p class="muted">
+      This page is internal: unlinked from public navigation and marked
+      <code>noindex</code> for search engines. It lives under the same
+      GitHub Pages origin as the public site, so anyone with the URL can
+      see it. Nothing sensitive belongs here until we have a private
+      annotation workflow.
+    </p>
+  </section>
+</article>
+{% endblock %}

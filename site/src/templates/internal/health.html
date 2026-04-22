@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% set path = "/internal/health/" %}
+
+{% block title %}Pipeline health &mdash; Drift Audit{% endblock %}
+{% block description %}Week-over-week pipeline run health: completion, cost, and error trends from data/run_log.jsonl.{% endblock %}
+
+{% block head_extra %}
+  <meta name="robots" content="noindex">
+{% endblock %}
+
+{% block main %}
+<article class="page">
+  <h1>Pipeline health</h1>
+  <p class="lede">
+    Week-over-week view of orchestrator runs. Sourced from
+    <code>data/run_log.jsonl</code> (one entry per
+    <code>cli run</code>; latest per week wins). Time-series companion
+    to the single-week <code>inspect-week</code> CLI.
+  </p>
+
+  {% if weekly_summaries %}
+  {% set latest = weekly_summaries[0] %}
+  {% set weeks_count = weekly_summaries | length %}
+  {% set runs_total = weekly_summaries | length %}
+  <p>
+    <strong>{{ runs_total }}</strong> run{{ 's' if runs_total != 1 else '' }}
+    captured across <strong>{{ weeks_count }}</strong> week{{ 's' if weeks_count != 1 else '' }}.
+    Latest: <code>{{ latest.week_id }}</code> with
+    <strong>{{ latest.pairs_complete }}</strong>/<strong>{{ latest.pairs_complete + latest.pairs_failed }}</strong>
+    complete.
+  </p>
+
+  <table class="metric-table">
+    <caption>Weekly rollup, newest first.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Week</th>
+        <th scope="col">Finished</th>
+        <th scope="col">Samples</th>
+        <th scope="col">Pairs (done/skip/fail)</th>
+        <th scope="col">Cost est. → actual</th>
+        <th scope="col">Runners</th>
+        <th scope="col">Errors</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in weekly_summaries %}
+      <tr>
+        <th scope="row"><code>{{ s.week_id }}</code></th>
+        <td><time datetime="{{ s.latest_finished_at }}">{{ s.latest_finished_at[:10] }}</time></td>
+        <td><code>{{ s.total_samples_written }}</code></td>
+        <td>
+          <code>{{ s.pairs_complete }}</code> /
+          <code>{{ s.pairs_skipped }}</code> /
+          <code>{{ s.pairs_failed }}</code>
+        </td>
+        <td>
+          ${{ '{:.2f}'.format(s.estimated_cost_usd) }} → ${{ '{:.2f}'.format(s.actual_cost_usd) }}
+          {% if s.cost_overrun_pct is not none %}
+            <span class="muted">({{ '{:+.1f}%'.format(s.cost_overrun_pct) }})</span>
+          {% endif %}
+        </td>
+        <td><code>{{ s.runner_count }}</code></td>
+        <td>
+          {% if s.error_count %}
+          <code>{{ s.error_count }}</code>
+          {% else %}
+          <span class="muted">&mdash;</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">
+    No run log captured yet. The orchestrator writes
+    <code>data/run_log.jsonl</code> at the end of every <code>cli run</code>
+    invocation; this page fills in automatically once entries accumulate.
+  </p>
+  {% endif %}
+
+  <section aria-labelledby="howto-heading">
+    <h2 id="howto-heading">How to read this</h2>
+    <p>
+      Each row summarises the <em>latest</em> orchestrator run for that
+      ISO week. Retries within a week overwrite prior entries; pair
+      counts and cost reflect the final state at week close.
+    </p>
+    <p class="muted">
+      This page is internal: unlinked from public navigation and marked
+      <code>noindex</code>. Nothing sensitive lives on it &mdash; all
+      fields are derived from counts and estimated costs &mdash; but it
+      only exists as an operator surface, not a public report.
+    </p>
+  </section>
+</article>
+{% endblock %}
