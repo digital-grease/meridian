@@ -51,10 +51,10 @@ MODELS = [
         version_string="claude-opus-4-7-20260318",
     ),
     ModelRecord(
-        model_id="gpt-5-preview",
+        model_id="gpt-5.1",
         display_name="GPT-5 Preview",
         provider="OpenAI",
-        version_string="gpt-5-preview-2026-03-22",
+        version_string="gpt-5.1-2026-03-22",
     ),
     ModelRecord(
         model_id="gemini-2.5-pro",
@@ -87,7 +87,7 @@ AXIS_PROFILES = {
 # Per-model deltas to simulate drift between providers.
 MODEL_DELTAS = {
     "claude-opus-4-7":  (-0.01, +0.3, +20.0),
-    "gpt-5-preview":    (+0.02, -0.2, -15.0),
+    "gpt-5.1":    (+0.02, -0.2, -15.0),
     "gemini-2.5-pro":   (+0.04, +0.1, +5.0),
 }
 

@@ -865,8 +865,35 @@ def publish_og_images(
     return written
 
 
+def _safe_clean_dist(out_dir: Path) -> None:
+    """Wipe out_dir so stale pages from prior builds can't pollute
+    sitemap.xml / urls.txt / the link-rot guard.
+
+    Guarded: we only wipe when the directory is empty or carries a
+    `build.json` marker left by a previous build. This refuses to
+    delete directories we don't recognise as our own output — the
+    existence check catches "oops, user pointed --out at a real
+    directory" before it's too late.
+    """
+    if not out_dir.exists():
+        return
+    contents = list(out_dir.iterdir())
+    if not contents:
+        return
+    marker = out_dir / "build.json"
+    if not marker.exists():
+        raise SystemExit(
+            f"refusing to wipe {out_dir}: not empty and no build.json "
+            f"marker (which every meridian build leaves). If this is a "
+            f"previous meridian build that somehow lost its marker, "
+            f"remove the directory manually and re-run."
+        )
+    shutil.rmtree(out_dir)
+
+
 def build(manifest_path: Path, out_dir: Path) -> dict:
     manifest = load_manifest(manifest_path)
+    _safe_clean_dist(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     env = jinja_env(TEMPLATES_DIR)

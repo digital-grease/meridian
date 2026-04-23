@@ -40,6 +40,6 @@ runners:
     cadence: even_weeks
 
   - provider: openai
-    model_id: "gpt-5-preview"
+    model_id: "gpt-5.1"
     enabled: true
     cadence: odd_weeks

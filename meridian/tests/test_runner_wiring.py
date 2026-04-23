@@ -21,7 +21,7 @@ def test_anthropic_runner_constructs():
 
 
 def test_openai_runner_constructs():
-    r = OpenAIRunner("gpt-5-preview", api_key="sk-dummy")
+    r = OpenAIRunner("gpt-5.1", api_key="sk-dummy")
     assert r.provider == "openai"
-    assert r.model_id == "gpt-5-preview"
+    assert r.model_id == "gpt-5.1"
     assert r.client is not None

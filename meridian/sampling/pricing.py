@@ -16,7 +16,10 @@ PRICING: dict[tuple[str, str], tuple[float, float]] = {
     ("anthropic", "claude-opus-4-7"):          (15.00, 75.00),
     ("anthropic", "claude-sonnet-4-6"):        ( 3.00, 15.00),
     ("anthropic", "claude-haiku-4-5-20251001"):( 0.80,  4.00),
-    ("openai",    "gpt-5-preview"):            (10.00, 30.00),  # placeholder
+    # TODO: verify at https://platform.openai.com/pricing. These values
+    # were inherited from the retired `gpt-5-preview` placeholder; the
+    # model ID was swapped on 2026-04-23.
+    ("openai",    "gpt-5.1"):                  (10.00, 30.00),
     ("openai",    "gpt-4o"):                   ( 2.50, 10.00),
     ("openai",    "gpt-4.1-mini"):             ( 0.15,  0.60),
     ("ollama",    "*"):                        ( 0.00,  0.00),  # local, free
