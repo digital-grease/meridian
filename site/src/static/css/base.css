@@ -308,9 +308,16 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
 .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* "Buy me a coffee" button. Self-styled (no remote image) to honor the
- * site's no-third-party-resources rule. The CSS replicates BMC's
- * signature red pill with an accessible color-contrast margin. */
-.bmc-button {
+ * site's no-third-party-resources rule. The red tones are darker than
+ * BMC's stock pink so white-on-red clears WCAG AA (4.5:1). Fixed
+ * colors — not theme variables — so contrast holds under both light
+ * and dark schemes.
+ *
+ * Selector uses `a.bmc-button` (specificity 0,1,1) so it beats
+ * `.site-footer a` when the button lives in the footer. Without the
+ * `a` qualifier, the muted-link color wins by specificity and drops
+ * contrast to ~2.5:1. */
+a.bmc-button {
   display: inline-flex;
   align-items: center;
   gap: 0.45em;
@@ -319,23 +326,23 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
   font-weight: 600;
   font-size: 0.95rem;
   color: #fff;
-  background: #ff5f5f;
-  border: 1px solid #e94b4b;
+  background: #b03a2e;  /* 5.9:1 on #fff */
+  border: 1px solid #8e2d24;
   border-radius: 999px;
   text-decoration: none;
   line-height: 1.2;
   transition: transform 120ms ease, background 120ms ease;
 }
-.bmc-button:visited { color: #fff; }
-.bmc-button:hover,
-.bmc-button:focus-visible {
-  background: #e94b4b;
+a.bmc-button:visited { color: #fff; }
+a.bmc-button:hover,
+a.bmc-button:focus-visible {
+  background: #8e2d24;  /* 8.3:1 on #fff */
   color: #fff;
   text-decoration: none;
   transform: translateY(-1px);
 }
-.bmc-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.bmc-button .cup { font-size: 1.2em; line-height: 1; }
+a.bmc-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+a.bmc-button .cup { font-size: 1.2em; line-height: 1; }
 
 /* Citation entries. Wraps <details> + injected .copy-btn so the button
  * is a sibling of <summary>, not nested inside it (nested interactive
@@ -423,6 +430,8 @@ caption { text-align: left; color: var(--fg-muted); margin-bottom: 0.3em; }
   body { background: #fff; color: #000; font-size: 11pt; line-height: 1.4; }
   .site-header, .site-nav, .site-footer .footer-note a { background: #fff; color: #000; }
   .skip-link { display: none; }
+  /* Donation widget has no place on printed reports/research output. */
+  .footer-support, a.bmc-button { display: none; }
   a { color: #000; text-decoration: underline; }
   a[href]::after { content: " (" attr(href) ")"; font-size: 85%; color: #333; }
   .build-prov { border-top: 1px solid #999; padding-top: 0.5em; }

@@ -34,12 +34,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Checkout previously published site (for link-rot diff)
-        uses: actions/checkout@v4
-        with:
-          ref: gh-pages
-          path: .previous-gh-pages
-        continue-on-error: true
+      - name: Fetch previously published urls.txt (for link-rot diff)
+        # deploy-pages@v4 publishes directly from a workflow artifact and
+        # never writes a `gh-pages` branch, so the old branch-based diff
+        # silently no-op'd on every run. Pull the live site's urls.txt
+        # instead — if the site isn't live yet (first deploy), the
+        # fetch fails and link-rot skips with a clear log line.
+        id: prev_urls
+        run: |
+          mkdir -p .previous-site
+          if curl -fsSL --max-time 30 https://meridianaudit.org/urls.txt -o .previous-site/urls.txt; then
+            echo "Fetched previous urls.txt ($(wc -l < .previous-site/urls.txt) URLs)"
+          else
+            echo "Previous urls.txt not reachable (first deploy or site down); link-rot will skip."
+            rm -f .previous-site/urls.txt
+          fi
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v4
@@ -60,12 +69,12 @@ jobs:
 
       - name: Link-rot guard
         run: |
-          if [ -f .previous-gh-pages/urls.txt ]; then
+          if [ -f .previous-site/urls.txt ]; then
             uv run python scripts/check_linkrot.py \
               --current site/dist \
-              --previous .previous-gh-pages
+              --previous .previous-site
           else
-            echo "No previous urls.txt on gh-pages; skipping link-rot guard (first deploy)"
+            echo "No previous urls.txt fetched; skipping link-rot guard (first deploy)"
           fi
 
       - name: Site size guard (fail above 800 MB)
