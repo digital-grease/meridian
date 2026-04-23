@@ -73,7 +73,7 @@ meridian/
 Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-git clone https://github.com/drift-audit/meridian
+git clone https://github.com/digital-grease/meridian
 cd meridian
 uv sync
 ```

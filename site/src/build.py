@@ -703,12 +703,24 @@ def write_robots(out_dir: Path) -> None:
     )
 
 
+def write_cname(out_dir: Path) -> None:
+    """Emit `dist/CNAME` so GitHub Pages keeps the custom-domain
+    setting across deploys. Without this file, Pages strips the custom
+    domain on every successful deploy and the site falls back to
+    `<user>.github.io/<repo>/`. Host is derived from SITE_ORIGIN so the
+    two can never drift apart."""
+    from urllib.parse import urlparse
+
+    host = urlparse(SITE_ORIGIN).netloc
+    (out_dir / "CNAME").write_text(host + "\n")
+
+
 def write_humans(out_dir: Path, build_meta: dict) -> None:
     lines = [
         "/* TEAM */",
         "Project: Drift Audit",
         "Site: https://meridianaudit.org/",
-        "Source: https://github.com/drift-audit/meridian",
+        "Source: https://github.com/digital-grease/meridian",
         "",
         "/* SITE */",
         f"Built: {build_meta['built_at']}",
@@ -912,6 +924,7 @@ def build(manifest_path: Path, out_dir: Path) -> dict:
     write_robots(out_dir)
     write_humans(out_dir, build_meta)
     write_sitemap(out_dir)
+    write_cname(out_dir)
 
     copy_static(STATIC_DIR, out_dir)
     # Must run after copy_static, which wipes and repopulates dist/static/.

@@ -46,7 +46,7 @@ variable "github_oidc_provider_arn" {
 }
 
 variable "github_repository" {
-  description = "owner/repo identifier for the sub-claim on the OIDC trust policy, e.g. \"drift-audit/meridian\"."
+  description = "owner/repo identifier for the sub-claim on the OIDC trust policy, e.g. \"digital-grease/meridian\"."
   type        = string
   default     = ""
 }

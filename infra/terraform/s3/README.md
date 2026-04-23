@@ -82,7 +82,7 @@ terraform apply \
   -var enable_github_oidc_role=true \
   -var create_writer_iam_user=false \
   -var github_oidc_provider_arn=arn:aws:iam::<account>:oidc-provider/token.actions.githubusercontent.com \
-  -var github_repository=drift-audit/meridian
+  -var github_repository=digital-grease/meridian
 ```
 
 Take the output role ARN and add it to `.github/workflows/weekly-pipeline.yml`:
