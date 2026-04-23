@@ -25,4 +25,10 @@
 #     citations go into academic papers. Rewrite the site around them.
 #   - Entries are append-only. Removing an entry re-breaks the URL.
 
-redirects: []
+redirects:
+  - from: /models/gpt-5-preview/
+    to: /models/gpt-5.1/
+    reason: "Model id renamed 2026-04-23 from placeholder `gpt-5-preview` to the real OpenAI slug `gpt-5.1`."
+  - from: /models/gpt-5-preview/2026-W16/
+    to: /models/gpt-5.1/2026-W16/
+    reason: "Model-week drill-down for the renamed openai frontier runner."
