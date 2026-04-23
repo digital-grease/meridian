@@ -80,3 +80,32 @@ def test_build_runners_disabled_still_excluded():
     )
     assert build_runners(config, week_id="2026-W16") == []
     assert build_runners(config, week_id=None) == []
+
+
+def test_build_runners_env_skip_providers(monkeypatch):
+    """MERIDIAN_SKIP_PROVIDERS excludes matching runners even when
+    config has them enabled — the CI-side override for no-Ollama
+    hosted runners."""
+    config = PipelineConfig(
+        sampling=SamplingSpec(),
+        runners=[
+            RunnerSpec(provider="ollama", model_id="local",
+                       enabled=True, cadence="every_week"),
+            RunnerSpec(provider="ollama", model_id="also-local",
+                       enabled=True, cadence="every_week"),
+        ],
+    )
+    monkeypatch.setenv("MERIDIAN_SKIP_PROVIDERS", "ollama")
+    assert build_runners(config, week_id="2026-W16") == []
+
+    # Case-insensitive, whitespace-tolerant, comma-separated.
+    monkeypatch.setenv("MERIDIAN_SKIP_PROVIDERS", " Ollama , openai ")
+    assert build_runners(config, week_id="2026-W16") == []
+
+    # Unrelated skip leaves Ollama runners in place.
+    monkeypatch.setenv("MERIDIAN_SKIP_PROVIDERS", "anthropic")
+    assert len(build_runners(config, week_id="2026-W16")) == 2
+
+    # Empty / unset has no effect.
+    monkeypatch.setenv("MERIDIAN_SKIP_PROVIDERS", "")
+    assert len(build_runners(config, week_id="2026-W16")) == 2

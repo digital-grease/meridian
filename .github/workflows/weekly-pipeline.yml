@@ -7,8 +7,10 @@ name: Weekly pipeline run
 # Secrets required in the repository settings:
 #   ANTHROPIC_API_KEY (optional — set to enable the Anthropic runner)
 #   OPENAI_API_KEY    (optional — same)
-# Ollama is not available in GitHub's hosted runners; enable only the
-# providers you have keys for in meridian/config.yaml.
+#
+# Ollama is not available in GitHub's hosted runners, so this workflow
+# sets MERIDIAN_SKIP_PROVIDERS=ollama at runtime. meridian/config.yaml
+# keeps Ollama enabled so local (maintainer) runs still use it.
 
 on:
   schedule:
@@ -80,6 +82,9 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # Hosted runners have no Ollama daemon; skip it without editing
+          # meridian/config.yaml (which stays accurate for local runs).
+          MERIDIAN_SKIP_PROVIDERS: ollama
         run: |
           set -euo pipefail
           WEEK_ARG=""

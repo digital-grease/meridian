@@ -12,6 +12,7 @@ credentials leak.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import Literal
 
@@ -109,14 +110,31 @@ def build_runners(config: PipelineConfig, *, week_id: str | None = None):
     also filtered out. Passing ``None`` disables cadence filtering and
     returns every enabled runner (useful for the ``estimate`` subcommand's
     "monthly average" view).
+
+    ``MERIDIAN_SKIP_PROVIDERS`` (env var, comma-separated provider names)
+    excludes matching runners after the config-level ``enabled`` check.
+    The intended caller is CI, which has no local Ollama server: set
+    ``MERIDIAN_SKIP_PROVIDERS=ollama`` in the workflow so the local
+    config.yaml's ``ollama: enabled: true`` still works for interactive
+    runs on the maintainer's machine.
     """
     from meridian.runners.anthropic import AnthropicRunner
     from meridian.runners.openai import OpenAIRunner
     from meridian.runners.ollama import OllamaRunner
 
+    skip_env = os.environ.get("MERIDIAN_SKIP_PROVIDERS", "").strip()
+    skip = {s.strip().lower() for s in skip_env.split(",") if s.strip()}
+
     out = []
     for spec in config.runners:
         if not spec.enabled:
+            continue
+        if spec.provider.lower() in skip:
+            print(
+                f"[meridian] skipping {spec.provider}/{spec.model_id} "
+                f"(MERIDIAN_SKIP_PROVIDERS)",
+                file=sys.stderr,
+            )
             continue
         if week_id is not None and not should_run_in_week(spec.cadence, week_id):
             continue
