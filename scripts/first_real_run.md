@@ -15,7 +15,7 @@ in the run log (`data/run_log.jsonl`) as comments if material.
 
       ollama pull llama3.2:3b
 
-- [ ] `drift_audit/config.yaml` has `enabled: true` on the providers you
+- [ ] `meridian/config.yaml` has `enabled: true` on the providers you
   intend to run, `false` on the rest. For v0.1 the recommended roster is:
 
       - anthropic / claude-haiku-4-5-20251001   # cheapest usable Claude
@@ -28,22 +28,22 @@ in the run log (`data/run_log.jsonl`) as comments if material.
 
 ```bash
 # Verify the corpus loads and the site builds from the current synthetic fixture.
-uv run pytest drift_audit/tests/
+uv run pytest meridian/tests/
 
 # Show the estimated cost before committing to a run.
-uv run python -m drift_audit.pipeline.cli estimate
+uv run python -m meridian.pipeline.cli estimate
 ```
 
 Expected output for the recommended roster: `total: ~$3.00` on a 30-prompt
 public corpus at N=25 samples per (prompt × model).
 
-If the estimate looks wrong, stop and audit `drift_audit/sampling/pricing.py`.
+If the estimate looks wrong, stop and audit `meridian/sampling/pricing.py`.
 
 ## Run
 
 ```bash
 # One full week against the enabled providers.
-uv run python -m drift_audit.pipeline.cli run --yes
+uv run python -m meridian.pipeline.cli run --yes
 ```
 
 Expected wall-clock: 10–30 minutes depending on provider rate limits.
@@ -96,7 +96,7 @@ After the run completes, note in a new GitHub Issue titled
   format changes, etc.).
 - Anything from the silent-update-check CLI:
 
-      uv run python -m drift_audit.pipeline.cli silent-update-check
+      uv run python -m meridian.pipeline.cli silent-update-check
 
 This issue becomes the anchor for the second run's diff.
 

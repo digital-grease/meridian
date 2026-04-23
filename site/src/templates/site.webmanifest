@@ -1,6 +1,6 @@
 {
-  "name": "Drift Audit",
-  "short_name": "Drift Audit",
+  "name": "Meridian",
+  "short_name": "Meridian",
   "description": "Longitudinal measurement of political, epistemic, and behavioral drift in commercial large language models.",
   "start_url": "/",
   "display": "browser",

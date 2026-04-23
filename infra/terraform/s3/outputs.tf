@@ -1,5 +1,5 @@
 output "bucket_name" {
-  description = "Name of the archive bucket. Use in drift_audit/config.yaml:storage.s3.bucket."
+  description = "Name of the archive bucket. Use in meridian/config.yaml:storage.s3.bucket."
   value       = aws_s3_bucket.archive.bucket
 }
 

@@ -1,4 +1,4 @@
-"""Inline SVG and CSS helpers for the Drift Audit dashboard.
+"""Inline SVG and CSS helpers for the Meridian dashboard.
 
 No heavy dependencies: all charts are pre-rendered to SVG at build time so
 the site serves entirely static content and works with JavaScript disabled.

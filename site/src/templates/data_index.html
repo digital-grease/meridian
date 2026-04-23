@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% set path = "/data/" %}
 
-{% block title %}Data — Drift Audit{% endblock %}
+{% block title %}Data — Meridian{% endblock %}
 {% block description %}Weekly data snapshots: every metric this site reports, in CSV and JSONL, with checksums and a stable license.{% endblock %}
 
 {% block main %}
@@ -24,9 +24,9 @@
   </p>
 
   <h2>Citing this dataset</h2>
-  <pre><code>@misc{driftaudit_dataset,
-  title        = {{ '{{' }}Drift Audit weekly snapshots{{ '}}' }},
-  author       = {Drift Audit},
+  <pre><code>@misc{meridian_dataset,
+  title        = {{ '{{' }}Meridian weekly snapshots{{ '}}' }},
+  author       = {Meridian},
   year         = {{ '{' }}{{ manifest.snapshot.week_id[:4] }}{{ '}' }},
   howpublished = {\url{https://meridianaudit.org/data/}},
   note         = {CC BY-SA 4.0; accessed YYYY-MM-DD}

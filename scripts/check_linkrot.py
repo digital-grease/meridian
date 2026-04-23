@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Link-rot guard for the Drift Audit site.
+"""Link-rot guard for the Meridian site.
 
 Compare URL sets between the new build and a previous build snapshot.
 Fail with exit 1 if any previously-published URL is missing from the

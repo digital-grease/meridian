@@ -1,4 +1,4 @@
-/* Drift Audit client-side search.
+/* Meridian client-side search.
  *
  * Progressive enhancement: the page works without this script. If JS is
  * enabled, an input appears and searches the prebuilt index under
@@ -35,7 +35,7 @@
       })
       .then(function (data) { index = data; return data; })
       .catch(function (err) {
-        console.error("[drift-audit search]", err);
+        console.error("[meridian search]", err);
         results.textContent = "Search unavailable.";
       });
     return indexLoadPromise;

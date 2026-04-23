@@ -1,6 +1,6 @@
-# site/ — Drift Audit public website source
+# site/ — Meridian public website source
 
-Static site generator for the Drift Audit dashboard, reports, and bulk data publication. Built with Python + Jinja2, deployed to GitHub Pages via GitHub Actions.
+Static site generator for the Meridian dashboard, reports, and bulk data publication. Built with Python + Jinja2, deployed to GitHub Pages via GitHub Actions.
 
 ## Layout
 
@@ -25,4 +25,4 @@ site/
 python -m site.src.build --manifest fixtures/manifest-2026-W16.json --out dist/
 ```
 
-See `.devloop/plan.md` for the full build plan and `.devloop/spikes/drift-audit-website.md` for the architecture decision record.
+See `.devloop/plan.md` for the full build plan and `.devloop/spikes/meridian-website.md` for the architecture decision record.

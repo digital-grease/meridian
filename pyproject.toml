@@ -1,11 +1,11 @@
 [project]
 name = "meridian"
 version = "0.1.0"
-description = "Drift Audit — longitudinal measurement of LLM drift. Monorepo: site builder + analysis pipeline."
+description = "Meridian — longitudinal measurement of LLM drift. Monorepo: site builder + analysis pipeline."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
-authors = [{ name = "Drift Audit contributors" }]
+authors = [{ name = "Meridian contributors" }]
 dependencies = [
   "jinja2>=3.1,<4",
   "pydantic>=2.7,<3",
@@ -35,7 +35,7 @@ analysis-heavy = [
   "numpy>=1.26,<3",
 ]
 changepoint = [
-  # PELT implementation used by drift_audit.analysis.change_point.
+  # PELT implementation used by meridian.analysis.change_point.
   "ruptures>=1.1,<2",
 ]
 search = [
@@ -49,7 +49,7 @@ parquet = [
 ]
 storage-s3 = [
   # S3 archival of raw samples + published manifests. Config-gated in
-  # drift_audit/config.yaml; when disabled, not needed at runtime.
+  # meridian/config.yaml; when disabled, not needed at runtime.
   "boto3>=1.34,<2",
   "botocore>=1.34,<2",
 ]
@@ -70,7 +70,7 @@ select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF"]
 ignore = ["E501"]  # line-length handled by formatter
 
 [tool.pytest.ini_options]
-testpaths = ["drift_audit/tests", "site/tests"]
+testpaths = ["meridian/tests", "site/tests"]
 asyncio_mode = "auto"
 # Default run skips @pytest.mark.slow; CI opts in via `pytest -m slow`
 # (or `-m ""` to run everything).

@@ -14,7 +14,7 @@ provider "aws" {
   default_tags {
     tags = merge(
       {
-        Project   = "drift-audit"
+        Project   = "meridian"
         Component = "raw-sample-archive"
         ManagedBy = "terraform"
       },

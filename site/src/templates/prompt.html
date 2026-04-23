@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% set path = "/prompts/" + prompt.prompt_id + "/" %}
 
-{% block title %}{{ prompt.title }} — prompt — Drift Audit{% endblock %}
-{% block description %}Per-model drift metrics for prompt "{{ prompt.title }}" across the Drift Audit observation window.{% endblock %}
+{% block title %}{{ prompt.title }} — prompt — Meridian{% endblock %}
+{% block description %}Per-model drift metrics for prompt "{{ prompt.title }}" across the Meridian observation window.{% endblock %}
 
 {% block main %}
 {% set crumbs = [

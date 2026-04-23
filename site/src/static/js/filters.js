@@ -1,4 +1,4 @@
-/* Drift Audit table filter chips.
+/* Meridian table filter chips.
  *
  * Progressive enhancement: attaches to any <table data-filter-col="N">
  * and injects chips that toggle the `hidden` attribute on rows whose

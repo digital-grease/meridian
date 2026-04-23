@@ -54,7 +54,7 @@
     },
     "DriftTest": {
       "additionalProperties": false,
-      "description": "Two-sample drift test result for one metric on one (prompt \u00d7 model).\n\nPopulated only when a prior week's samples are available. The\n``adjusted_p_value`` and ``significant_after_bh`` fields are filled\nin by the within-week Benjamini\u2013Hochberg pass in\n``drift_audit.pipeline.manifest_writer``; ``p_value`` alone is the\nraw output of ``drift_audit.analysis.drift_tests``.",
+      "description": "Two-sample drift test result for one metric on one (prompt \u00d7 model).\n\nPopulated only when a prior week's samples are available. The\n``adjusted_p_value`` and ``significant_after_bh`` fields are filled\nin by the within-week Benjamini\u2013Hochberg pass in\n``meridian.pipeline.manifest_writer``; ``p_value`` alone is the\nraw output of ``meridian.analysis.drift_tests``.",
       "properties": {
         "adjusted_p_value": {
           "maximum": 1.0,
@@ -377,7 +377,7 @@
     },
     "SilentUpdateWarning": {
       "additionalProperties": false,
-      "description": "Candidate silent-model-update event on the neutral-control axis.\n\nFlagged when a model's axis-level metric shifts week-over-week by\nmore than ``drift_audit.analysis.silent_update`` thresholds. These\nare *candidates*, not proven updates \u2014 the public report should say\n\"appears to have updated\" and invite human review.",
+      "description": "Candidate silent-model-update event on the neutral-control axis.\n\nFlagged when a model's axis-level metric shifts week-over-week by\nmore than ``meridian.analysis.silent_update`` thresholds. These\nare *candidates*, not proven updates \u2014 the public report should say\n\"appears to have updated\" and invite human review.",
       "properties": {
         "axis": {
           "title": "Axis",
@@ -527,6 +527,6 @@
     "prompts",
     "metrics"
   ],
-  "title": "Drift Audit manifest (v2)",
+  "title": "Meridian manifest (v2)",
   "type": "object"
 }

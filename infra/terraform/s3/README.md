@@ -1,6 +1,6 @@
 # `infra/terraform/s3` — durable raw-sample archive
 
-Provisions the S3 bucket the Drift Audit pipeline mirrors raw samples and
+Provisions the S3 bucket the Meridian pipeline mirrors raw samples and
 published manifests into, plus the IAM permissions needed to write to it.
 
 This is the *durability* backup. Public distribution happens via GitHub Pages
@@ -29,8 +29,8 @@ classes, never expires current versions.
 ```bash
 cd infra/terraform/s3
 terraform init
-terraform plan -var bucket_name=drift-audit-archive-prod
-terraform apply -var bucket_name=drift-audit-archive-prod
+terraform plan -var bucket_name=meridian-archive-prod
+terraform apply -var bucket_name=meridian-archive-prod
 ```
 
 The bucket has `prevent_destroy = true`. Taking the bucket down intentionally
@@ -38,20 +38,20 @@ requires removing that line and a second targeted apply.
 
 ## Wire the pipeline
 
-Add the bucket to `drift_audit/config.yaml`:
+Add the bucket to `meridian/config.yaml`:
 
 ```yaml
 storage:
   raw_dir: "data/raw"
   s3:
-    bucket: "drift-audit-archive-prod"
+    bucket: "meridian-archive-prod"
     region: "us-east-1"
-    prefix: ""                      # or "drift-audit/" to namespace within a shared bucket
+    prefix: ""                      # or "meridian/" to namespace within a shared bucket
     publish_latest_pointer: true    # write manifests/latest.json each run
 ```
 
 Then provide AWS credentials to the process that runs `uv run python -m
-drift_audit.pipeline.cli run` via the standard boto3 chain (env vars, instance
+meridian.pipeline.cli run` via the standard boto3 chain (env vars, instance
 profile, OIDC). The repo never stores credentials.
 
 ### Path A: local / cron host
@@ -78,7 +78,7 @@ own calendar, not in this module.
 
 ```bash
 terraform apply \
-  -var bucket_name=drift-audit-archive-prod \
+  -var bucket_name=meridian-archive-prod \
   -var enable_github_oidc_role=true \
   -var create_writer_iam_user=false \
   -var github_oidc_provider_arn=arn:aws:iam::<account>:oidc-provider/token.actions.githubusercontent.com \

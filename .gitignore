@@ -32,7 +32,7 @@ metrics/local/
 # responses.jsonl.gz that the site build copies into dist/data/{week}/
 # for public distribution. The weekly-pipeline workflow commits it back
 # to main so the downstream weekly-build workflow can find it. See
-# drift_audit/BUDGET.md for the scale ceiling on this approach.
+# meridian/BUDGET.md for the scale ceiling on this approach.
 
 # Secrets
 *.pem
@@ -49,8 +49,8 @@ CLAUDE.md
 # Held-out corpus — must not be committed. Its value is that it is not
 # publicly knowable. Maintainers keep the real held-out set in one of these
 # paths (or at an out-of-repo location pointed to by an env var).
-drift_audit/corpus/held_out.yaml
-drift_audit/corpus/held_out.local.yaml
+meridian/corpus/held_out.yaml
+meridian/corpus/held_out.local.yaml
 
 # Internal manifests that include held-out metrics. Never published.
 data/internal/

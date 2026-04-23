@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% set path = "/models/" %}
 
-{% block title %}Models — Drift Audit{% endblock %}
-{% block description %}All models observed by Drift Audit, with links to per-model drift histories.{% endblock %}
+{% block title %}Models — Meridian{% endblock %}
+{% block description %}All models observed by Meridian, with links to per-model drift histories.{% endblock %}
 
 {% block main %}
 {% set crumbs = [
@@ -13,7 +13,7 @@
 
 <article class="page">
   <h1>Models</h1>
-  <p class="lede">Models currently observed in the Drift Audit rotation.</p>
+  <p class="lede">Models currently observed in the Meridian rotation.</p>
 
   <ul class="models-list">
     {% for m in models %}

@@ -1,4 +1,4 @@
-# Durable raw-sample + manifest archive for the Drift Audit pipeline.
+# Durable raw-sample + manifest archive for the Meridian pipeline.
 #
 # Design goals (derived from CLAUDE.md hard rules):
 #   * Raw samples are never overwritten or destroyed.

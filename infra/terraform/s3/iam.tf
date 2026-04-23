@@ -24,7 +24,7 @@ data "aws_iam_policy_document" "writer" {
 
 resource "aws_iam_policy" "writer" {
   name        = "${var.bucket_name}-writer"
-  description = "Write-only access to the Drift Audit raw-sample archive."
+  description = "Write-only access to the Meridian raw-sample archive."
   policy      = data.aws_iam_policy_document.writer.json
 }
 

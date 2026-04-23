@@ -1,5 +1,5 @@
 name: Prompt proposal
-description: Propose a prompt for the Drift Audit corpus.
+description: Propose a prompt for the Meridian corpus.
 title: "[Prompt] "
 labels: ["corpus", "prompt-proposal"]
 body:

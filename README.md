@@ -1,4 +1,4 @@
-# Meridian — Drift Audit
+# Meridian
 
 <a href="https://www.buymeacoffee.com/digitalgrease" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-red.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
@@ -14,7 +14,7 @@ and GPT-5 Preview alternating biweekly, Ollama as a weekly baseline.
 Broadening the corpus, unalternating the frontier models, adding Gemini,
 and standing up durable S3 / IPFS / Postgres storage each require
 sustained monthly sponsorship. Full tier ladder at
-[`drift_audit/BUDGET.md`](drift_audit/BUDGET.md). If the record is
+[`meridian/BUDGET.md`](meridian/BUDGET.md). If the record is
 useful to you, a coffee via the button above meaningfully extends how
 many weeks the project can keep running. We never take funding from an
 LLM provider.
@@ -48,7 +48,7 @@ See `/methodology/` on the deployed site for the full design doc.
 
 ```
 meridian/
-├── drift_audit/              # the pipeline (Python)
+├── meridian/              # the pipeline (Python)
 │   ├── corpus/               # versioned prompt corpus (YAML)
 │   ├── runners/              # one adapter per provider
 │   ├── sampling/             # orchestrator + cost estimator
@@ -80,7 +80,7 @@ uv sync
 
 ## Quickstart (no API keys needed)
 
-Ollama is enabled by default in `drift_audit/config.yaml` because it costs
+Ollama is enabled by default in `meridian/config.yaml` because it costs
 nothing and gives you a local baseline / control group.
 
 ```bash
@@ -88,7 +88,7 @@ nothing and gives you a local baseline / control group.
 ollama pull llama3.2:3b
 
 # Run the pipeline for this week, then rebuild the site from the result:
-uv run python -m drift_audit.pipeline.cli run --yes
+uv run python -m meridian.pipeline.cli run --yes
 uv run python site/src/build.py \
     --manifest site/fixtures/manifest-$(date -u +'%Y-W%V').json \
     --out site/dist
@@ -114,12 +114,12 @@ against prompts it knows are in this corpus. Its measurement value is
 that it *never* reaches a provider's training data.
 
 **Committed to this repo:**
-- `drift_audit/corpus/prompts.yaml` — the public corpus.
-- `drift_audit/corpus/held_out.example.yaml` — a template with the
+- `meridian/corpus/prompts.yaml` — the public corpus.
+- `meridian/corpus/held_out.example.yaml` — a template with the
   expected format.
 
 **Never committed:**
-- `drift_audit/corpus/held_out.yaml` (or `.local.yaml`) — your real
+- `meridian/corpus/held_out.yaml` (or `.local.yaml`) — your real
   held-out prompts. Both filenames are git-ignored.
 - `data/internal/` — internal manifests that contain held-out metrics.
   Also git-ignored.
@@ -134,7 +134,7 @@ the prompts, and rerun the pipeline. The CLI will automatically:
 Compare public vs held-out drift:
 
 ```bash
-uv run python -m drift_audit.pipeline.cli holdout-report --week 2026-W16
+uv run python -m meridian.pipeline.cli holdout-report --week 2026-W16
 ```
 
 If public drift diverges significantly from held-out drift, that gap is
@@ -153,15 +153,15 @@ export ANTHROPIC_API_KEY=sk-ant-...
 export OPENAI_API_KEY=sk-...
 ```
 
-Then enable the runners in `drift_audit/config.yaml` (set `enabled: true`)
+Then enable the runners in `meridian/config.yaml` (set `enabled: true`)
 and run:
 
 ```bash
 # See the estimated cost first.
-uv run python -m drift_audit.pipeline.cli estimate
+uv run python -m meridian.pipeline.cli estimate
 
 # Run for real (add --yes to skip confirmation):
-uv run python -m drift_audit.pipeline.cli run --yes
+uv run python -m meridian.pipeline.cli run --yes
 ```
 
 The orchestrator is idempotent: re-running the same week is a no-op. Use
@@ -171,17 +171,17 @@ The orchestrator is idempotent: re-running the same week is a no-op. Use
 
 ```bash
 uv run pytest                # all tests (pipeline + site + e2e)
-uv run pytest drift_audit/   # pipeline only
+uv run pytest meridian/   # pipeline only
 ```
 
-The e2e test (`drift_audit/tests/test_e2e_pipeline_to_site.py`) exercises
+The e2e test (`meridian/tests/test_e2e_pipeline_to_site.py`) exercises
 the whole stack with a fake runner: no network, no API keys required.
 
 ## Contributing
 
 Hard rules are listed above; the full methodology lives at
 `/methodology/` on the deployed site. See
-[`drift_audit/runners/README.md`](drift_audit/runners/README.md) for how
+[`meridian/runners/README.md`](meridian/runners/README.md) for how
 to add a new provider. Corpus additions go through GitHub Issues with
 the `Prompt proposal` template; see the site's `/contribute/` page.
 

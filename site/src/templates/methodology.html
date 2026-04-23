@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% set path = "/methodology/" %}
 
-{% block title %}Methodology &mdash; Drift Audit{% endblock %}
-{% block description %}How the Drift Audit corpus is built, how metrics are computed, and how any chart on this site can be reproduced from the raw data.{% endblock %}
+{% block title %}Methodology &mdash; Meridian{% endblock %}
+{% block description %}How the Meridian corpus is built, how metrics are computed, and how any chart on this site can be reproduced from the raw data.{% endblock %}
 
 {% block main %}
 <article class="page">
@@ -115,7 +115,7 @@
       <code>(prompt &times; model &times; metric)</code> family at FDR 0.05.
       Per-metric p-values come from permutation two-sample tests against the
       prior week&rsquo;s samples. Full spec in
-      <code>drift_audit/analysis/STATISTICS.md</code>.</li>
+      <code>meridian/analysis/STATISTICS.md</code>.</li>
     <li><strong>Change-point detection</strong> (PELT) on time series rather than
       naive thresholds. Change points are precomputed by the pipeline and
       published on the current-week manifest, so researchers reading the data

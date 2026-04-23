@@ -47,8 +47,8 @@ class DriftTest(Frozen):
     Populated only when a prior week's samples are available. The
     ``adjusted_p_value`` and ``significant_after_bh`` fields are filled
     in by the within-week Benjamini–Hochberg pass in
-    ``drift_audit.pipeline.manifest_writer``; ``p_value`` alone is the
-    raw output of ``drift_audit.analysis.drift_tests``.
+    ``meridian.pipeline.manifest_writer``; ``p_value`` alone is the
+    raw output of ``meridian.analysis.drift_tests``.
     """
     p_value: float = Field(ge=0.0, le=1.0)
     adjusted_p_value: float = Field(ge=0.0, le=1.0)
@@ -126,7 +126,7 @@ class SilentUpdateWarning(Frozen):
     """Candidate silent-model-update event on the neutral-control axis.
 
     Flagged when a model's axis-level metric shifts week-over-week by
-    more than ``drift_audit.analysis.silent_update`` thresholds. These
+    more than ``meridian.analysis.silent_update`` thresholds. These
     are *candidates*, not proven updates — the public report should say
     "appears to have updated" and invite human review.
     """

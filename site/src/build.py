@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Drift Audit static site builder.
+"""Meridian static site builder.
 
 Consumes a validated manifest JSON and renders the site to dist/.
 Idempotent and deterministic: given the same inputs, produces byte-identical output
@@ -34,7 +34,7 @@ from pydantic import ValidationError
 _HERE = Path(__file__).resolve().parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
-# Repo root too, so `from drift_audit...` imports resolve when the
+# Repo root too, so `from meridian...` imports resolve when the
 # script is launched as `python site/src/build.py`.
 _REPO_ROOT_FOR_IMPORTS = _HERE.parent.parent
 if str(_REPO_ROOT_FOR_IMPORTS) not in sys.path:
@@ -407,7 +407,7 @@ _METRICS_COLUMNS = [
 
 def _per_week_readme(week_id: str) -> str:
     return (
-        f"# Drift Audit snapshot: {week_id}\n\n"
+        f"# Meridian snapshot: {week_id}\n\n"
         f"ISO week {week_id}. Contains computed metrics plus the raw\n"
         f"response samples they were derived from.\n\n"
         f"## Files\n\n"
@@ -417,7 +417,7 @@ def _per_week_readme(week_id: str) -> str:
         f"- `manifest.json` — present on the current-week snapshot only;\n"
         f"  the full schema-validated manifest the site renders from.\n"
         f"- `responses.jsonl.gz` — gzipped stream of raw\n"
-        f"  :class:`drift_audit.runners.base.Sample` records for every\n"
+        f"  :class:`meridian.runners.base.Sample` records for every\n"
         f"  public prompt captured this week. Held-out prompt responses\n"
         f"  are excluded. Present when the pipeline emitted one;\n"
         f"  `SHA256SUMS` lists it when it is.\n"
@@ -718,7 +718,7 @@ def write_cname(out_dir: Path) -> None:
 def write_humans(out_dir: Path, build_meta: dict) -> None:
     lines = [
         "/* TEAM */",
-        "Project: Drift Audit",
+        "Project: Meridian",
         "Site: https://meridianaudit.org/",
         "Source: https://github.com/digital-grease/meridian",
         "",
@@ -778,8 +778,8 @@ def load_run_log_summary(repo_root: Path) -> list:
 
     Graceful when the log doesn't exist yet (empty list).
     """
-    from drift_audit.pipeline.run_log import read_run_log
-    from drift_audit.pipeline.run_log_summary import summarize_weekly
+    from meridian.pipeline.run_log import read_run_log
+    from meridian.pipeline.run_log_summary import summarize_weekly
 
     log_path = repo_root / "data" / "run_log.jsonl"
     return summarize_weekly(read_run_log(log_path))
@@ -822,16 +822,16 @@ def publish_og_images(
 
     axes = sorted({p.axis for p in manifest.prompts})
     specs: list[tuple[str, str, str]] = [
-        ("index", "Drift Audit",
+        ("index", "Meridian",
          "A public record of how commercial LLMs change over time"),
         ("methodology", "Methodology",
-         "How Drift Audit measures drift on contested topics"),
+         "How Meridian measures drift on contested topics"),
     ]
     for r in reports:
         specs.append((
             f"report-{r.slug}",
             r.title,
-            r.summary or "Drift Audit report",
+            r.summary or "Meridian report",
         ))
     for m in manifest.models:
         specs.append((
@@ -849,7 +849,7 @@ def publish_og_images(
         specs.append((
             f"axis-{axis}",
             axis.replace("-", " ").capitalize(),
-            "Drift Audit prompt axis",
+            "Meridian prompt axis",
         ))
 
     og_dir = out_dir / "static" / "og"
@@ -889,7 +889,7 @@ def build(manifest_path: Path, out_dir: Path) -> dict:
     # between the PNG and the SVG fallback.
     base_context = {
         "manifest": manifest, "build": build_meta,
-        "site_title": "Drift Audit",
+        "site_title": "Meridian",
         "og_slug": None, "og_available": og_ok,
         "weekly_summaries": load_run_log_summary(REPO_ROOT),
     }
@@ -948,7 +948,7 @@ def build(manifest_path: Path, out_dir: Path) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build the Drift Audit static site.")
+    parser = argparse.ArgumentParser(description="Build the Meridian static site.")
     parser.add_argument(
         "--manifest", type=Path, required=True, help="Path to manifest JSON"
     )

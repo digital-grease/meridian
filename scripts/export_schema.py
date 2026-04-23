@@ -22,7 +22,7 @@ def main() -> int:
     schema = Manifest.model_json_schema()
     schema["$id"] = "https://meridianaudit.org/schemas/manifest.schema.json"
     schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
-    schema["title"] = f"Drift Audit manifest (v{SCHEMA_VERSION})"
+    schema["title"] = f"Meridian manifest (v{SCHEMA_VERSION})"
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(schema, indent=2, sort_keys=True) + "\n")
     print(f"wrote {OUT.relative_to(REPO)} (schema_version={SCHEMA_VERSION})")

@@ -8,7 +8,7 @@ name: Weekly pipeline run
 #   ANTHROPIC_API_KEY (optional — set to enable the Anthropic runner)
 #   OPENAI_API_KEY    (optional — same)
 # Ollama is not available in GitHub's hosted runners; enable only the
-# providers you have keys for in drift_audit/config.yaml.
+# providers you have keys for in meridian/config.yaml.
 
 on:
   schedule:
@@ -86,13 +86,13 @@ jobs:
           if [ -n "${{ inputs.week }}" ]; then WEEK_ARG="--week ${{ inputs.week }}"; fi
           FORCE_ARG=""
           if [ "${{ inputs.force }}" = "true" ]; then FORCE_ARG="--force"; fi
-          uv run python -m drift_audit.pipeline.cli run --yes ${WEEK_ARG} ${FORCE_ARG}
+          uv run python -m meridian.pipeline.cli run --yes ${WEEK_ARG} ${FORCE_ARG}
 
       - name: Commit fresh manifest
         if: success()
         run: |
-          git config user.name "drift-audit[bot]"
-          git config user.email "drift-audit-bot@users.noreply.github.com"
+          git config user.name "meridian[bot]"
+          git config user.email "meridian-bot@users.noreply.github.com"
           git add site/fixtures/ data/manifests/ data/snapshots/ data/run_log.jsonl || true
           if git diff --cached --quiet; then
             echo "no manifest changes to commit"

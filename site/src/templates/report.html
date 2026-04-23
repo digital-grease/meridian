@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% set path = report.canonical_path %}
 
-{% block title %}{{ report.title }} &mdash; Drift Audit{% endblock %}
+{% block title %}{{ report.title }} &mdash; Meridian{% endblock %}
 {% block description %}{{ report.summary }}{% endblock %}
 {% block og_type %}article{% endblock %}
 
@@ -12,8 +12,8 @@
   "@type": "Article",
   "headline": "{{ report.title }}",
   "datePublished": "{{ report.date }}",
-  "author": { "@type": "Organization", "name": "Drift Audit" },
-  "publisher": { "@type": "Organization", "name": "Drift Audit" },
+  "author": { "@type": "Organization", "name": "Meridian" },
+  "publisher": { "@type": "Organization", "name": "Meridian" },
   "mainEntityOfPage": "https://meridianaudit.org{{ report.canonical_path }}"
 }
 </script>

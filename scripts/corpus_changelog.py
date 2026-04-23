@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Auto-generate the corpus changelog from git history.
 
-Walks commits that touched ``drift_audit/corpus/prompts.yaml`` and
+Walks commits that touched ``meridian/corpus/prompts.yaml`` and
 emits a Markdown log: date, commit SHA, added/modified prompt IDs,
-author. Committed output lives at ``drift_audit/corpus/CHANGELOG.md``.
+author. Committed output lives at ``meridian/corpus/CHANGELOG.md``.
 
 Run manually before a release or from CI on a schedule:
 
-    uv run python scripts/corpus_changelog.py > drift_audit/corpus/CHANGELOG.md
+    uv run python scripts/corpus_changelog.py > meridian/corpus/CHANGELOG.md
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-CORPUS_FILE = REPO / "drift_audit" / "corpus" / "prompts.yaml"
+CORPUS_FILE = REPO / "meridian" / "corpus" / "prompts.yaml"
 
 _ID_LINE_RE = re.compile(r"^\+\s*-\s*id:\s*(\S+)")
 
@@ -62,7 +62,7 @@ def main() -> int:
 
     print("# Corpus changelog\n")
     print(
-        "Auto-generated from the git history of `drift_audit/corpus/prompts.yaml`. "
+        "Auto-generated from the git history of `meridian/corpus/prompts.yaml`. "
         "Prompts are never edited in place; a revision supersedes the prior id. "
         "Regenerate with `scripts/corpus_changelog.py`.\n"
     )

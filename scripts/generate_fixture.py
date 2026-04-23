@@ -2,14 +2,14 @@
 """Generate a synthetic Phase-1 fixture manifest.
 
 DEPRECATED for production use as of 2026-04-19. The real pipeline at
-``drift_audit.pipeline.manifest_writer`` produces manifests from stored
+``meridian.pipeline.manifest_writer`` produces manifests from stored
 LLM samples. Use this script only for:
   * Bootstrapping a fresh clone before any pipeline run exists
   * Smoke-testing the site build with plausible-looking data
   * Regenerating the v0.1 fixture if the corpus changes
 
 Prefer:
-    python -m drift_audit.pipeline.cli run --week 2026-W16
+    python -m meridian.pipeline.cli run --week 2026-W16
 
 Run this script:
     uv run python scripts/generate_fixture.py
@@ -64,10 +64,10 @@ MODELS = [
     ),
 ]
 
-# Corpus is loaded from drift_audit/corpus/prompts.yaml so this script
+# Corpus is loaded from meridian/corpus/prompts.yaml so this script
 # stays in lockstep with the real pipeline's corpus.
 sys.path.insert(0, str(REPO))
-from drift_audit.corpus import load_corpus  # noqa: E402
+from meridian.corpus import load_corpus  # noqa: E402
 
 _CORPUS = load_corpus()
 PROMPTS: list[tuple[str, str, str, str]] = [
@@ -144,7 +144,7 @@ def build_metrics(
                     stance_confidence=0.72 if axis != "refusal-boundary" else None,
                     embedding_centroid_shift=round(rng.uniform(0.01, 0.08), 4),
                     sample_s3_uris=[
-                        f"s3://drift-audit-raw/{week_id}/{model.model_id}/{pid}/{i:02d}.json"
+                        f"s3://meridian-raw/{week_id}/{model.model_id}/{pid}/{i:02d}.json"
                         for i in range(3)
                     ],
                     flagged_for_review=(axis == "political" and rng.random() < 0.1),

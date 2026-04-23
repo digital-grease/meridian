@@ -5,9 +5,9 @@
   <div class="citation-entry">
     <details>
       <summary>BibTeX</summary>
-      <pre><code>@misc{driftaudit{{ report.slug | replace('-', '') }},
+      <pre><code>@misc{meridian{{ report.slug | replace('-', '') }},
   title        = {{ '{{' }}{{ report.title | striptags }}{{ '}}' }},
-  author       = {Drift Audit},
+  author       = {Meridian},
   year         = {{ '{' }}{{ report.year }}{{ '}' }},
   howpublished = {\url{{ '{' }}{{ report.canonical_url }}{{ '}' }}},
   note         = {Accessed: YYYY-MM-DD}
@@ -18,21 +18,21 @@
   <div class="citation-entry">
     <details>
       <summary>APA</summary>
-      <p>Drift Audit. ({{ report.year }}, {{ report.month_name }} {{ report.day }}). <em>{{ report.title | striptags }}</em>. <a href="{{ report.canonical_url }}">{{ report.canonical_url }}</a></p>
+      <p>Meridian. ({{ report.year }}, {{ report.month_name }} {{ report.day }}). <em>{{ report.title | striptags }}</em>. <a href="{{ report.canonical_url }}">{{ report.canonical_url }}</a></p>
     </details>
   </div>
 
   <div class="citation-entry">
     <details>
       <summary>Chicago</summary>
-      <p>Drift Audit. &ldquo;{{ report.title | striptags }}.&rdquo; {{ report.date }}. <a href="{{ report.canonical_url }}">{{ report.canonical_url }}</a>.</p>
+      <p>Meridian. &ldquo;{{ report.title | striptags }}.&rdquo; {{ report.date }}. <a href="{{ report.canonical_url }}">{{ report.canonical_url }}</a>.</p>
     </details>
   </div>
 
   <div class="citation-entry">
     <details>
       <summary>Harvard</summary>
-      <p>Drift Audit ({{ report.year }}) &lsquo;{{ report.title | striptags }}&rsquo;, {{ report.date }}. Available at: <a href="{{ report.canonical_url }}">{{ report.canonical_url }}</a>.</p>
+      <p>Meridian ({{ report.year }}) &lsquo;{{ report.title | striptags }}&rsquo;, {{ report.date }}. Available at: <a href="{{ report.canonical_url }}">{{ report.canonical_url }}</a>.</p>
     </details>
   </div>
 </section>

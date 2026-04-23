@@ -1,4 +1,4 @@
-/* Drift Audit citation copy buttons.
+/* Meridian citation copy buttons.
  *
  * Progressive enhancement: citation blocks are fully visible without JS.
  * If JS is enabled, a "Copy" button appears next to each <pre>/<p>
