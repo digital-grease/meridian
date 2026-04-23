@@ -48,7 +48,7 @@ STATIC_DIR = _HERE / "static"
 REPO_ROOT = _HERE.parent.parent
 CONTENT_REPORTS = REPO_ROOT / "site" / "content" / "reports"
 
-SITE_ORIGIN = "https://drift-audit.example"
+SITE_ORIGIN = "https://meridianaudit.org"
 
 MONTH_NAMES = [
     "January", "February", "March", "April", "May", "June",
@@ -424,7 +424,7 @@ def _per_week_readme(week_id: str) -> str:
         f"- `SHA256SUMS` — hex digests for integrity verification.\n\n"
         f"## License\n\n"
         f"CC-BY-SA 4.0. See /data/schema/ for full column definitions.\n"
-        f"Citation: https://drift-audit.example/data/{week_id}/\n"
+        f"Citation: https://meridianaudit.org/data/{week_id}/\n"
     )
 
 
@@ -707,7 +707,7 @@ def write_humans(out_dir: Path, build_meta: dict) -> None:
     lines = [
         "/* TEAM */",
         "Project: Drift Audit",
-        "Site: https://drift-audit.example/",
+        "Site: https://meridianaudit.org/",
         "Source: https://github.com/drift-audit/meridian",
         "",
         "/* SITE */",

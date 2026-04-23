@@ -20,7 +20,7 @@ OUT = REPO / "site" / "schemas" / "manifest.schema.json"
 
 def main() -> int:
     schema = Manifest.model_json_schema()
-    schema["$id"] = "https://drift-audit.example/schemas/manifest.schema.json"
+    schema["$id"] = "https://meridianaudit.org/schemas/manifest.schema.json"
     schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
     schema["title"] = f"Drift Audit manifest (v{SCHEMA_VERSION})"
     OUT.parent.mkdir(parents=True, exist_ok=True)

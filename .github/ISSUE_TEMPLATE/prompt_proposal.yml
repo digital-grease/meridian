@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         Thanks for proposing a prompt. Please read
-        [`/contribute/`](https://drift-audit.example/contribute/) before
+        [`/contribute/`](https://meridianaudit.org/contribute/) before
         submitting — it covers what we accept and what we reject.
 
         Prompts that target a specific provider, request operationally

@@ -10,7 +10,7 @@
   {% endblock %}
 
   <meta name="description" content="{% block description %}A public, timestamped, reproducible record of how commercial large language models&rsquo; stances, refusals, and framings change over time on contested topics.{% endblock %}">
-  <link rel="canonical" href="{% block canonical %}https://drift-audit.example{{ path | default('/') }}{% endblock %}">
+  <link rel="canonical" href="{% block canonical %}https://meridianaudit.org{{ path | default('/') }}{% endblock %}">
 
   <link rel="stylesheet" href="/static/css/base.css">
   {# Favicon set. Modern browsers prefer the SVG; everything else falls
@@ -29,9 +29,9 @@
   <meta property="og:url" content="{{ self.canonical() }}">
   {% block og_image %}
   {% if og_slug and og_available %}
-  <meta property="og:image" content="https://drift-audit.example/static/og/{{ og_slug }}.png">
+  <meta property="og:image" content="https://meridianaudit.org/static/og/{{ og_slug }}.png">
   {% else %}
-  <meta property="og:image" content="https://drift-audit.example/static/images/og-default.svg">
+  <meta property="og:image" content="https://meridianaudit.org/static/images/og-default.svg">
   {% endif %}
   {% endblock %}
 
@@ -48,7 +48,7 @@
     "@type": "ResearchProject",
     "name": "Drift Audit",
     "description": "Longitudinal measurement of political, epistemic, and behavioral drift in deployed commercial large language models.",
-    "url": "https://drift-audit.example/"
+    "url": "https://meridianaudit.org/"
   }
   </script>
   {% endblock %}

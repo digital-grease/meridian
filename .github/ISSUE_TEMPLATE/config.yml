@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: Propose a corpus prompt
-    url: https://drift-audit.example/contribute/
+    url: https://meridianaudit.org/contribute/
     about: How to propose a prompt and what we accept / reject.
   - name: Methodology
-    url: https://drift-audit.example/methodology/
+    url: https://meridianaudit.org/methodology/
     about: How corpus, sampling, and metrics are defined.
   - name: Funding transparency
-    url: https://drift-audit.example/funding/
+    url: https://meridianaudit.org/funding/
     about: Who pays for Drift Audit, with the hard rules we follow.

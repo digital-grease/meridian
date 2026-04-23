@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Send disclosures to `security@drift-audit.example` (placeholder — the
+Send disclosures to `security@meridianaudit.org` (placeholder — the
 final address will be announced at `/about/` once that inbox is live).
 
 Please include:

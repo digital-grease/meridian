@@ -466,7 +466,7 @@
       "type": "object"
     }
   },
-  "$id": "https://drift-audit.example/schemas/manifest.schema.json",
+  "$id": "https://meridianaudit.org/schemas/manifest.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {

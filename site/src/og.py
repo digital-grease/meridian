@@ -67,7 +67,7 @@ def render_og_png(title: str, subtitle: str, out_path: Path) -> None:
     )
 
     fig.text(
-        0.05, 0.08, "drift-audit.example",
+        0.05, 0.08, "meridianaudit.org",
         fontsize=18, color=WORDMARK_COLOR,
         family="monospace",
         ha="left", va="bottom",
