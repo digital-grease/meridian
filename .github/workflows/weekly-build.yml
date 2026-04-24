@@ -1,11 +1,22 @@
 name: Weekly build and deploy
 
 on:
+  # Chain off the pipeline's successful run so freshly-sampled manifests
+  # deploy without manual intervention. GitHub Actions does NOT fire
+  # push-triggered workflows on pushes authored by GITHUB_TOKEN — which
+  # the pipeline workflow uses to commit the new manifest — so this
+  # workflow_run trigger is the actual mechanism that couples the two.
+  workflow_run:
+    workflows: ["Weekly pipeline run"]
+    types: [completed]
+    branches: [main]
+  # Belt-and-suspenders cron in case the pipeline didn't run (missed
+  # schedule, rate-limited, etc.). Builds from whatever manifest is
+  # current on main — same selection logic as workflow_run.
   schedule:
-    # Sunday 00:00 UTC. The analysis pipeline is expected to have published
-    # the week's manifest to site/fixtures/ (or a well-known S3 URI fetched
-    # as a prior step, once the pipeline is wired in).
     - cron: "0 0 * * 0"
+  # Auto-rebuild on site/template edits too, so pushing CSS or
+  # template changes still redeploys without waiting for Sunday.
   push:
     branches: [main]
     paths:
@@ -28,6 +39,12 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # When chained off workflow_run, skip the build if the pipeline
+    # failed — no point rendering a partial or stale manifest from a
+    # broken run. Other triggers (push, cron, dispatch) always proceed.
+    if: |
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -62,10 +79,20 @@ jobs:
         run: uv sync --frozen || uv sync
 
       - name: Build site
+        # Pick the latest manifest by filename. Manifests are
+        # `manifest-YYYY-WNN.json` with zero-padded week numbers, so
+        # lexical sort matches chronological order within a year.
+        # Across year boundaries (e.g. 2026-W52 → 2027-W01) the same
+        # invariant holds because the year prefix sorts first.
         run: |
-          uv run python site/src/build.py \
-            --manifest site/fixtures/manifest-2026-W16.json \
-            --out site/dist
+          set -euo pipefail
+          MANIFEST=$(ls -1 site/fixtures/manifest-*.json 2>/dev/null | sort | tail -1)
+          if [ -z "$MANIFEST" ]; then
+            echo "::error::No manifest files found under site/fixtures/."
+            exit 1
+          fi
+          echo "Building from: $MANIFEST"
+          uv run python site/src/build.py --manifest "$MANIFEST" --out site/dist
 
       - name: Link-rot guard
         run: |
@@ -104,15 +131,38 @@ jobs:
             if curl -sf http://127.0.0.1:8765/ -o /dev/null; then break; fi
             sleep 0.25
           done
+          # Pick one representative of each per-item page type from the
+          # just-built urls.txt. Previously these were pinned to
+          # /models/claude-opus-4-7/ etc., which broke every time the
+          # manifest's model/axis/prompt set shifted (e.g. odd-week
+          # manifests don't include Opus). Fall back to the category
+          # index page if the category is empty.
+          #
+          # Redirect pages (emitted via site/redirects.yaml) are
+          # skipped — their meta-refresh fires before axe-core's
+          # scanner locks on, producing spurious results.
+          pick() {
+            for u in $(grep -oE "^$1[^/]+/\$" site/dist/urls.txt); do
+              if ! grep -q 'http-equiv="refresh"' "site/dist${u}index.html" 2>/dev/null; then
+                echo "$u"
+                return
+              fi
+            done
+          }
+          MODEL_URL=$(pick "/models/")
+          REPORT_URL=$(pick "/reports/")
+          AXIS_URL=$(pick "/axes/")
+          PROMPT_URL=$(pick "/prompts/")
+          BASE=http://127.0.0.1:8765
           npx --yes -p @axe-core/cli@4 axe \
-            "http://127.0.0.1:8765/" \
-            "http://127.0.0.1:8765/about/" \
-            "http://127.0.0.1:8765/methodology/" \
-            "http://127.0.0.1:8765/reports/2026-W16/" \
-            "http://127.0.0.1:8765/axes/political/" \
-            "http://127.0.0.1:8765/models/claude-opus-4-7/" \
-            "http://127.0.0.1:8765/prompts/fact-moon-landing/" \
-            "http://127.0.0.1:8765/data/" \
+            "$BASE/" \
+            "$BASE/about/" \
+            "$BASE/methodology/" \
+            "$BASE${REPORT_URL:-/reports/}" \
+            "$BASE${AXIS_URL:-/axes/}" \
+            "$BASE${MODEL_URL:-/models/}" \
+            "$BASE${PROMPT_URL:-/prompts/}" \
+            "$BASE/data/" \
             --exit
 
       - name: Upload Pages artifact
