@@ -345,6 +345,47 @@ def _models_from_storage(
     return out
 
 
+def _enrich_models_with_history(
+    current_models: list[dict],
+    manifests_dir: Path,
+) -> list[dict]:
+    """Carry forward models from prior committed manifests.
+
+    Without this, model index pages cycle in/out as cadence-alternated
+    runners come and go (Opus on even weeks, GPT-5.1 on odd, etc.) —
+    which fails the link-rot guard every other week and breaks the
+    "never 404 a published URL" guarantee.
+
+    Source of truth is ``data/manifests/*.json`` because it's
+    committed and therefore present in CI's fresh checkout. Raw
+    samples under ``data/raw/`` are gitignored, so the in-process
+    LocalSampleStore can't see prior weeks in CI.
+
+    Models seen in current-week storage stay marked ``available=True``;
+    models known only from history are added with ``available=False``
+    so templates can show "this model didn't run this week" if they
+    want to.
+    """
+    out = list(current_models)
+    seen = {m["model_id"] for m in current_models}
+    if not manifests_dir.exists():
+        return out
+    for f in sorted(manifests_dir.glob("*.json"), reverse=True):
+        try:
+            prior = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        for mm in prior.get("models", []):
+            mid = mm.get("model_id")
+            if not mid or mid in seen:
+                continue
+            seen.add(mid)
+            entry = dict(mm)
+            entry["available"] = False
+            out.append(entry)
+    return out
+
+
 def build_manifest(
     *,
     store: LocalSampleStore,
@@ -359,6 +400,7 @@ def build_manifest(
     stance_by_key: dict[tuple[str, str], "StanceResult"] | None = None,
     embedding_model: "EmbeddingModel | None" = None,
     insufficient_data_n: int = MIN_SAMPLES_FOR_PUBLICATION,
+    prior_manifests_dir: Path | None = None,
 ) -> dict:
     """Construct a Manifest dict matching the site schema.
 
@@ -382,6 +424,8 @@ def build_manifest(
     )
     _apply_bh_correction(current_metrics)
     models = _models_from_storage(store, week_id, display_info, scoped_prompts)
+    if prior_manifests_dir is not None:
+        models = _enrich_models_with_history(models, prior_manifests_dir)
 
     all_weeks = store.weeks()
     prior_weeks = [w for w in all_weeks if w < week_id][-history_weeks:]

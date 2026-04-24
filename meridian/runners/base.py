@@ -102,6 +102,21 @@ class Runner(abc.ABC):
         """Return one Sample. Raises RunnerError on failure."""
         raise NotImplementedError
 
+    def supports_temperature(self, temperature: float) -> bool:
+        """True if this runner's model accepts ``temperature`` at the API.
+
+        The default is permissive (True). Override in subclasses where a
+        specific model rejects non-default temperature at the API (e.g.
+        Anthropic's thinking-by-default Opus 4.7 returns 400 with
+        "`temperature` is deprecated for this model" on non-default
+        values; OpenAI's o1/o3 reasoning models have the same restriction).
+
+        The orchestrator calls this before launching a batch at a given
+        temperature and skips that batch — rather than burning requests
+        on 400 errors — when it returns False.
+        """
+        return True
+
     async def batch(
         self,
         prompt: str,

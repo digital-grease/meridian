@@ -1,0 +1,34 @@
+# URLs the link-rot guard is allowed to find missing in the current
+# build. Format: one path per line; lines starting with `#` are ignored.
+#
+# An entry here is an explicit acknowledgement that a previously-published
+# URL has been retired. Use sparingly — citation stability is one of the
+# project's hard rules. When in doubt, redirect (`site/redirects.yaml`)
+# instead of allowing.
+#
+# -----------------------------------------------------------------------
+# Fixture → real-data transition (2026-04-23 / W17 first real run).
+#
+# The pre-launch fixture site rendered model pages for three providers
+# (Opus, GPT-5-preview, Gemini 2.5 Pro). Real runs have never included
+# Gemini and the model-week drill-downs (`/models/<x>/2026-W16/`) only
+# render for the current week per build (see model_week.html). Those
+# fixture-era URLs cannot be reproduced from real data.
+#
+# Going forward, the manifest_writer carries previously-seen models
+# across weeks (see _enrich_models_with_history) so cadence-alternated
+# providers (Opus on even weeks, GPT-5.1 on odd) keep rendering both
+# /models/<x>/ pages every week and don't trip this guard.
+/models/gemini-2.5-pro/
+/models/gemini-2.5-pro/2026-W16/
+/models/claude-opus-4-7/2026-W16/
+/models/gpt-5.1/2026-W16/
+
+# Temporarily missing on the W17→W18 transition: the W17 manifest
+# (committed by the W17 pipeline run, before the carry-forward fix)
+# does not list claude-opus-4-7. After the W18 run lands and the bot
+# publishes the W18 manifest with carry-forward enabled, this URL
+# reappears and the entry below becomes a harmless no-op. Leave it
+# in place — removing it would re-break the URL during this single
+# transition window.
+/models/claude-opus-4-7/

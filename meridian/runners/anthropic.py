@@ -23,6 +23,30 @@ from meridian.runners.base import (
 )
 
 
+#: Model-id prefixes whose API deprecates `temperature` (returns 400
+#: "`temperature` is deprecated for this model" on non-default values).
+#: Anthropic tolerates the API default (1.0) but nothing else. Extend
+#: this list when a new thinking-default model errors with that message.
+_TEMPERATURE_DEPRECATED_PREFIXES: tuple[str, ...] = (
+    "claude-opus-4-7",
+)
+
+#: Anthropic Messages API treats 1.0 as the default; only this value is
+#: accepted by the prefixes above.
+_ANTHROPIC_DEFAULT_TEMPERATURE = 1.0
+
+
+def _anthropic_supports_temperature(model_id: str, temperature: float) -> bool:
+    """Whether Anthropic's API will accept this temperature for this
+    model. Exposed as a pure-Python helper so tests can exercise the
+    decision without constructing a runner (which spins up an SDK
+    client that expects credentials)."""
+    mid = model_id.lower()
+    if any(mid.startswith(p) for p in _TEMPERATURE_DEPRECATED_PREFIXES):
+        return temperature == _ANTHROPIC_DEFAULT_TEMPERATURE
+    return True
+
+
 class AnthropicRunner(Runner):
     provider = "anthropic"
 
@@ -35,6 +59,9 @@ class AnthropicRunner(Runner):
     ) -> None:
         self.model_id = model_id
         self.client = client or AsyncAnthropic(api_key=api_key)
+
+    def supports_temperature(self, temperature: float) -> bool:
+        return _anthropic_supports_temperature(self.model_id, temperature)
 
     async def sample(
         self,

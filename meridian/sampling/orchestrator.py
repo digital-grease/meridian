@@ -115,42 +115,65 @@ class Orchestrator:
 
                 try:
                     if n_default_batch > 0:
-                        async for s in runner.batch(
-                            prompt.text,
-                            prompt_id=prompt.id,
-                            n=n_default_batch,
-                            temperature=self.plan.default_temperature,
-                            max_tokens=self.plan.max_tokens,
-                            concurrency=self.plan.concurrency_per_provider,
-                            start_index=start_default,
+                        if not runner.supports_temperature(
+                            self.plan.default_temperature
                         ):
-                            self.store.append(
-                                self.plan.week_id,
-                                runner.model_id,
-                                prompt.id,
-                                s,
+                            _log.warning(
+                                "%s/%s does not accept temperature=%s; "
+                                "skipping %d default-temp sample(s) for %s",
+                                runner.provider, runner.model_id,
+                                self.plan.default_temperature,
+                                n_default_batch, prompt.id,
                             )
-                            outcome.total_samples_written += 1
-                            outcome.per_runner_samples[runner_key] += 1
+                        else:
+                            async for s in runner.batch(
+                                prompt.text,
+                                prompt_id=prompt.id,
+                                n=n_default_batch,
+                                temperature=self.plan.default_temperature,
+                                max_tokens=self.plan.max_tokens,
+                                concurrency=self.plan.concurrency_per_provider,
+                                start_index=start_default,
+                            ):
+                                self.store.append(
+                                    self.plan.week_id,
+                                    runner.model_id,
+                                    prompt.id,
+                                    s,
+                                )
+                                outcome.total_samples_written += 1
+                                outcome.per_runner_samples[runner_key] += 1
 
                     if n_zero_batch > 0:
-                        async for s in runner.batch(
-                            prompt.text,
-                            prompt_id=prompt.id,
-                            n=n_zero_batch,
-                            temperature=self.plan.zero_temperature,
-                            max_tokens=self.plan.max_tokens,
-                            concurrency=self.plan.concurrency_per_provider,
-                            start_index=start_zero,
+                        if not runner.supports_temperature(
+                            self.plan.zero_temperature
                         ):
-                            self.store.append(
-                                self.plan.week_id,
-                                runner.model_id,
-                                prompt.id,
-                                s,
+                            _log.info(
+                                "%s/%s does not accept temperature=%s; "
+                                "skipping %d zero-temp sample(s) for %s "
+                                "(model does not expose non-default temperature)",
+                                runner.provider, runner.model_id,
+                                self.plan.zero_temperature,
+                                n_zero_batch, prompt.id,
                             )
-                            outcome.total_samples_written += 1
-                            outcome.per_runner_samples[runner_key] += 1
+                        else:
+                            async for s in runner.batch(
+                                prompt.text,
+                                prompt_id=prompt.id,
+                                n=n_zero_batch,
+                                temperature=self.plan.zero_temperature,
+                                max_tokens=self.plan.max_tokens,
+                                concurrency=self.plan.concurrency_per_provider,
+                                start_index=start_zero,
+                            ):
+                                self.store.append(
+                                    self.plan.week_id,
+                                    runner.model_id,
+                                    prompt.id,
+                                    s,
+                                )
+                                outcome.total_samples_written += 1
+                                outcome.per_runner_samples[runner_key] += 1
 
                     outcome.pairs_complete += 1
                 except RunnerError as e:

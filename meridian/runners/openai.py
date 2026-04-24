@@ -22,6 +22,28 @@ from meridian.runners.base import (
 )
 
 
+#: o-series reasoning model prefixes reject the `temperature` parameter
+#: outright. GPT-5 family currently accepts temperature but OpenAI's
+#: docs signal the same transition is in progress for reasoning-default
+#: models; extend this list when a 400 on temperature appears for a
+#: new family.
+_TEMPERATURE_UNSUPPORTED_PREFIXES: tuple[str, ...] = (
+    "o1",
+    "o3",
+    "o4",
+)
+
+
+def _openai_supports_temperature(model_id: str, temperature: float) -> bool:
+    """Pure-function helper mirroring the runner method, so tests can
+    exercise it without constructing an SDK-backed runner."""
+    del temperature  # o-series rejects temperature at any value
+    mid = model_id.lower()
+    if any(mid.startswith(p) for p in _TEMPERATURE_UNSUPPORTED_PREFIXES):
+        return False
+    return True
+
+
 class OpenAIRunner(Runner):
     provider = "openai"
 
@@ -34,6 +56,9 @@ class OpenAIRunner(Runner):
     ) -> None:
         self.model_id = model_id
         self.client = client or AsyncOpenAI(api_key=api_key)
+
+    def supports_temperature(self, temperature: float) -> bool:
+        return _openai_supports_temperature(self.model_id, temperature)
 
     async def sample(
         self,
