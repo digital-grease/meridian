@@ -44,6 +44,8 @@ class OpenAIRunner(Runner):
         temperature: float,
         max_tokens: int = 1024,
     ) -> Sample:
+        token_kwarg = _token_kwarg_for(self.model_id)
+
         async def one_call() -> Sample:
             started = time.monotonic()
             try:
@@ -51,7 +53,7 @@ class OpenAIRunner(Runner):
                     model=self.model_id,
                     messages=[{"role": "user", "content": prompt}],
                     temperature=temperature,
-                    max_tokens=max_tokens,
+                    **{token_kwarg: max_tokens},
                 )
             except openai.AuthenticationError as e:
                 raise AuthError(str(e)) from e
@@ -88,6 +90,22 @@ class OpenAIRunner(Runner):
             )
 
         return await with_retry(one_call)
+
+
+def _token_kwarg_for(model_id: str) -> str:
+    """Return the token-cap parameter name the model's API accepts.
+
+    GPT-5 family and o-series reasoning models (o1, o3, o4, ...)
+    reject `max_tokens` with `unsupported_parameter`; they require
+    `max_completion_tokens`. Legacy `gpt-4*` / `gpt-3.5*` still accept
+    the older name. OpenAI flipped the default as part of the GPT-5
+    rollout; the error message on a failed call is the signal to
+    extend this list when new model families ship.
+    """
+    mid = model_id.lower()
+    if mid.startswith(("gpt-5", "o1", "o3", "o4")):
+        return "max_completion_tokens"
+    return "max_tokens"
 
 
 def _parse_retry_after(e: openai.RateLimitError) -> float | None:
