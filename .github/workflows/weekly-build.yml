@@ -154,7 +154,26 @@ jobs:
           AXIS_URL=$(pick "/axes/")
           PROMPT_URL=$(pick "/prompts/")
           BASE=http://127.0.0.1:8765
+          # axe-core/cli@4 bundles its own ChromeDriver via npm. That
+          # ChromeDriver tracks the latest Chrome (currently 148) and
+          # mismatches the GitHub-hosted runner's preinstalled Chrome
+          # (currently 147), producing
+          #   "session not created: This version of ChromeDriver only
+          #    supports Chrome version 148".
+          # The runner ships a matching ChromeDriver alongside Chrome;
+          # point axe at it via --chromedriver-path so we use the
+          # system pair instead of axe's bundled one.
+          CHROMEDRIVER_PATH="$(command -v chromedriver || true)"
+          if [ -z "$CHROMEDRIVER_PATH" ]; then
+            CHROMEDRIVER_PATH="$(find /usr/local/share /usr/bin /opt -maxdepth 5 -name chromedriver -type f 2>/dev/null | head -1)"
+          fi
+          if [ -z "$CHROMEDRIVER_PATH" ]; then
+            echo "::error::No system chromedriver found; axe will fall back to its bundled one (likely Chrome-version mismatch)."
+            exit 1
+          fi
+          echo "using chromedriver: $CHROMEDRIVER_PATH"
           npx --yes -p @axe-core/cli@4 axe \
+            --chromedriver-path "$CHROMEDRIVER_PATH" \
             "$BASE/" \
             "$BASE/about/" \
             "$BASE/methodology/" \
