@@ -17,6 +17,7 @@
     <a href="/feed.xml" rel="alternate" type="application/atom+xml">Subscribe via Atom</a>
   </p>
 
+  {% if reports_by_year %}
   {% for year in reports_by_year | sort(reverse=True) %}
   <section class="year-block">
     <h2 id="y{{ year }}">{{ year }}</h2>
@@ -39,5 +40,13 @@
     </ol>
   </section>
   {% endfor %}
+  {% else %}
+  <p class="muted">
+    No reports published yet. The first plain-English writeup will go up
+    once the weekly pipeline has accumulated enough data to say something
+    substantive. The raw measurements are already public at
+    <a href="/data/">/data/</a> if you want to look at them now.
+  </p>
+  {% endif %}
 </article>
 {% endblock %}

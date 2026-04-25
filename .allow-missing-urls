@@ -32,3 +32,16 @@
 # in place — removing it would re-break the URL during this single
 # transition window.
 /models/claude-opus-4-7/
+
+# -----------------------------------------------------------------------
+# Retracted pre-launch placeholder reports (removed 2026-04-25).
+# The three .md files under site/content/reports/ that produced these
+# URLs were authored before any real pipeline runs and presented
+# fictional findings ("hedge density creeps up on political axis",
+# "Baseline week — no notable changes" for a week we never ran).
+# Shipping them as real measurements would fail the project's own
+# editor-in-chief integrity gate. Deleted before any real audience
+# saw the site, hence the allowlist rather than retraction notices.
+/reports/2026-04/
+/reports/2026-W15/
+/reports/2026-W16/

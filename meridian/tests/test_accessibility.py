@@ -33,18 +33,22 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Representative pages: every distinct template in site/src/templates/.
-# `/data/` is the data index (the per-week `/data/{week}/` is a raw
-# artifact directory with no index.html).
-PAGE_PATHS = [
+# Static page paths exercise template types whose URLs are stable
+# regardless of which manifest the site builds from. Per-item pages
+# (a specific report / model / axis / prompt) used to be hardcoded
+# here too — but those slugs shift as the corpus / roster / cadence
+# change, so we now pick one of each from urls.txt at test time.
+STATIC_PAGE_PATHS = [
     "/",
     "/about/",
     "/methodology/",
-    "/reports/2026-W16/",
-    "/axes/political/",
-    "/models/claude-opus-4-7/",
-    "/prompts/fact-moon-landing/",
+    "/reports/",
     "/data/",
+    "/contribute/",
+    "/funding/",
 ]
+# Per-item template types to spot-check via dynamic pick.
+DYNAMIC_PAGE_PREFIXES = ("/axes/", "/models/", "/prompts/")
 
 
 def _free_port() -> int:
@@ -91,12 +95,40 @@ def axe_server(built_dist: Path):
         httpd.server_close()
 
 
+def _pick_first_non_redirect(urls_txt: Path, prefix: str) -> str | None:
+    """Return the first URL under ``prefix`` whose page is not a
+    redirect stub (those meta-refresh before axe locks on)."""
+    if not urls_txt.exists():
+        return None
+    dist = urls_txt.parent
+    for line in urls_txt.read_text().splitlines():
+        u = line.strip()
+        if not u or not u.startswith(prefix) or u == prefix:
+            continue
+        # Strip leading "/" so it's a relative path under dist.
+        rel = u.lstrip("/").rstrip("/")
+        index_html = dist / rel / "index.html"
+        if not index_html.exists():
+            continue
+        if 'http-equiv="refresh"' in index_html.read_text():
+            continue
+        return u
+    return None
+
+
 @pytest.mark.slow
-def test_axe_no_violations(axe_server: str, tmp_path: Path) -> None:
+def test_axe_no_violations(axe_server: str, built_dist: Path, tmp_path: Path) -> None:
     if shutil.which("npx") is None:
         pytest.skip("npx not available; CI workflow runs the hard gate")
 
-    urls = [axe_server + p for p in PAGE_PATHS]
+    paths = list(STATIC_PAGE_PATHS)
+    urls_txt = built_dist / "urls.txt"
+    for prefix in DYNAMIC_PAGE_PREFIXES:
+        picked = _pick_first_non_redirect(urls_txt, prefix)
+        if picked is not None:
+            paths.append(picked)
+
+    urls = [axe_server + p for p in paths]
     # axe-core/cli 4.x resolves --save as cwd-relative and strips leading
     # slashes, so we run from tmp_path and pass a bare filename.
     out_json = tmp_path / "axe.json"

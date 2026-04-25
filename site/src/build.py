@@ -936,9 +936,12 @@ def build(manifest_path: Path, out_dir: Path) -> dict:
                 ctx = dict(base_context, og_slug=slug)
             render_page(env, template_name, out_dir / out_path, ctx)
 
-    if reports:
-        render_reports(env, out_dir, reports, base_context)
-        write_atom_feed(env, out_dir, reports, base_context)
+    # Always render the reports index and Atom feed, even with zero
+    # reports authored. Both URLs ship in the public urls.txt and
+    # citation-stability says we don't 404 them. The empty-state copy
+    # is in reports_index.html; the empty Atom feed is still valid.
+    render_reports(env, out_dir, reports, base_context)
+    write_atom_feed(env, out_dir, reports, base_context)
 
     render_dashboard(env, out_dir, manifest, base_context)
     publish_data(env, out_dir, manifest_path, manifest, base_context)
