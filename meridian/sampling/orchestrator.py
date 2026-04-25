@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass, field
 
 from meridian.corpus import Corpus, Prompt
@@ -26,6 +27,19 @@ from meridian.runners import Runner, RunnerError
 from meridian.storage import LocalSampleStore
 
 _log = logging.getLogger(__name__)
+
+
+def _fmt_secs(seconds: float) -> str:
+    """Compact wall-clock formatter for progress logs: "8s", "3m12s",
+    "1h05m". Drops sub-second precision; cosmetic only."""
+    s = max(0, int(seconds))
+    if s < 60:
+        return f"{s}s"
+    m, s = divmod(s, 60)
+    if m < 60:
+        return f"{m}m{s:02d}s"
+    h, m = divmod(m, 60)
+    return f"{h}h{m:02d}m"
 
 
 @dataclass(frozen=True)
@@ -91,12 +105,26 @@ class Orchestrator:
         async def run_one_runner(runner: Runner) -> None:
             runner_key = f"{runner.provider}/{runner.model_id}"
             outcome.per_runner_samples.setdefault(runner_key, 0)
-            for prompt in prompts:
+            total = len(prompts)
+            run_started = time.monotonic()
+            samples_per_pair = self.plan.samples_per_pair
+            _log.info(
+                "[%s] starting: %d prompts × up to %d samples/pair",
+                runner_key, total, samples_per_pair,
+            )
+            for idx, prompt in enumerate(prompts, 1):
+                pair_started = time.monotonic()
+                samples_before = outcome.per_runner_samples[runner_key]
                 existing = self.store.count(
                     self.plan.week_id, runner.model_id, prompt.id
                 )
                 if not force and existing >= self.plan.samples_per_pair:
                     outcome.pairs_skipped += 1
+                    self._log_progress(
+                        runner_key, idx, total, prompt.id, "SKIP",
+                        pair_started, run_started,
+                        samples_added=0,
+                    )
                     continue
 
                 if force:
@@ -176,6 +204,7 @@ class Orchestrator:
                                 outcome.per_runner_samples[runner_key] += 1
 
                     outcome.pairs_complete += 1
+                    status = "OK"
                 except RunnerError as e:
                     outcome.pairs_failed += 1
                     outcome.errors.append(
@@ -191,6 +220,50 @@ class Orchestrator:
                         "pair failed: %s / %s / %s: %s",
                         runner.provider, runner.model_id, prompt.id, e,
                     )
+                    status = "FAIL"
+
+                samples_added = (
+                    outcome.per_runner_samples[runner_key] - samples_before
+                )
+                self._log_progress(
+                    runner_key, idx, total, prompt.id, status,
+                    pair_started, run_started, samples_added=samples_added,
+                )
+
+            _log.info(
+                "[%s] complete in %s — %d ok, %d skipped, %d failed",
+                runner_key, _fmt_secs(time.monotonic() - run_started),
+                outcome.pairs_complete, outcome.pairs_skipped,
+                outcome.pairs_failed,
+            )
 
         await asyncio.gather(*[run_one_runner(r) for r in self.runners])
         return outcome
+
+    @staticmethod
+    def _log_progress(
+        runner_key: str,
+        idx: int,
+        total: int,
+        prompt_id: str,
+        status: str,
+        pair_started: float,
+        run_started: float,
+        *,
+        samples_added: int,
+    ) -> None:
+        """One log line per (runner, prompt) iteration with status, timing,
+        and a rough ETA derived from average pair time so far. ETA is
+        cosmetic — it gets less wrong as the run progresses."""
+        now = time.monotonic()
+        pair_elapsed = now - pair_started
+        run_elapsed = now - run_started
+        rate = run_elapsed / idx if idx else 0
+        eta_secs = rate * (total - idx)
+        _log.info(
+            "[%s] %d/%d %s %s "
+            "(pair %s, +%d samples, elapsed %s, eta %s)",
+            runner_key, idx, total, status, prompt_id,
+            _fmt_secs(pair_elapsed), samples_added,
+            _fmt_secs(run_elapsed), _fmt_secs(eta_secs),
+        )

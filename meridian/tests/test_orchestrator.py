@@ -8,7 +8,7 @@ import pytest
 
 from meridian.corpus import load_corpus
 from meridian.runners.base import Runner, RunnerError, Sample
-from meridian.sampling.orchestrator import Orchestrator, SamplingPlan
+from meridian.sampling.orchestrator import Orchestrator, SamplingPlan, _fmt_secs
 from meridian.storage import LocalSampleStore
 
 
@@ -128,3 +128,53 @@ async def test_orchestrator_collects_errors_without_halting(tmp_path: Path):
     assert outcome.pairs_complete == 2 # ok succeeded on both
     assert outcome.total_samples_written == 4  # only from ok runner
     assert {e.provider for e in outcome.errors} == {"broken"}
+
+
+@pytest.mark.parametrize(
+    "seconds,expected",
+    [
+        (0, "0s"),
+        (8, "8s"),
+        (59, "59s"),
+        (60, "1m00s"),
+        (61, "1m01s"),
+        (192, "3m12s"),
+        (3599, "59m59s"),
+        (3600, "1h00m"),
+        (3899, "1h04m"),  # rounds down on minutes
+        (-5, "0s"),       # clamps negatives (defensive)
+    ],
+)
+def test_fmt_secs(seconds: int, expected: str):
+    """Progress-log timestamp formatter. Cosmetic, but pinning the
+    cutoffs so re-runs of the same pipeline produce stable log shapes."""
+    assert _fmt_secs(seconds) == expected
+
+
+async def test_orchestrator_progress_logging(tmp_path, caplog):
+    """Each pair emits one [runner] X/Y prompt-id status line so a long
+    Ollama run shows visible progress."""
+    import logging
+
+    store = LocalSampleStore(tmp_path)
+    corpus = load_corpus()
+    one_axis = [p for p in corpus.public() if p.axis == "neutral-control"][:3]
+    runner = _FakeRunner("llama3.2:3b")
+    plan = SamplingPlan(week_id="2026-W16", n_default_temp=1, n_zero_temp=0)
+    orch = Orchestrator([runner], store, corpus, plan)
+
+    with caplog.at_level(logging.INFO, logger="meridian.sampling.orchestrator"):
+        await orch.run(prompts=one_axis)
+
+    progress_lines = [
+        rec.getMessage() for rec in caplog.records
+        if "/3" in rec.getMessage() and "OK" in rec.getMessage()
+    ]
+    assert len(progress_lines) == 3
+    # First and last line carry the expected counter shape.
+    assert progress_lines[0].startswith("[fake/llama3.2:3b] 1/3 OK ")
+    assert progress_lines[-1].startswith("[fake/llama3.2:3b] 3/3 OK ")
+    # Header + footer also fired.
+    headers = [m for m in caplog.messages if "starting:" in m]
+    footers = [m for m in caplog.messages if "complete in" in m]
+    assert len(headers) == 1 and len(footers) == 1
