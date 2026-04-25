@@ -14,6 +14,7 @@ import pytest
 from meridian.runners.anthropic import (
     AnthropicRunner,
     _anthropic_supports_temperature,
+    _build_message_kwargs,
 )
 from meridian.runners.openai import (
     OpenAIRunner,
@@ -99,3 +100,42 @@ def test_anthropic_supports_temperature(model_id: str, temp: float, supported: b
 )
 def test_openai_supports_temperature(model_id: str, temp: float, supported: bool):
     assert _openai_supports_temperature(model_id, temp) is supported
+
+
+def test_build_message_kwargs_omits_temperature_for_opus_47():
+    """Anthropic's migration guidance is to omit `temperature` entirely
+    for thinking-by-default models. We currently rely on the implicit
+    default (1.0); explicitly sending it would 400 if Anthropic ever
+    changes that default. Omitting future-proofs the runner."""
+    kwargs = _build_message_kwargs(
+        model_id="claude-opus-4-7",
+        prompt="hi",
+        temperature=1.0,
+        max_tokens=1024,
+    )
+    assert "temperature" not in kwargs
+    assert kwargs["model"] == "claude-opus-4-7"
+    assert kwargs["max_tokens"] == 1024
+    assert kwargs["messages"] == [{"role": "user", "content": "hi"}]
+
+
+def test_build_message_kwargs_omits_temperature_for_date_pinned_opus():
+    kwargs = _build_message_kwargs(
+        model_id="claude-opus-4-7-20250114",
+        prompt="hi", temperature=1.0, max_tokens=1024,
+    )
+    assert "temperature" not in kwargs
+
+
+@pytest.mark.parametrize(
+    "model_id",
+    ["claude-sonnet-4-6", "claude-haiku-4-5-20251001", "claude-3-5-sonnet"],
+)
+def test_build_message_kwargs_includes_temperature_for_non_thinking_models(model_id: str):
+    """Non-thinking models still accept and benefit from temperature
+    control. Removing it for them would change observed behavior on
+    the GPT-4-era roster."""
+    kwargs = _build_message_kwargs(
+        model_id=model_id, prompt="hi", temperature=0.3, max_tokens=512,
+    )
+    assert kwargs["temperature"] == 0.3

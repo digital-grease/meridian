@@ -64,6 +64,37 @@
     Responses are stored append-only. The raw log is never overwritten or
     rewritten &mdash; only extended.
   </p>
+  <p id="thinking-models">
+    <strong>Thinking-by-default models.</strong> Some frontier models &mdash;
+    Claude Opus 4.7 and the OpenAI o-series among them &mdash; have
+    <a href="https://platform.claude.com/docs/en/api/messages">deprecated the
+    <code>temperature</code>, <code>top_p</code>, and <code>top_k</code>
+    parameters</a>: any non-default value returns a 400 error. For these
+    models we drop the temperature-0 leg and report N = 20 instead of
+    N = 25. Three downstream effects are worth knowing:
+  </p>
+  <ul>
+    <li>The deterministic-baseline measurement is unavailable on these
+      models. Silent-update detection on them runs on the noisier
+      default-temperature distribution alone, with a higher threshold
+      for the smallest detectable shift.</li>
+    <li>Confidence intervals on per-metric estimates are
+      <code>&radic;(25/20) &asymp; 1.12&times;</code> wider than for
+      models we can sample at temperature 0.</li>
+    <li>Cross-model comparisons inherit a sampling asymmetry. Where
+      that matters (e.g. comparing Opus drift against GPT-5.1 drift) we
+      flag it.</li>
+  </ul>
+  <p>
+    A deeper consequence: at &ldquo;default temperature&rdquo; on a
+    thinking-by-default model, the response is shaped by an internal
+    reasoning phase the API does not let us control. Our default-temp
+    measurements on these models are therefore not strictly
+    apples-to-apples with measurements on non-thinking models &mdash;
+    even before sampling enters the picture. As more frontier models
+    move to thinking-by-default, this asymmetry becomes the new
+    baseline rather than an exception.
+  </p>
 
   <h2 id="metrics">Metrics</h2>
   <dl class="metric-glossary">

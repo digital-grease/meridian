@@ -47,6 +47,37 @@ def _anthropic_supports_temperature(model_id: str, temperature: float) -> bool:
     return True
 
 
+def _build_message_kwargs(
+    *,
+    model_id: str,
+    prompt: str,
+    temperature: float,
+    max_tokens: int,
+) -> dict:
+    """Construct the kwargs dict for ``AsyncAnthropic.messages.create``.
+
+    On thinking-by-default models (Opus 4.7 and successors), Anthropic
+    has deprecated ``temperature``, ``top_p``, and ``top_k``. The API
+    currently still tolerates the implicit default (1.0) but the
+    documented migration is to omit the parameter entirely
+    (https://platform.claude.com/docs/en/api/messages). Sending an
+    explicit value is brittle if Anthropic ever changes the implicit
+    default — so we omit the param up-front for these models. The
+    Sample record still carries ``temperature`` as the orchestrator
+    intended (1.0 in this case), even though the API call did not
+    include it; that field documents our sampling intent, not the
+    bytes on the wire.
+    """
+    kwargs: dict = {
+        "model": model_id,
+        "max_tokens": max_tokens,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    if not any(model_id.lower().startswith(p) for p in _TEMPERATURE_DEPRECATED_PREFIXES):
+        kwargs["temperature"] = temperature
+    return kwargs
+
+
 class AnthropicRunner(Runner):
     provider = "anthropic"
 
@@ -72,15 +103,17 @@ class AnthropicRunner(Runner):
         temperature: float,
         max_tokens: int = 1024,
     ) -> Sample:
+        api_kwargs = _build_message_kwargs(
+            model_id=self.model_id,
+            prompt=prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
         async def one_call() -> Sample:
             started = time.monotonic()
             try:
-                resp = await self.client.messages.create(
-                    model=self.model_id,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    messages=[{"role": "user", "content": prompt}],
-                )
+                resp = await self.client.messages.create(**api_kwargs)
             except anthropic.AuthenticationError as e:
                 raise AuthError(str(e)) from e
             except anthropic.RateLimitError as e:
