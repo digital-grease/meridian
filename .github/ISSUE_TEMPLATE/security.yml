@@ -8,10 +8,9 @@ body:
       value: |
         **STOP.** Do not file public security reports.
 
-        Send security disclosures to `security@meridianaudit.org` (placeholder
-        — final address published at `/about/` once the inbox is live).
-        Include: a description, reproduction steps, and any disclosure
-        timeline constraints you have. We'll acknowledge within 72 hours.
+        Send security disclosures to `dg@digitalgrease.net`. Include: a
+        description, reproduction steps, and any disclosure timeline
+        constraints you have. We'll acknowledge within 72 hours.
 
         If you got here by accident, close this without submitting.
 
@@ -20,5 +19,5 @@ body:
     attributes:
       label: Acknowledgement
       options:
-        - label: I have read the note above and I am filing a non-sensitive report (e.g. pointing out that our contact info itself is wrong). Sensitive reports go to `security@meridianaudit.org`.
+        - label: I have read the note above and I am filing a non-sensitive report (e.g. pointing out that our contact info itself is wrong). Sensitive reports go to `dg@digitalgrease.net`.
           required: true

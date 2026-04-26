@@ -6,7 +6,7 @@ Idempotent and deterministic: given the same inputs, produces byte-identical out
 (modulo the build timestamp, which is surfaced in build.json for provenance).
 
 Run:
-    uv run python site/src/build.py --manifest site/fixtures/manifest-2026-W16.json \
+    uv run python site/src/build.py --manifest site/fixtures/synthetic-fixture.json \
         --out site/dist
 """
 from __future__ import annotations
@@ -785,6 +785,305 @@ def load_run_log_summary(repo_root: Path) -> list:
     return summarize_weekly(read_run_log(log_path))
 
 
+# Reference scales for normalising per-metric weekly deltas into a
+# unitless "drift signal" for the home-page heatmap. These are not
+# meant to be statistically tight — they're "what counts as a big
+# week-over-week move" so the colour ramp tracks intuition. Tightened
+# scales are fine; the heatmap colour is normalised against
+# `max_score_in_grid` at render time so absolute scale doesn't matter.
+_DRIFT_SCALES = {
+    "refusal_rate": 1.0,        # full Bernoulli range
+    "hedge_density": 5.0,        # typical 0-10 markers/100 tok
+    "length_median": None,       # uses relative scale at compute time
+}
+
+
+def _drift_score_for_axis(
+    *,
+    axis: str,
+    model_id: str,
+    manifest: Manifest,
+) -> dict | None:
+    """Compute one heatmap cell: the dominant week-over-week shift on
+    this (axis, model). Returns ``None`` when the axis has no prompts
+    measured for this model.
+
+    Modes:
+      * ``"delta"``: most recent prior-week metrics for the same
+        (axis, model) exist; cell shows |current - prior| normalised.
+      * ``"absolute"``: no prior week — cell shows the current absolute
+        value (useful as a first-week snapshot).
+    """
+    axis_prompt_ids = {p.prompt_id for p in manifest.prompts if p.axis == axis}
+    if not axis_prompt_ids:
+        return None
+    current = [
+        m for m in manifest.metrics
+        if m.model_id == model_id and m.prompt_id in axis_prompt_ids
+    ]
+    if not current:
+        return None
+
+    def _avg(records, attr):
+        vals = []
+        for r in records:
+            v = getattr(r, attr, None) if "." not in attr else getattr(r.length, attr.split(".")[1])
+            if v is not None:
+                vals.append(float(v))
+        return sum(vals) / len(vals) if vals else None
+
+    cur = {
+        "refusal_rate": _avg(current, "refusal_rate"),
+        "hedge_density": _avg(current, "hedge_density"),
+        "length_median": _avg(current, "length.median"),
+    }
+
+    prior_metrics: list = []
+    for h in reversed(manifest.history):  # newest history first
+        prior_metrics = [
+            m for m in h.metrics
+            if m.model_id == model_id and m.prompt_id in axis_prompt_ids
+        ]
+        if prior_metrics:
+            break
+
+    if not prior_metrics:
+        # No prior — colour the cell by absolute current refusal_rate
+        # plus normalised hedge_density. Same metric grammar; the
+        # caption tells the reader this is a first-week view.
+        score = max(
+            (cur["refusal_rate"] or 0.0) / _DRIFT_SCALES["refusal_rate"],
+            (cur["hedge_density"] or 0.0) / _DRIFT_SCALES["hedge_density"],
+        )
+        return {
+            "axis": axis, "model_id": model_id,
+            "score": round(score, 3), "mode": "absolute",
+            "metric": "absolute snapshot",
+            "current": cur, "prior": None,
+        }
+
+    prior = {
+        "refusal_rate": _avg(prior_metrics, "refusal_rate"),
+        "hedge_density": _avg(prior_metrics, "hedge_density"),
+        "length_median": _avg(prior_metrics, "length.median"),
+    }
+    deltas: dict[str, float] = {}
+    for k in ("refusal_rate", "hedge_density"):
+        c, p = cur[k], prior[k]
+        if c is not None and p is not None:
+            deltas[k] = abs(c - p) / _DRIFT_SCALES[k]
+    if cur["length_median"] is not None and prior["length_median"]:
+        denom = max(prior["length_median"], cur["length_median"]) / 2
+        deltas["length_median"] = abs(cur["length_median"] - prior["length_median"]) / denom if denom else 0.0
+    if not deltas:
+        return None
+    dominant_metric = max(deltas, key=deltas.get)
+    return {
+        "axis": axis, "model_id": model_id,
+        "score": round(deltas[dominant_metric], 3),
+        "mode": "delta",
+        "metric": dominant_metric,
+        "current": cur, "prior": prior,
+    }
+
+
+def drift_heatmap(manifest: Manifest) -> dict:
+    """Compute the home-page drift heatmap data.
+
+    Returns a dict with:
+      * ``axes``: ordered list of axis ids
+      * ``models``: ordered list of model_ids
+      * ``cells``: dict[(axis, model_id)] → cell dict (see
+        _drift_score_for_axis); missing pairs are absent
+      * ``max_score``: the largest score in the grid (for colour scaling);
+        falls back to 1.0 if the grid is empty
+      * ``mode``: "delta" if any cell uses delta mode, else "absolute" —
+        drives the caption.
+    """
+    axes = sorted({p.axis for p in manifest.prompts})
+    models = [m.model_id for m in manifest.models if m.available]
+    cells: dict[tuple[str, str], dict] = {}
+    for axis in axes:
+        for model_id in models:
+            cell = _drift_score_for_axis(
+                axis=axis, model_id=model_id, manifest=manifest,
+            )
+            if cell is not None:
+                cells[(axis, model_id)] = cell
+    if not cells:
+        return {
+            "axes": axes, "models": models,
+            "cells": {}, "max_score": 1.0, "mode": "absolute",
+        }
+    max_score = max(c["score"] for c in cells.values()) or 1.0
+    mode = "delta" if any(c["mode"] == "delta" for c in cells.values()) else "absolute"
+    return {
+        "axes": axes, "models": models,
+        "cells": cells, "max_score": max_score, "mode": mode,
+    }
+
+
+def model_refusal_series(manifest: Manifest) -> dict[str, list[float]]:
+    """Per-model time series of mean refusal_rate across all current
+    prompts for that model, oldest-first.
+
+    Used to inject a sparkline into each model tile on the home page.
+    Models with no current-week data return an empty list and the
+    template can show a "no data" affordance.
+    """
+    out: dict[str, list[float]] = {}
+    weeks: list[tuple[str, list]] = []
+    for h in manifest.history:
+        weeks.append((h.week_id, h.metrics))
+    weeks.append((manifest.snapshot.week_id, manifest.metrics))
+
+    for model in manifest.models:
+        series: list[float] = []
+        for _wk, metrics in weeks:
+            vals = [m.refusal_rate for m in metrics if m.model_id == model.model_id]
+            if vals:
+                series.append(round(sum(vals) / len(vals), 3))
+        out[model.model_id] = series
+    return out
+
+
+def notable_shifts(manifest: Manifest, *, top_n: int = 3) -> list[dict]:
+    """Top-N largest week-over-week metric shifts across the manifest.
+
+    Each result is a single (prompt × model × metric) shift expressed
+    as the most recent paired-week delta normalized to its reference
+    scale (matching :func:`drift_heatmap`'s normalisation). Used by the
+    home-page callout cards to surface "this week's headline drifts"
+    without requiring the reader to scan the whole heatmap.
+
+    Returns an empty list when no prior week is available (the caller
+    should render an empty-state section).
+    """
+    if not manifest.history:
+        return []
+    prior_metrics_by_key: dict[tuple[str, str], "MetricRecord"] = {}
+    for h in reversed(manifest.history):
+        for m in h.metrics:
+            key = (m.prompt_id, m.model_id)
+            if key not in prior_metrics_by_key:
+                prior_metrics_by_key[key] = m
+        if prior_metrics_by_key:
+            break
+    if not prior_metrics_by_key:
+        return []
+
+    prompts_by_id = {p.prompt_id: p for p in manifest.prompts}
+    models_by_id = {m.model_id: m for m in manifest.models}
+    shifts: list[dict] = []
+    for cur in manifest.metrics:
+        prior = prior_metrics_by_key.get((cur.prompt_id, cur.model_id))
+        if prior is None:
+            continue
+        prompt = prompts_by_id.get(cur.prompt_id)
+        model = models_by_id.get(cur.model_id)
+        if prompt is None or model is None:
+            continue
+
+        # Refusal rate.
+        d = abs(cur.refusal_rate - prior.refusal_rate)
+        shifts.append({
+            "metric": "refusal_rate", "metric_label": "Refusal rate",
+            "prompt_id": cur.prompt_id, "prompt_title": prompt.title,
+            "model_id": cur.model_id, "model_name": model.display_name,
+            "axis": prompt.axis,
+            "from_value": round(prior.refusal_rate, 3),
+            "to_value": round(cur.refusal_rate, 3),
+            "delta": round(cur.refusal_rate - prior.refusal_rate, 3),
+            "magnitude": d / _DRIFT_SCALES["refusal_rate"],
+        })
+        # Hedge density.
+        d = abs(cur.hedge_density - prior.hedge_density)
+        shifts.append({
+            "metric": "hedge_density", "metric_label": "Hedge density",
+            "prompt_id": cur.prompt_id, "prompt_title": prompt.title,
+            "model_id": cur.model_id, "model_name": model.display_name,
+            "axis": prompt.axis,
+            "from_value": round(prior.hedge_density, 2),
+            "to_value": round(cur.hedge_density, 2),
+            "delta": round(cur.hedge_density - prior.hedge_density, 2),
+            "magnitude": d / _DRIFT_SCALES["hedge_density"],
+        })
+        # Length median (relative shift).
+        if prior.length.median:
+            denom = max(prior.length.median, cur.length.median) / 2 or 1.0
+            d = abs(cur.length.median - prior.length.median) / denom
+            shifts.append({
+                "metric": "length_median", "metric_label": "Length (median)",
+                "prompt_id": cur.prompt_id, "prompt_title": prompt.title,
+                "model_id": cur.model_id, "model_name": model.display_name,
+                "axis": prompt.axis,
+                "from_value": int(prior.length.median),
+                "to_value": int(cur.length.median),
+                "delta": int(cur.length.median - prior.length.median),
+                "magnitude": d,
+            })
+
+    shifts.sort(key=lambda s: s["magnitude"], reverse=True)
+    return shifts[:top_n]
+
+
+def _metric_status(manifest: Manifest) -> list[dict]:
+    """Inspect the latest manifest and report which metrics are
+    actually populated this week. Powers the "What's measured today"
+    table on /methodology/ — sourced from the live manifest at build
+    time so the table can never lie about what shipped.
+    """
+    if not manifest.metrics:
+        return []
+    sample = manifest.metrics[0]
+    has_drift = any(m.refusal_drift is not None for m in manifest.metrics)
+    has_change_points = any(
+        bool(m.change_points.refusal_rate
+             or m.change_points.hedge_density
+             or m.change_points.length_median)
+        for m in manifest.metrics
+    )
+    has_stance_signal = any(m.stance != "na" for m in manifest.metrics)
+    has_embedding = any(
+        m.embedding_centroid_shift is not None for m in manifest.metrics
+    )
+    has_silent_update = bool(manifest.silent_update_warnings)
+
+    return [
+        {"metric": "Refusal rate", "status": "live",
+         "note": f"e.g. {sample.refusal_rate:.2f} on first metric record"},
+        {"metric": "Hedge density", "status": "live",
+         "note": f"e.g. {sample.hedge_density:.2f} markers/100 tok on first record"},
+        {"metric": "Length distribution", "status": "live",
+         "note": f"median, p25/p75 — first record median = {sample.length.median:.0f}"},
+        {"metric": "Drift tests (refusal/hedge/length)",
+         "status": "live" if has_drift else "data-gated",
+         "note": ("BH-corrected at FDR 0.05 across the within-week family"
+                  if has_drift
+                  else "Need a prior week's samples per pair before tests fire")},
+        {"metric": "Change-point detection (PELT)",
+         "status": "live" if has_change_points else "data-gated",
+         "note": ("Annotates per-(prompt,model,metric) sparkline series"
+                  if has_change_points
+                  else "Needs ≥ 4 weeks of paired history per pair")},
+        {"metric": "Stance",
+         "status": "live" if has_stance_signal else "off",
+         "note": ("Haiku-classified on stance-bearing axes"
+                  if has_stance_signal
+                  else "Currently off; metric record stance='na' on every row")},
+        {"metric": "Embedding centroid shift",
+         "status": "live" if has_embedding else "off",
+         "note": ("Sentence-transformers cosine-distance week over week"
+                  if has_embedding
+                  else "Currently off (config: embedding.enabled=false)")},
+        {"metric": "Silent-update warnings",
+         "status": "live" if has_silent_update else "live (no flags this week)",
+         "note": ("Anomalies on the neutral-control axis"
+                  if has_silent_update
+                  else "No neutral-control anomalies surfaced this snapshot")},
+    ]
+
+
 def og_available() -> bool:
     """True when `site/src/og.py` can render PNGs.
 
@@ -919,6 +1218,10 @@ def build(manifest_path: Path, out_dir: Path) -> dict:
         "site_title": "Meridian",
         "og_slug": None, "og_available": og_ok,
         "weekly_summaries": load_run_log_summary(REPO_ROOT),
+        "metric_status": _metric_status(manifest),
+        "heatmap": drift_heatmap(manifest),
+        "notable": notable_shifts(manifest),
+        "model_refusal_series": model_refusal_series(manifest),
     }
 
     # Pages in STATIC_PAGES that get their own OG PNG. Tuple of

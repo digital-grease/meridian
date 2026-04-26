@@ -105,7 +105,7 @@ fixture:
 ```bash
 uv run python scripts/generate_fixture.py
 uv run python site/src/build.py \
-    --manifest site/fixtures/manifest-2026-W16.json --out site/dist
+    --manifest site/fixtures/synthetic-fixture.json --out site/dist
 ```
 
 ## Held-out corpus

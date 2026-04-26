@@ -233,6 +233,116 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
 .axes-list strong,
 .models-list strong { display: block; }
 
+/* Per-model tile spelling out the refusal-rate sparkline below the
+ * provider/version line. Visual scoreboard treatment for /. */
+.models-list .model-tile-sparkline {
+  display: block;
+  margin-top: 0.4em;
+  color: var(--fg-muted);
+}
+.models-list .model-tile-sparkline svg {
+  width: 100%;
+  max-width: 160px;
+  height: 24px;
+}
+.models-list .model-tile-no-data {
+  display: block;
+  margin-top: 0.4em;
+  font-size: 0.78rem;
+  font-style: italic;
+}
+.models-list .model-tile-dim a { opacity: 0.65; }
+.models-list .model-tile-dim a:hover,
+.models-list .model-tile-dim a:focus-visible { opacity: 1; }
+
+/* Notable-shift callout cards on /. Three cards in a row at desktop,
+ * stacking to one column on mobile. Each card carries the headline
+ * delta in large numerals, then the prompt link + small-print context. */
+.notable-cards {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.8rem;
+  margin: 0.6rem 0 1.4rem;
+}
+.notable-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.8em 1em;
+  background: var(--bg-subtle);
+}
+.notable-card p { margin: 0 0 0.4em; max-width: none; }
+.notable-card .notable-metric {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  font-weight: 600;
+}
+.notable-card .notable-delta {
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+}
+.notable-card .notable-arrow {
+  font-weight: 600;
+  margin-left: 0.4em;
+}
+.notable-card .notable-prompt a {
+  font-weight: 600;
+}
+.notable-card .notable-context { font-size: 0.85rem; }
+
+/* Drift heatmap table on /. Different layout from the .heatmap grid
+ * (which is used inside per-axis pages); this one is a real <table>
+ * for axis × model so screen readers announce headers correctly. */
+.heatmap-table {
+  border-collapse: separate;
+  border-spacing: 2px;
+  width: auto;
+  margin: 1em 0;
+}
+.heatmap-table th,
+.heatmap-table td { padding: 0.4em 0.6em; }
+.heatmap-table thead th {
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: none;
+}
+.heatmap-table tbody th[scope="row"] {
+  text-align: left;
+  font-weight: 500;
+  white-space: nowrap;
+  border-bottom: none;
+  background: var(--bg-subtle);
+}
+.heatmap-table tbody th[scope="row"] a {
+  color: var(--fg);
+  text-decoration: none;
+}
+.heatmap-table tbody th[scope="row"] a:hover { text-decoration: underline; }
+.heatmap-table .heatmap-cell {
+  text-align: center;
+  min-width: 4rem;
+  border-bottom: none;
+}
+.heatmap-table .heatmap-cell a {
+  color: inherit;
+  text-decoration: none;
+  display: block;
+}
+.heatmap-table .heatmap-cell a:hover .cell-score,
+.heatmap-table .heatmap-cell a:focus-visible .cell-score {
+  text-decoration: underline;
+}
+.heatmap-table .heatmap-empty {
+  background: var(--bg-subtle);
+  color: var(--fg-muted);
+  text-align: center;
+}
+.cell-score { font-variant-numeric: tabular-nums; font-weight: 600; }
+
 /* Heatmap cells (CSS grid). Colors set inline via style="background:var(--seq-N)" */
 .heatmap {
   display: grid;
@@ -254,6 +364,29 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
   text-decoration: none;
 }
 .heatmap-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* GitHub link in the header. Inline SVG, no remote dependency.
+ * Selector is `a.site-github` (specificity 0,1,1) so it wins against
+ * any future `header a { color: ... }` rule the way `a.bmc-button`
+ * does in the footer. */
+a.site-github {
+  color: var(--fg);
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  line-height: 0;
+  padding: 0.2em;
+  border-radius: var(--radius);
+}
+a.site-github:hover,
+a.site-github:focus-visible {
+  color: var(--link-hover);
+  text-decoration: none;
+}
+a.site-github:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 /* Search */
 .site-search { margin-left: auto; position: relative; }
@@ -419,6 +552,23 @@ caption { text-align: left; color: var(--fg-muted); margin-bottom: 0.3em; }
 .severity-medium { background: #7a5c1f; color: #faf0db; border-color: #a68132; }
 .severity-high   { background: #5c1f1f; color: #f7e5e5; border-color: #8a3636; }
 
+/* "What's measured this week" status badges on /methodology/. Same
+ * visual grammar as .severity / .stance — rounded inline-block with
+ * a colour that codes the metric's pipeline state. */
+[class^="status-"] {
+  display: inline-block;
+  padding: 0.1em 0.55em;
+  border-radius: 3px;
+  font-size: 0.88em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--border);
+}
+.status-live              { background: #1a4d2e; color: #e8f4eb; border-color: #2d7346; }
+.status-live-no-flags-this-week { background: var(--bg-subtle); color: var(--fg-muted); }
+.status-data-gated        { background: #7a5c1f; color: #faf0db; border-color: #a68132; }
+.status-off               { background: #5c1f1f; color: #f7e5e5; border-color: #8a3636; }
+
 /* ---------- Semantic-drift cell ---------- */
 .semantic-drift-cell { font-variant-numeric: tabular-nums; }
 .semantic-drift-cell .magnitude { font-weight: 600; }
@@ -430,8 +580,8 @@ caption { text-align: left; color: var(--fg-muted); margin-bottom: 0.3em; }
   body { background: #fff; color: #000; font-size: 11pt; line-height: 1.4; }
   .site-header, .site-nav, .site-footer .footer-note a { background: #fff; color: #000; }
   .skip-link { display: none; }
-  /* Donation widget has no place on printed reports/research output. */
-  .footer-support, a.bmc-button { display: none; }
+  /* Donation widget + repo link have no place on printed reports. */
+  .footer-support, a.bmc-button, a.site-github { display: none; }
   a { color: #000; text-decoration: underline; }
   a[href]::after { content: " (" attr(href) ")"; font-size: 85%; color: #333; }
   .build-prov { border-top: 1px solid #999; padding-top: 0.5em; }

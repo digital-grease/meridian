@@ -28,7 +28,7 @@ def _run_build_with_redirects(
     redirects_path.write_text(redirects_yaml)
     try:
         dist = tmp_path / "dist"
-        manifest = REPO_ROOT / "site" / "fixtures" / "manifest-2026-W16.json"
+        manifest = REPO_ROOT / "site" / "fixtures" / "synthetic-fixture.json"
         result = subprocess.run(
             [
                 "uv", "run", "python",
@@ -109,7 +109,7 @@ def test_self_redirect_is_rejected(tmp_path: Path):
     backup = redirects_path.read_text() if redirects_path.exists() else None
     redirects_path.write_text(yaml_text)
     try:
-        manifest = REPO_ROOT / "site" / "fixtures" / "manifest-2026-W16.json"
+        manifest = REPO_ROOT / "site" / "fixtures" / "synthetic-fixture.json"
         result = subprocess.run(
             [
                 "uv", "run", "python",
@@ -138,7 +138,7 @@ def test_relative_paths_rejected(tmp_path: Path):
     backup = redirects_path.read_text() if redirects_path.exists() else None
     redirects_path.write_text(yaml_text)
     try:
-        manifest = REPO_ROOT / "site" / "fixtures" / "manifest-2026-W16.json"
+        manifest = REPO_ROOT / "site" / "fixtures" / "synthetic-fixture.json"
         result = subprocess.run(
             [
                 "uv", "run", "python",

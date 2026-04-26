@@ -43,3 +43,27 @@ runners:
     model_id: "gpt-5.1"
     enabled: true
     cadence: odd_weeks
+
+# Stance classifier — pinned to Haiku 4.5 for stability:
+#   - Cheapest reasonable Claude tier (~$0.80/MT input).
+#   - Accepts temperature=0 (Opus 4.7 deprecated it; Haiku still
+#     honours it), so classifications are deterministic-ish week to week.
+#   - Not in the cadence-alternated frontier set, so the classifier
+#     itself doesn't drift between weeks while we're measuring drift on
+#     other models.
+# Disabling sets every metric record's stance to "na". The classifier
+# is itself an LLM and shares many biases we measure on others; the
+# golden set at meridian/corpus/stance_golden.yaml is the periodic
+# re-validation surface.
+stance:
+  enabled: true
+  provider: anthropic
+  model_id: "claude-haiku-4-5-20251001"
+  cache_path: "data/cache/stance/cache.jsonl"
+
+# Embedding-centroid drift. Disabled by default until CI cold-start
+# cost is measured (sentence-transformers ~400 MB download). Enable
+# locally to populate `embedding_centroid_shift` on each metric record.
+embedding:
+  enabled: false
+  model: "sentence-transformers/all-mpnet-base-v2"

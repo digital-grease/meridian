@@ -22,7 +22,7 @@ site/
 ## Build
 
 ```
-python -m site.src.build --manifest fixtures/manifest-2026-W16.json --out dist/
+python -m site.src.build --manifest fixtures/synthetic-fixture.json --out dist/
 ```
 
 See `.devloop/plan.md` for the full build plan and `.devloop/spikes/meridian-website.md` for the architecture decision record.

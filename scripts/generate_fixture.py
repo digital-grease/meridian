@@ -41,7 +41,7 @@ from schema import (  # noqa: E402
     Snapshot,
 )
 
-OUT = REPO / "site" / "fixtures" / "manifest-2026-W16.json"
+OUT = REPO / "site" / "fixtures" / "synthetic-fixture.json"
 
 MODELS = [
     ModelRecord(

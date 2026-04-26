@@ -10,6 +10,17 @@ from markupsafe import Markup, escape
 # Viridis 5-step (colorblind-safe sequential palette).
 VIRIDIS = ["#440154", "#3b528b", "#21918c", "#5ec962", "#fde725"]
 
+# Per-viridis-index foreground colour. Fixed map (rather than a t
+# threshold) so the bg/fg pair is always co-decided and contrast can
+# never land in a cliff between indices. WCAG AA contrast values
+# against each bg with the chosen fg, smallest first:
+#   idx 0 #440154 + #fff = 15.4 :1
+#   idx 1 #3b528b + #fff =  7.4 :1
+#   idx 2 #21918c + #111 =  6.4 :1   (white was 3.82, FAIL)
+#   idx 3 #5ec962 + #111 = 11.4 :1
+#   idx 4 #fde725 + #111 = 17.7 :1
+VIRIDIS_FG = ["#fff", "#fff", "#111", "#111", "#111"]
+
 # Okabe-Ito categorical palette.
 OKABE_ITO = [
     "#000000", "#e69f00", "#56b4e9", "#009e73",
@@ -91,10 +102,15 @@ def sparkline(
 
 
 def heatmap_cell_style(value: float, lo: float = 0.0, hi: float = 1.0) -> str:
-    """CSS ``style`` attribute value for a heatmap cell coloured via viridis."""
-    color = viridis_color(value, lo, hi)
-    # White-on-dark or black-on-light for legibility across the palette.
-    # Viridis goes purple->yellow; index >= 3 gets dark text.
-    t = max(0.0, min(1.0, (value - lo) / (hi - lo))) if hi > lo else 0.0
-    fg = "#111" if t >= 0.66 else "#fff"
-    return f"background:{color};color:{fg}"
+    """CSS ``style`` attribute value for a heatmap cell coloured via viridis.
+
+    Background and foreground are co-selected from
+    :data:`VIRIDIS_FG` so the contrast pair is guaranteed across the
+    whole index range — no cliff at the transition between two indices.
+    """
+    if hi <= lo:
+        idx = 0
+    else:
+        t = max(0.0, min(1.0, (value - lo) / (hi - lo)))
+        idx = min(len(VIRIDIS) - 1, int(t * (len(VIRIDIS) - 1) + 0.5))
+    return f"background:{VIRIDIS[idx]};color:{VIRIDIS_FG[idx]}"

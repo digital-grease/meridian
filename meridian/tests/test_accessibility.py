@@ -65,7 +65,7 @@ class _QuietHandler(http.server.SimpleHTTPRequestHandler):
 @pytest.fixture(scope="module")
 def built_dist(tmp_path_factory: pytest.TempPathFactory) -> Path:
     dist = tmp_path_factory.mktemp("axe-dist")
-    manifest = REPO_ROOT / "site" / "fixtures" / "manifest-2026-W16.json"
+    manifest = REPO_ROOT / "site" / "fixtures" / "synthetic-fixture.json"
     result = subprocess.run(
         [
             "uv", "run", "python",

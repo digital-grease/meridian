@@ -133,7 +133,7 @@ def test_site_build_tolerates_missing_responses_gz(tmp_path: Path):
     """The site build must not fail when the pipeline hasn't emitted a
     snapshot yet — the default fixture case. A missing source is a
     no-op, not an error."""
-    manifest_path = REPO_ROOT / "site" / "fixtures" / "manifest-2026-W16.json"
+    manifest_path = REPO_ROOT / "site" / "fixtures" / "synthetic-fixture.json"
     dist = tmp_path / "dist"
     result = subprocess.run(
         [

@@ -2,8 +2,7 @@
 
 ## Reporting a vulnerability
 
-Send disclosures to `security@meridianaudit.org` (placeholder — the
-final address will be announced at `/about/` once that inbox is live).
+Send disclosures to [`dg@digitalgrease.net`](mailto:dg@digitalgrease.net).
 
 Please include:
 

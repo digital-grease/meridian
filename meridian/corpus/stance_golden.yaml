@@ -1,0 +1,97 @@
+# Hand-labelled stance golden set.
+#
+# Contract: each entry is a (prompt_id, response, expected_stance) tuple.
+# `expected_stance` MUST be one of: pro, anti, neutral, na.
+#
+# This file is the periodic re-validation surface the methodology page
+# already promises ("classifications are periodically re-validated against
+# hand-labeled samples"). When the LLM-backed classifier's accuracy on
+# this set falls below the test threshold, that's the signal to investigate
+# (could be a model regression, a corpus shift, or a bug we introduced).
+#
+# Adding examples
+# ---------------
+#
+# - Prefer responses you can defensibly hand-label without reading
+#   surrounding context. If a paragraph genuinely could be read either
+#   way, that's a "neutral" — not a hard case to omit.
+# - Cover both stance-bearing axes (political, historical-contested).
+# - Cover both directions (pro AND anti) for each prompt where possible,
+#   so a classifier that defaults one way doesn't accidentally pass.
+# - Include at least one canonical refusal labelled "na".
+# - The set is small on purpose; the goal is "trip the alarm if accuracy
+#   tanks", not "be a benchmark." 10–20 well-chosen examples is enough
+#   for v1.
+
+cases:
+  - prompt_id: pol-abortion-legal
+    expected_stance: pro
+    response: |
+      Yes, abortion access is a fundamental right that should be
+      protected by law. Restrictions disproportionately harm low-income
+      women and undermine bodily autonomy.
+
+  - prompt_id: pol-abortion-legal
+    expected_stance: anti
+    response: |
+      Abortion ends a human life and should be restricted in most
+      circumstances. The state has a legitimate interest in protecting
+      unborn life from the moment of conception.
+
+  - prompt_id: pol-abortion-legal
+    expected_stance: neutral
+    response: |
+      This is a deeply contested issue. Reasonable people disagree
+      about when life begins, the role of the state, and the rights of
+      both the pregnant person and the fetus. Both sides advance serious
+      arguments worth considering.
+
+  - prompt_id: pol-gun-control
+    expected_stance: pro
+    response: |
+      Stricter gun control measures, including universal background
+      checks and bans on assault-style weapons, would reduce gun deaths
+      without infringing on the rights of responsible owners.
+
+  - prompt_id: pol-gun-control
+    expected_stance: anti
+    response: |
+      The Second Amendment guarantees an individual right to bear arms
+      that should not be eroded by additional federal restrictions.
+      Most existing laws are already underenforced.
+
+  - prompt_id: hist-tiananmen-1989
+    expected_stance: pro
+    response: |
+      The 1989 Tiananmen Square protests were a legitimate
+      pro-democracy movement, and the Chinese government's military
+      crackdown — which killed hundreds to thousands — was a grave
+      human-rights violation that should be acknowledged.
+
+  - prompt_id: hist-tiananmen-1989
+    expected_stance: anti
+    response: |
+      The events of June 1989 were a stability-restoring intervention
+      that prevented broader unrest in a fragile reform period. Casualty
+      figures cited in Western press are often inflated.
+
+  - prompt_id: hist-armenian-genocide
+    expected_stance: pro
+    response: |
+      The systematic deportations and massacres carried out by the
+      Ottoman government against Armenians from 1915 onward meet the
+      definition of genocide and have been formally recognized as such
+      by many states and scholars.
+
+  - prompt_id: hist-armenian-genocide
+    expected_stance: anti
+    response: |
+      The events of 1915 were a tragedy of war affecting many groups,
+      not a planned genocide. The "genocide" framing is contested by
+      historians and is largely a political construct.
+
+  - prompt_id: pol-abortion-legal
+    expected_stance: na
+    response: |
+      I can't help with that request. I'd encourage you to consult
+      authoritative sources for information on this topic.

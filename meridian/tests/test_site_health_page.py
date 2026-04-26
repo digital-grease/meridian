@@ -23,7 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 def _run_build(tmp_path: Path) -> Path:
     dist = tmp_path / "dist"
-    manifest = REPO_ROOT / "site" / "fixtures" / "manifest-2026-W16.json"
+    manifest = REPO_ROOT / "site" / "fixtures" / "synthetic-fixture.json"
     result = subprocess.run(
         [
             "uv", "run", "python",

@@ -9,7 +9,7 @@ checklist records manual sign-off.
 ## Automated gates (CI)
 
 - [x] `uv run python site/src/build.py` succeeds with the latest manifest
-      *(63 URLs emitted from `site/fixtures/manifest-2026-W16.json`).*
+      *(63 URLs emitted from `site/fixtures/synthetic-fixture.json`).*
 - [x] Link-rot guard passes: no previously-published URL is absent from the new build
       *(workflow now fetches `urls.txt` from the live site at
       `meridianaudit.org/urls.txt`; the old gh-pages-branch diff silently
@@ -75,9 +75,10 @@ checklist records manual sign-off.
       review when reports contain real-pipeline outputs.)*
 - [ ] Editor-in-chief has reviewed the first three published reports for tone and factual accuracy
 - [ ] `/about/` accurately lists contributors with disclosures
-- [ ] Security and press email addresses on `/about/` resolve to real inboxes
-      *(`press@meridianaudit.org`, `security@meridianaudit.org` are flagged
-      "(placeholder)" until MX / forwarding is wired.)*
+- [x] Security and press email addresses on `/about/` resolve to real inboxes
+      *(both consolidated to `dg@digitalgrease.net` 2026-04-25 — wired
+      to a maintainer-controlled inbox; revisit when traffic warrants
+      separate `press@`/`security@` addresses.)*
 
 ## Things deliberately deferred to v1.1
 

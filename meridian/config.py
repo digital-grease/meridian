@@ -85,11 +85,40 @@ class StorageSpec(BaseModel):
     s3: S3StorageSpec | None = None
 
 
+class StanceSpec(BaseModel):
+    """Stance classifier wiring.
+
+    The classifier itself is an LLM call (currently a Haiku 4.5
+    invocation per response). When `enabled=False`, every metric
+    record's stance is "na" — the project's stance signal is dark.
+    """
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    enabled: bool = False
+    provider: Provider = "anthropic"
+    model_id: str = "claude-haiku-4-5-20251001"
+    cache_path: str = "data/cache/stance/cache.jsonl"
+
+
+class EmbeddingSpec(BaseModel):
+    """Embedding-centroid drift wiring.
+
+    Disabled by default: sentence-transformers' default model is a
+    ~400 MB download, and CI cold-start cost has not been measured.
+    Enable locally to populate `embedding_centroid_shift` on every
+    metric record.
+    """
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    enabled: bool = False
+    model: str = "sentence-transformers/all-mpnet-base-v2"
+
+
 class PipelineConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     sampling: SamplingSpec = Field(default_factory=SamplingSpec)
     storage: StorageSpec = Field(default_factory=StorageSpec)
     runners: list[RunnerSpec] = Field(default_factory=list)
+    stance: StanceSpec = Field(default_factory=StanceSpec)
+    embedding: EmbeddingSpec = Field(default_factory=EmbeddingSpec)
 
 
 _DEFAULT_PATH = Path(__file__).resolve().parent / "config.yaml"

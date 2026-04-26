@@ -19,6 +19,96 @@
   </p>
 </section>
 
+{% if notable %}
+<section class="notable-shifts" aria-labelledby="notable-heading">
+  <h2 id="notable-heading">Notable shifts this week</h2>
+  <p class="muted">
+    Largest week-over-week movements across all measured prompts. One
+    card per metric type. Magnitude is normalised against each
+    metric&rsquo;s reference scale, so refusal-rate, hedge-density, and
+    length shifts can be compared on the same axis.
+  </p>
+  <ul class="notable-cards">
+    {% for n in notable %}
+    <li class="notable-card">
+      <p class="notable-metric">{{ n.metric_label }}</p>
+      <p class="notable-delta">
+        <code>{{ n.from_value }}</code> &rarr; <code>{{ n.to_value }}</code>
+        <span class="notable-arrow">
+          {%- if n.delta is number and n.delta > 0 %}&uparrow;{% elif n.delta is number and n.delta < 0 %}&darr;{% endif -%}
+          {%- if n.metric == 'length_median' %} {{ n.delta }} tok{% else %} {{ '{:+}'.format(n.delta) }}{% endif -%}
+        </span>
+      </p>
+      <p class="notable-prompt">
+        <a href="/prompts/{{ n.prompt_id }}/">{{ n.prompt_title }}</a>
+      </p>
+      <p class="muted notable-context">
+        {{ n.model_name }} &middot; {{ n.axis | replace('-', ' ') }}
+      </p>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if heatmap.cells %}
+<section class="drift-heatmap" aria-labelledby="heatmap-heading">
+  <h2 id="heatmap-heading">
+    {% if heatmap.mode == "delta" %}Movement this week{% else %}This week&rsquo;s snapshot{% endif %}
+  </h2>
+  <p class="muted">
+    {% if heatmap.mode == "delta" %}
+      Cells colour the dominant week-over-week shift on each
+      <em>axis &times; model</em>. Darker = larger shift. Click a cell
+      to drill into the axis page for that model.
+      <a href="/methodology/#metrics">How this is computed</a>.
+    {% else %}
+      First-week snapshot view: cells colour absolute current values
+      (refusal-rate + hedge-density). Week-over-week deltas appear
+      starting next snapshot.
+      <a href="/methodology/#metrics">How this is computed</a>.
+    {% endif %}
+  </p>
+  <table class="heatmap-table">
+    <caption>
+      Snapshot <code>{{ manifest.snapshot.week_id }}</code> &middot;
+      {{ heatmap.cells | length }} cells across
+      {{ heatmap.axes | length }} axes &times;
+      {{ heatmap.models | length }} models.
+    </caption>
+    <thead>
+      <tr>
+        <th scope="col">Axis</th>
+        {% for model_id in heatmap.models %}
+        {% set m = manifest.model_by_id(model_id) %}
+        <th scope="col">{% if m %}{{ m.display_name }}{% else %}<code>{{ model_id }}</code>{% endif %}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for axis in heatmap.axes %}
+      <tr>
+        <th scope="row"><a href="/axes/{{ axis }}/">{{ axis | replace('-', ' ') | capitalize }}</a></th>
+        {% for model_id in heatmap.models %}
+        {% set cell = heatmap.cells.get((axis, model_id)) %}
+        {% if cell %}
+        <td class="heatmap-cell"
+            style="{{ heatmap_cell_style(cell.score, 0.0, heatmap.max_score) }}">
+          <a href="/axes/{{ axis }}/" aria-label="{{ axis }} on {{ model_id }}: score {{ cell.score }}">
+            <span class="cell-score">{{ '{:.2f}'.format(cell.score) }}</span>
+          </a>
+        </td>
+        {% else %}
+        <td class="heatmap-cell heatmap-empty" aria-label="no data">&middot;</td>
+        {% endif %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
 {% if manifest.silent_update_warnings %}
 <section class="silent-updates" aria-labelledby="silent-updates-heading">
   <h2 id="silent-updates-heading">Silent-update candidates this week</h2>
@@ -81,10 +171,19 @@
   <h2 id="models-heading">Observed models</h2>
   <ul class="models-list">
     {% for m in manifest.models %}
-    <li>
+    {% set series = model_refusal_series.get(m.model_id, []) %}
+    <li class="{% if not m.available %}model-tile-dim{% endif %}">
       <a href="/models/{{ m.model_id }}/">
         <strong>{{ m.display_name }}</strong>
         <span class="muted">{{ m.provider }} &middot; <code>{{ m.version_string }}</code></span>
+        {% if series %}
+        <span class="model-tile-sparkline" aria-hidden="true">
+          {{ series | sparkline(label='refusal-rate', value_format='{:.2f}') }}
+        </span>
+        <span class="visually-hidden">refusal-rate trend across recent weeks</span>
+        {% else %}
+        <span class="muted model-tile-no-data">[not run this week]</span>
+        {% endif %}
       </a>
     </li>
     {% endfor %}

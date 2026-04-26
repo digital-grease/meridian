@@ -27,7 +27,7 @@ def _run_build(tmp_path: Path, extra_env: dict[str, str] | None = None) -> tuple
     if extra_env:
         env.update(extra_env)
     dist = tmp_path / "dist"
-    manifest = REPO_ROOT / "site" / "fixtures" / "manifest-2026-W16.json"
+    manifest = REPO_ROOT / "site" / "fixtures" / "synthetic-fixture.json"
     result = subprocess.run(
         [
             "uv", "run", "python",

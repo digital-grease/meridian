@@ -39,8 +39,11 @@ from meridian.pipeline.manifest_writer import (
     build_manifest,
     write_manifest,
 )
+from meridian.pipeline.embedding_loader import build_embedding_model
 from meridian.pipeline.run_log import append_run_log, read_run_log
 from meridian.pipeline.snapshot import emit_responses_snapshot, snapshot_path
+from meridian.pipeline.stance_collect import collect_stance_results
+from meridian.pipeline.stance_runner import build_stance_classifier
 from meridian.sampling.cost import compute_actual_cost
 from meridian.sampling.orchestrator import Orchestrator, SamplingPlan
 from meridian.sampling.pricing import estimate_cost
@@ -155,9 +158,20 @@ async def _cmd_run(args: argparse.Namespace) -> int:
 
     display_info = _display_info_for(config)
     prior_manifests_dir = REPO_ROOT / "data" / "manifests"
+
+    # Stance + embedding wiring. Both are gated by config; if disabled,
+    # build_manifest receives None and every metric record's stance
+    # stays "na" / embedding_centroid_shift stays None — the v0 behaviour.
+    stance_by_key = await _maybe_collect_stance(
+        config=config, store=store, corpus=corpus, week_id=week_id,
+    )
+    embedding_model = build_embedding_model(config.embedding)
+
     manifest = build_manifest(
         store=store, corpus=corpus, week_id=week_id, display_info=display_info,
         prior_manifests_dir=prior_manifests_dir,
+        stance_by_key=stance_by_key,
+        embedding_model=embedding_model,
     )
     paths = _output_paths(week_id)
     write_manifest(manifest, paths)
@@ -168,6 +182,8 @@ async def _cmd_run(args: argparse.Namespace) -> int:
             store=store, corpus=corpus, week_id=week_id,
             display_info=display_info, include_held_out=True,
             prior_manifests_dir=prior_manifests_dir,
+            stance_by_key=stance_by_key,
+            embedding_model=embedding_model,
         )
         internal_path = _internal_manifest_path(week_id)
         write_manifest(internal, [internal_path])
@@ -180,6 +196,31 @@ async def _cmd_run(args: argparse.Namespace) -> int:
     )
 
     return 1 if outcome.pairs_failed > 0 else 0
+
+
+async def _maybe_collect_stance(
+    *,
+    config: PipelineConfig,
+    store: LocalSampleStore,
+    corpus: Corpus,
+    week_id: str,
+):
+    """Build the stance classifier from config and run it across the
+    week's samples. Returns ``None`` when stance is disabled in config,
+    so :func:`build_manifest` keeps its v0 behaviour of leaving every
+    metric record's stance="na"."""
+    classifier = build_stance_classifier(config.stance, repo_root=REPO_ROOT)
+    if classifier is None:
+        return None
+    print(f"stance: classifying with {config.stance.provider}/{config.stance.model_id}")
+    results = await collect_stance_results(
+        classifier=classifier, store=store, corpus=corpus, week_id=week_id,
+    )
+    by_stance: dict[str, int] = {}
+    for r in results.values():
+        by_stance[r.stance] = by_stance.get(r.stance, 0) + 1
+    print(f"stance: classified {len(results)} pair(s) — {by_stance}")
+    return results
 
 
 def _emit_public_responses_snapshot(

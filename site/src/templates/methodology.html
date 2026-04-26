@@ -15,6 +15,7 @@
 
   <nav class="toc" aria-label="On this page">
     <ul>
+      <li><a href="#whats-measured">What&rsquo;s measured this week</a></li>
       <li><a href="#corpus">Corpus design</a></li>
       <li><a href="#sampling">Sampling</a></li>
       <li><a href="#metrics">Metrics</a>
@@ -32,6 +33,43 @@
       <li><a href="#limits">Limitations and hard problems</a></li>
     </ul>
   </nav>
+
+  <section aria-labelledby="whats-measured-heading">
+    <h2 id="whats-measured">What&rsquo;s measured this week</h2>
+    <p>
+      What the methodology promises and what the latest snapshot
+      actually carries can drift apart — pipeline modules toggle on and
+      off, data-gated metrics need history to accumulate. This table is
+      built directly from <code>{{ build.manifest_path }}</code> at
+      build time, so it can&rsquo;t lie about what shipped.
+    </p>
+    <table class="metric-table">
+      <caption>Snapshot <code>{{ manifest.snapshot.week_id }}</code>.</caption>
+      <thead>
+        <tr>
+          <th scope="col">Metric</th>
+          <th scope="col">Status</th>
+          <th scope="col">Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in metric_status %}
+        <tr>
+          <th scope="row">{{ row.metric }}</th>
+          <td><span class="status-{{ row.status | replace(' ', '-') | replace('(', '') | replace(')', '') }}">{{ row.status }}</span></td>
+          <td class="muted">{{ row.note }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="muted">
+      Status legend: <strong>live</strong> = populated this week.
+      <strong>data-gated</strong> = waiting on enough weekly history to
+      fire (typically 2 or 4 weeks). <strong>off</strong> = currently
+      disabled in <code>meridian/config.yaml</code>; flipping the flag
+      back on is a single line change.
+    </p>
+  </section>
 
   <h2 id="corpus">Corpus design</h2>
   <p>
@@ -99,31 +137,56 @@
   <h2 id="metrics">Metrics</h2>
   <dl class="metric-glossary">
     <dt id="refusal-rate">Refusal rate</dt>
-    <dd>Fraction of the <em>N</em> samples that declined to answer. Classified
-      by a hand-labeled model validated at &ge; 95% F1 across providers.</dd>
+    <dd>Fraction of the <em>N</em> samples that declined to answer.
+      Classified by a substring-pattern detector against a hand-curated
+      list of refusal phrases (&ldquo;I can&rsquo;t help with that,&rdquo;
+      &ldquo;I&rsquo;m not able to,&rdquo; &hellip;) — not a fine-tuned
+      model. The classifier is locked against a hand-labelled golden
+      set of 100+ canonical examples at F1 &ge; 0.95
+      (<code>meridian/tests/test_refusal.py</code>). Future versions
+      may swap in an ML classifier behind the same interface; the
+      contract is the F1 floor on the golden set, not the underlying
+      mechanism.</dd>
 
     <dt id="hedge-density">Hedge density</dt>
     <dd>Count of hedging markers per 100 tokens (&ldquo;it&rsquo;s important to
       note,&rdquo; &ldquo;some people argue,&rdquo; &hellip;). A measure of
-      framing.</dd>
+      framing. The marker list is hand-curated and intentionally
+      conservative — false negatives on novel framing are guaranteed.</dd>
 
     <dt id="embedding">Embedding centroid shift</dt>
-    <dd>L2 distance between the mean sentence-embedding centroid this week and
-      last week, per <code>(prompt &times; model)</code>. Higher = more semantic
-      shift in how the model is responding. In practice, shifts below 0.05 are
-      sampling noise; shifts above 0.15 warrant human review. The embedder
-      defaults to
-      <code>sentence-transformers/all-mpnet-base-v2</code>; the pipeline exposes
-      a Protocol so alternative models can be swapped in without changing the
-      manifest contract.</dd>
+    <dd>Cosine distance between the mean sentence-embedding centroid
+      this week and last week, per <code>(prompt &times; model)</code>.
+      Higher = more semantic shift in how the model is responding. In
+      practice, shifts below 0.05 are sampling noise; shifts above 0.15
+      warrant human review. The embedder is
+      <code>sentence-transformers/all-mpnet-base-v2</code>; the
+      pipeline exposes a Protocol so alternative models can be swapped
+      in without changing the manifest contract.
+      <strong>Operating note:</strong> currently disabled by default
+      (config <code>embedding.enabled: false</code>) until the
+      ~400&nbsp;MB model load is benchmarked against a hosted CI runner;
+      <code>embedding_centroid_shift</code> on metric records is
+      <code>null</code> while the flag is off.</dd>
 
     <dt id="stance">Stance</dt>
-    <dd>Zero-shot classification of each response as pro / anti / neutral / na,
-      applied only to stance-bearing axes (<em>political</em> and
-      <em>historical-contested</em>). The current classifier is LLM-backed with
-      on-disk caching; classifications are periodically re-validated against
-      hand-labeled samples. Every other axis returns <code>na</code> without
-      calling the classifier.</dd>
+    <dd>Each response is classified as pro / anti / neutral / na. The
+      classifier is itself an LLM call —
+      Anthropic&rsquo;s <code>claude-haiku-4-5</code>, pinned so it
+      doesn&rsquo;t drift on the same axis as the models we&rsquo;re
+      measuring on — and is applied only to stance-bearing axes
+      (<em>political</em> and <em>historical-contested</em>); every
+      other axis returns <code>na</code> without invoking the
+      classifier. Results are cached on
+      <code>(prompt_id, response_hash)</code>, so re-runs are free.
+      Periodic re-validation runs against
+      <code>meridian/corpus/stance_golden.yaml</code> — a small
+      hand-labelled set covering both directions on each stance-bearing
+      prompt. Caveat: because the classifier is itself an LLM, it
+      shares many of the biases we&rsquo;re measuring elsewhere; we
+      treat its output as suggestive, not authoritative, and surface
+      both stance and stance_confidence to readers who want to make up
+      their own mind.</dd>
 
     <dt id="length-distribution">Length distribution</dt>
     <dd>Median and interquartile range of response length in tokens.
