@@ -358,8 +358,12 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
   letter-spacing: 0.04em;
   /* Inherit colour from the cell's inline `color:` so the as-of
    * label tracks the bg/fg pair (white on dark cells, dark on light).
-   * Avoids the contrast cliff a hardcoded muted colour would re-create. */
-  opacity: 0.85;
+   * Avoids the contrast cliff a hardcoded muted colour would re-create.
+   * Opacity stays at 1.0: the size + weight differential vs. the score
+   * already de-emphasizes this label, and any opacity reduction drops
+   * dark-text-on-mid-viridis (e.g. #111 on #21918c teal) under WCAG AA.
+   * The previous 0.85 worked when stale cells only landed on dark
+   * backgrounds; per-row colour normalization can land them anywhere. */
 }
 
 /* Heatmap cells (CSS grid). Colors set inline via style="background:var(--seq-N)" */
