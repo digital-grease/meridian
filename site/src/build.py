@@ -984,18 +984,31 @@ def drift_heatmap(manifest: Manifest) -> dict:
     if not cells:
         return {
             "axes": axes, "models": models,
-            "cells": {}, "max_score": 1.0, "mode": "absolute",
-            "has_stale": False,
+            "cells": {}, "max_score": 1.0, "row_maxes": {},
+            "mode": "absolute", "has_stale": False,
         }
     max_score = max(c["score"] for c in cells.values()) or 1.0
+    # Per-axis (per-row) max for color normalization. The homepage
+    # heatmap colors each cell relative to its row's largest score so
+    # rows with quiet weeks (factual-stability, neutral-control) still
+    # show within-row spread instead of collapsing to one color when
+    # one row's outlier (a refusal-boundary spike) dominates a global
+    # max. Cross-row color comparison loses meaning — readers compare
+    # numbers for that. Caption explains.
+    row_maxes: dict[str, float] = {}
+    for axis in axes:
+        row_scores = [
+            c["score"] for (a, _m), c in cells.items() if a == axis
+        ]
+        row_maxes[axis] = max(row_scores) if row_scores else 0.0
     mode = "delta" if any(c["mode"] == "delta" for c in cells.values()) else "absolute"
     has_stale = any(
         c["as_of_week"] != manifest.snapshot.week_id for c in cells.values()
     )
     return {
         "axes": axes, "models": models,
-        "cells": cells, "max_score": max_score, "mode": mode,
-        "has_stale": has_stale,
+        "cells": cells, "max_score": max_score, "row_maxes": row_maxes,
+        "mode": mode, "has_stale": has_stale,
     }
 
 

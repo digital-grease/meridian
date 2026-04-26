@@ -59,11 +59,14 @@
   <p class="muted">
     {% if heatmap.mode == "delta" %}
       Cells colour the dominant week-over-week shift on each
-      <em>axis &times; model</em>. Darker = larger shift.
+      <em>axis &times; model</em>. Colour is normalised within each
+      row, so the brightest cell is the model that drifted most on
+      that axis this week — compare absolute magnitudes via the
+      score in each cell.
     {% else %}
       Cells colour absolute current values (refusal-rate +
-      hedge-density). Week-over-week deltas appear once two
-      consecutive weeks of data exist.
+      hedge-density), normalised within each row. Week-over-week
+      deltas appear once two consecutive weeks of data exist.
     {% endif %}
     Click a cell to drill into the axis page.
     <a href="/methodology/#metrics">How this is computed</a>.
@@ -100,7 +103,7 @@
         {% if cell %}
         {% set stale = cell.as_of_week != manifest.snapshot.week_id %}
         <td class="heatmap-cell"
-            style="{{ heatmap_cell_style(cell.score, 0.0, heatmap.max_score) }}">
+            style="{{ heatmap_cell_style(cell.score, 0.0, heatmap.row_maxes.get(axis, heatmap.max_score)) }}">
           <a href="/axes/{{ axis }}/"
              aria-label="{{ axis }} on {{ model_id }}: score {{ cell.score }}{% if stale %}, last measured {{ cell.as_of_week }}{% endif %}">
             <span class="cell-score">{{ '{:.2f}'.format(cell.score) }}</span>
