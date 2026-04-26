@@ -375,7 +375,11 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
   border-radius: var(--radius);
   overflow-x: auto;
 }
-.heatmap-cell {
+/* Scope to .heatmap (the CSS grid container on per-axis pages). Without
+ * this scoping, `display: flex` strips table-cell behavior from the
+ * homepage <td class="heatmap-cell"> elements, collapsing all three
+ * model columns into one stacked column. */
+.heatmap .heatmap-cell {
   min-width: 2.2rem;
   min-height: 2.2rem;
   display: flex;
@@ -386,7 +390,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
   background: var(--seq-2);
   text-decoration: none;
 }
-.heatmap-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.heatmap .heatmap-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 /* GitHub link in the header. Inline SVG, no remote dependency.
  * Selector is `a.site-github` (specificity 0,1,1) so it wins against
