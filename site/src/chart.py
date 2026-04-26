@@ -32,8 +32,17 @@ def viridis_color(value: float, lo: float = 0.0, hi: float = 1.0) -> str:
     if hi <= lo:
         return VIRIDIS[0]
     t = max(0.0, min(1.0, (value - lo) / (hi - lo)))
-    idx = min(len(VIRIDIS) - 1, int(t * (len(VIRIDIS) - 1) + 0.5))
-    return VIRIDIS[idx]
+    return VIRIDIS[_viridis_index(t)]
+
+
+def _viridis_index(t: float) -> int:
+    """Sqrt-shaped index lookup. Linear in t left almost the entire
+    grid in viridis-purple when one outlier cell pinned the top of
+    the scale (the typical case: a refusal-boundary cell at refusal=0.8
+    dominates everything else at refusal<0.05). Sqrt expands the low
+    end so small-but-non-zero scores get visible differentiation."""
+    t = max(0.0, min(1.0, t)) ** 0.5
+    return min(len(VIRIDIS) - 1, int(t * (len(VIRIDIS) - 1) + 0.5))
 
 
 def sparkline(
@@ -107,10 +116,13 @@ def heatmap_cell_style(value: float, lo: float = 0.0, hi: float = 1.0) -> str:
     Background and foreground are co-selected from
     :data:`VIRIDIS_FG` so the contrast pair is guaranteed across the
     whole index range — no cliff at the transition between two indices.
+    Index lookup uses :func:`_viridis_index`'s sqrt shape so the low
+    end of the score range gets visible differentiation when a single
+    outlier pins the top of the scale.
     """
     if hi <= lo:
         idx = 0
     else:
-        t = max(0.0, min(1.0, (value - lo) / (hi - lo)))
-        idx = min(len(VIRIDIS) - 1, int(t * (len(VIRIDIS) - 1) + 0.5))
+        t = (value - lo) / (hi - lo)
+        idx = _viridis_index(t)
     return f"background:{VIRIDIS[idx]};color:{VIRIDIS_FG[idx]}"
