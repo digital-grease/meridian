@@ -179,15 +179,58 @@ def test_heatmap_renders_in_home_page(tmp_path: Path):
     assert 'class="heatmap-table"' in html
 
 
-def test_heatmap_excludes_unavailable_carry_forward_models(tmp_path: Path):
-    """Models marked available=False (carried forward via
-    _enrich_models_with_history) should not get their own column."""
+def test_heatmap_includes_carry_forward_with_history(tmp_path: Path):
+    """Cadence-alternated models (Opus on even weeks, GPT-5.1 on odd)
+    sit in the manifest as available=False but with their own data in
+    the most recent history snapshot. The heatmap must include them
+    so the grid doesn't lose half its frontier columns every week.
+
+    Each carry-forward cell gets an ``as_of_week`` field pointing at
+    the week the data is actually from, so the template can flag stale
+    measurements visually.
+    """
     raw = _base_manifest_dict()
     raw["models"].append({
         "model_id": "ghost", "display_name": "Ghost",
         "provider": "fake", "version_string": "v1", "available": False,
     })
+    # Ghost has no current-week metrics — only history.
+    raw["history"] = [{
+        "week_id": "2026-W17",
+        "generated_at": "2026-04-19T00:00:00+00:00",
+        "metrics": [
+            {"prompt_id": "p-pol", "model_id": "ghost", "n_samples": 20,
+             "refusal_rate": 0.30,
+             "refusal_ci": {"lower": 0.1, "upper": 0.5}, "hedge_density": 1.5,
+             "length": {"median": 180.0, "p25": 160.0, "p75": 200.0, "n": 20},
+             "stance": "neutral", "stance_confidence": 0.8,
+             "embedding_centroid_shift": None,
+             "refusal_drift": None, "hedge_drift": None, "length_drift": None,
+             "change_points": {"refusal_rate": [], "hedge_density": [], "length_median": []},
+             "sample_s3_uris": [], "flagged_for_review": False, "flag_reason": None},
+        ],
+    }]
     m = Manifest.model_validate(raw)
     h = drift_heatmap(m)
-    assert "ghost" not in h["models"]
-    assert all(model_id != "ghost" for (_, model_id) in h["cells"])
+    assert "ghost" in h["models"], "carry-forward model should still get a heatmap column"
+    ghost_cell = h["cells"][("political", "ghost")]
+    assert ghost_cell["as_of_week"] == "2026-W17"
+    assert ghost_cell["mode"] == "absolute"  # only one week of data
+    assert h["has_stale"] is True
+
+
+def test_heatmap_no_history_at_all_omits_carry_forward_models(tmp_path: Path):
+    """If a carry-forward model has no history either (e.g. someone
+    typoed the model_id during enrichment), the cell can't be filled
+    and the column simply doesn't appear for that axis."""
+    raw = _base_manifest_dict()
+    raw["models"].append({
+        "model_id": "phantom", "display_name": "Phantom",
+        "provider": "fake", "version_string": "v1", "available": False,
+    })
+    m = Manifest.model_validate(raw)
+    h = drift_heatmap(m)
+    # Column appears in the model list (so the grid stays consistent),
+    # but no cells render against it.
+    assert "phantom" in h["models"]
+    assert all(model_id != "phantom" for (_, model_id) in h["cells"])

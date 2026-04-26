@@ -54,19 +54,25 @@
 {% if heatmap.cells %}
 <section class="drift-heatmap" aria-labelledby="heatmap-heading">
   <h2 id="heatmap-heading">
-    {% if heatmap.mode == "delta" %}Movement this week{% else %}This week&rsquo;s snapshot{% endif %}
+    {% if heatmap.mode == "delta" %}Latest measurement{% else %}Latest snapshot{% endif %}
   </h2>
   <p class="muted">
     {% if heatmap.mode == "delta" %}
       Cells colour the dominant week-over-week shift on each
-      <em>axis &times; model</em>. Darker = larger shift. Click a cell
-      to drill into the axis page for that model.
-      <a href="/methodology/#metrics">How this is computed</a>.
+      <em>axis &times; model</em>. Darker = larger shift.
     {% else %}
-      First-week snapshot view: cells colour absolute current values
-      (refusal-rate + hedge-density). Week-over-week deltas appear
-      starting next snapshot.
-      <a href="/methodology/#metrics">How this is computed</a>.
+      Cells colour absolute current values (refusal-rate +
+      hedge-density). Week-over-week deltas appear once two
+      consecutive weeks of data exist.
+    {% endif %}
+    Click a cell to drill into the axis page.
+    <a href="/methodology/#metrics">How this is computed</a>.
+    {% if heatmap.has_stale %}
+      Cells marked with the week label
+      <span class="cell-as-of">e.g. W17</span>
+      use the most recent measurement available — frontier models on
+      Level&nbsp;0 alternate biweekly, so half the columns will be
+      labelled as last-seen data on any given week.
     {% endif %}
   </p>
   <table class="heatmap-table">
@@ -92,10 +98,15 @@
         {% for model_id in heatmap.models %}
         {% set cell = heatmap.cells.get((axis, model_id)) %}
         {% if cell %}
+        {% set stale = cell.as_of_week != manifest.snapshot.week_id %}
         <td class="heatmap-cell"
             style="{{ heatmap_cell_style(cell.score, 0.0, heatmap.max_score) }}">
-          <a href="/axes/{{ axis }}/" aria-label="{{ axis }} on {{ model_id }}: score {{ cell.score }}">
+          <a href="/axes/{{ axis }}/"
+             aria-label="{{ axis }} on {{ model_id }}: score {{ cell.score }}{% if stale %}, last measured {{ cell.as_of_week }}{% endif %}">
             <span class="cell-score">{{ '{:.2f}'.format(cell.score) }}</span>
+            {% if stale %}
+            <span class="cell-as-of">{{ cell.as_of_week.split('-')[-1] }}</span>
+            {% endif %}
           </a>
         </td>
         {% else %}

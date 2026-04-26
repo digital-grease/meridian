@@ -798,6 +798,58 @@ _DRIFT_SCALES = {
 }
 
 
+def _avg(records, attr):
+    vals = []
+    for r in records:
+        v = (
+            getattr(r, attr, None)
+            if "." not in attr
+            else getattr(r.length, attr.split(".")[1])
+        )
+        if v is not None:
+            vals.append(float(v))
+    return sum(vals) / len(vals) if vals else None
+
+
+def _metrics_for_model_at_week(
+    manifest: Manifest,
+    model_id: str,
+    week_id: str,
+    axis_prompt_ids: set[str],
+):
+    """Return the (axis-scoped) metric records for a model at a given
+    week, looking in current first and history second."""
+    if week_id == manifest.snapshot.week_id:
+        return [
+            m for m in manifest.metrics
+            if m.model_id == model_id and m.prompt_id in axis_prompt_ids
+        ]
+    for h in manifest.history:
+        if h.week_id == week_id:
+            return [
+                m for m in h.metrics
+                if m.model_id == model_id and m.prompt_id in axis_prompt_ids
+            ]
+    return []
+
+
+def _latest_week_with_data(manifest: Manifest, model_id: str, axis_prompt_ids: set[str]) -> str | None:
+    """Walk current-then-history and return the most recent week_id
+    where ``model_id`` has any metric records on prompts in this axis."""
+    if any(
+        m.model_id == model_id and m.prompt_id in axis_prompt_ids
+        for m in manifest.metrics
+    ):
+        return manifest.snapshot.week_id
+    for h in reversed(manifest.history):  # newest first
+        if any(
+            m.model_id == model_id and m.prompt_id in axis_prompt_ids
+            for m in h.metrics
+        ):
+            return h.week_id
+    return None
+
+
 def _drift_score_for_axis(
     *,
     axis: str,
@@ -805,52 +857,53 @@ def _drift_score_for_axis(
     manifest: Manifest,
 ) -> dict | None:
     """Compute one heatmap cell: the dominant week-over-week shift on
-    this (axis, model). Returns ``None`` when the axis has no prompts
-    measured for this model.
+    this (axis, model). Returns ``None`` when this (axis, model) has
+    no measurement in either current or history.
 
     Modes:
-      * ``"delta"``: most recent prior-week metrics for the same
-        (axis, model) exist; cell shows |current - prior| normalised.
-      * ``"absolute"``: no prior week — cell shows the current absolute
-        value (useful as a first-week snapshot).
+      * ``"delta"``: two consecutive weeks of data → cell shows
+        |as_of - prior| normalised.
+      * ``"absolute"``: only one week of data → cell shows the
+        as-of-week absolute value.
+
+    For cadence-skipped frontier models (Opus on odd weeks, GPT-5.1 on
+    even), the as-of week is the most recent week the model was sampled
+    on this axis, NOT the manifest's snapshot week. The cell carries an
+    ``as_of_week`` field so the template can flag stale measurements.
     """
     axis_prompt_ids = {p.prompt_id for p in manifest.prompts if p.axis == axis}
     if not axis_prompt_ids:
         return None
-    current = [
-        m for m in manifest.metrics
-        if m.model_id == model_id and m.prompt_id in axis_prompt_ids
-    ]
-    if not current:
+    as_of_week = _latest_week_with_data(manifest, model_id, axis_prompt_ids)
+    if as_of_week is None:
+        return None
+    as_of_metrics = _metrics_for_model_at_week(manifest, model_id, as_of_week, axis_prompt_ids)
+    if not as_of_metrics:
         return None
 
-    def _avg(records, attr):
-        vals = []
-        for r in records:
-            v = getattr(r, attr, None) if "." not in attr else getattr(r.length, attr.split(".")[1])
-            if v is not None:
-                vals.append(float(v))
-        return sum(vals) / len(vals) if vals else None
-
     cur = {
-        "refusal_rate": _avg(current, "refusal_rate"),
-        "hedge_density": _avg(current, "hedge_density"),
-        "length_median": _avg(current, "length.median"),
+        "refusal_rate": _avg(as_of_metrics, "refusal_rate"),
+        "hedge_density": _avg(as_of_metrics, "hedge_density"),
+        "length_median": _avg(as_of_metrics, "length.median"),
     }
 
+    # Find the most recent week strictly older than as_of_week with
+    # data for this model on this axis.
     prior_metrics: list = []
-    for h in reversed(manifest.history):  # newest history first
-        prior_metrics = [
-            m for m in h.metrics
-            if m.model_id == model_id and m.prompt_id in axis_prompt_ids
-        ]
-        if prior_metrics:
+    prior_week: str | None = None
+    candidates = [(h.week_id, h.metrics) for h in manifest.history]
+    if as_of_week != manifest.snapshot.week_id:
+        candidates.append((manifest.snapshot.week_id, manifest.metrics))
+    candidates = [(w, ms) for (w, ms) in candidates if w < as_of_week]
+    candidates.sort(key=lambda t: t[0], reverse=True)
+    for w, ms in candidates:
+        cand = [m for m in ms if m.model_id == model_id and m.prompt_id in axis_prompt_ids]
+        if cand:
+            prior_metrics = cand
+            prior_week = w
             break
 
     if not prior_metrics:
-        # No prior — colour the cell by absolute current refusal_rate
-        # plus normalised hedge_density. Same metric grammar; the
-        # caption tells the reader this is a first-week view.
         score = max(
             (cur["refusal_rate"] or 0.0) / _DRIFT_SCALES["refusal_rate"],
             (cur["hedge_density"] or 0.0) / _DRIFT_SCALES["hedge_density"],
@@ -860,6 +913,7 @@ def _drift_score_for_axis(
             "score": round(score, 3), "mode": "absolute",
             "metric": "absolute snapshot",
             "current": cur, "prior": None,
+            "as_of_week": as_of_week, "prior_week": None,
         }
 
     prior = {
@@ -884,24 +938,41 @@ def _drift_score_for_axis(
         "mode": "delta",
         "metric": dominant_metric,
         "current": cur, "prior": prior,
+        "as_of_week": as_of_week, "prior_week": prior_week,
     }
 
 
 def drift_heatmap(manifest: Manifest) -> dict:
     """Compute the home-page drift heatmap data.
 
+    The grid is "latest measurement per (axis × model)", not
+    "current week only". Cadence-alternated frontier models (Opus on
+    even weeks, GPT-5.1 on odd) would otherwise leave half the grid
+    empty every week — which would imply nothing about the model's
+    drift, only about the week's roster. Each cell carries an
+    ``as_of_week`` field so the template can flag rows whose data is
+    older than the manifest's snapshot week.
+
     Returns a dict with:
       * ``axes``: ordered list of axis ids
-      * ``models``: ordered list of model_ids
-      * ``cells``: dict[(axis, model_id)] → cell dict (see
-        _drift_score_for_axis); missing pairs are absent
-      * ``max_score``: the largest score in the grid (for colour scaling);
-        falls back to 1.0 if the grid is empty
-      * ``mode``: "delta" if any cell uses delta mode, else "absolute" —
-        drives the caption.
+      * ``models``: ordered list of model_ids — both currently-active
+        and carry-forward
+      * ``cells``: dict[(axis, model_id)] → cell dict; missing pairs
+        are absent
+      * ``max_score``: the largest score in the grid (for colour
+        scaling); falls back to 1.0 if the grid is empty
+      * ``mode``: "delta" if any cell uses delta mode, else
+        "absolute" — drives the caption
+      * ``has_stale``: True if any cell's as_of_week is older than the
+        snapshot week (drives the "some columns show last-seen data"
+        caption note)
     """
     axes = sorted({p.axis for p in manifest.prompts})
-    models = [m.model_id for m in manifest.models if m.available]
+    # Active models first, then carry-forward, so the grid puts
+    # current-week data on the left.
+    active = [m.model_id for m in manifest.models if m.available]
+    inactive = [m.model_id for m in manifest.models if not m.available]
+    models = active + inactive
     cells: dict[tuple[str, str], dict] = {}
     for axis in axes:
         for model_id in models:
@@ -914,12 +985,17 @@ def drift_heatmap(manifest: Manifest) -> dict:
         return {
             "axes": axes, "models": models,
             "cells": {}, "max_score": 1.0, "mode": "absolute",
+            "has_stale": False,
         }
     max_score = max(c["score"] for c in cells.values()) or 1.0
     mode = "delta" if any(c["mode"] == "delta" for c in cells.values()) else "absolute"
+    has_stale = any(
+        c["as_of_week"] != manifest.snapshot.week_id for c in cells.values()
+    )
     return {
         "axes": axes, "models": models,
         "cells": cells, "max_score": max_score, "mode": mode,
+        "has_stale": has_stale,
     }
 
 

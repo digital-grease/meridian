@@ -350,6 +350,17 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
   text-align: center;
 }
 .cell-score { font-variant-numeric: tabular-nums; font-weight: 600; }
+.cell-as-of {
+  display: block;
+  margin-top: 0.1em;
+  font-size: 0.7rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  /* Inherit colour from the cell's inline `color:` so the as-of
+   * label tracks the bg/fg pair (white on dark cells, dark on light).
+   * Avoids the contrast cliff a hardcoded muted colour would re-create. */
+  opacity: 0.85;
+}
 
 /* Heatmap cells (CSS grid). Colors set inline via style="background:var(--seq-N)" */
 .heatmap {

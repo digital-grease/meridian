@@ -430,6 +430,7 @@ def build_manifest(
     all_weeks = store.weeks()
     prior_weeks = [w for w in all_weeks if w < week_id][-history_weeks:]
     history: list[dict] = []
+    weeks_seen: set[str] = set()
     for w in prior_weeks:
         # History metrics do not re-run stance/embedding (expensive and
         # already captured in the contemporaneous record).
@@ -444,6 +445,40 @@ def build_manifest(
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "metrics": metrics,
         })
+        weeks_seen.add(w)
+
+    # Backfill history from prior committed manifests for weeks the
+    # local sample store has no data for. Critical in CI, where
+    # `data/raw/` is gitignored and only contains the current week —
+    # without this, every week's manifest would have an empty history
+    # and the home-page heatmap would lose half its frontier columns
+    # (the cadence-skipped Opus or GPT-5.1) for lack of data to draw.
+    if prior_manifests_dir is not None and prior_manifests_dir.exists():
+        scoped_pids = {p.id for p in scoped_prompts}
+        for f in sorted(prior_manifests_dir.glob("*.json")):
+            try:
+                prior = json.loads(f.read_text())
+            except (OSError, ValueError):
+                continue
+            wk = prior.get("snapshot", {}).get("week_id")
+            if not wk or wk in weeks_seen or wk >= week_id:
+                continue
+            kept = [
+                mx for mx in prior.get("metrics", [])
+                if mx.get("prompt_id") in scoped_pids
+            ]
+            if not kept:
+                continue
+            history.append({
+                "week_id": wk,
+                "generated_at": prior.get("snapshot", {}).get(
+                    "generated_at",
+                    datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                ),
+                "metrics": kept,
+            })
+            weeks_seen.add(wk)
+    history.sort(key=lambda h: h["week_id"])  # oldest first
 
     # Change-point detection runs AFTER history is assembled so each
     # current MetricRecord carries precomputed indices into its
