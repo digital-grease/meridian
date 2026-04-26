@@ -250,10 +250,18 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
   margin-top: 0.4em;
   font-size: 0.78rem;
   font-style: italic;
+  /* Don't use the muted colour here. .muted gives ~7:1 contrast on
+   * its own, but on a small italic font axe scrutinises it harder
+   * and we don't need the muted treatment — the bracketed wording
+   * is already an unambiguous "this is metadata" signal. */
+  color: var(--fg);
 }
-.models-list .model-tile-dim a { opacity: 0.65; }
-.models-list .model-tile-dim a:hover,
-.models-list .model-tile-dim a:focus-visible { opacity: 1; }
+/* Carry-forward (available=false) tiles get a dashed border instead
+ * of an opacity dim. Opacity below ~0.85 drops .muted contrast under
+ * the AA floor on Chrome's compositor, which axe correctly flags. */
+.models-list .model-tile-dim a {
+  border-style: dashed;
+}
 
 /* Notable-shift callout cards on /. Three cards in a row at desktop,
  * stacking to one column on mobile. Each card carries the headline
