@@ -61,9 +61,13 @@ stance:
   model_id: "claude-haiku-4-5-20251001"
   cache_path: "data/cache/stance/cache.jsonl"
 
-# Embedding-centroid drift. Disabled by default until CI cold-start
-# cost is measured (sentence-transformers ~400 MB download). Enable
-# locally to populate `embedding_centroid_shift` on each metric record.
+# Embedding-centroid drift. Cold-start measured at ~60 sec end-to-end
+# on a clean HF cache (download + lazy load + first encode); ~4 sec
+# warm-start when the model is on disk. The weekly-pipeline workflow
+# caches `~/.cache/huggingface` so cold downloads happen at most once
+# per cache key. Centroid shift is week-over-week, so the methodology
+# page reads "off" for one week after enable and flips to "live" the
+# week after.
 embedding:
-  enabled: false
+  enabled: true
   model: "sentence-transformers/all-mpnet-base-v2"

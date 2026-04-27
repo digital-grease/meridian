@@ -86,14 +86,16 @@ def _build_context(
     args: argparse.Namespace,
     *,
     week_id: str | None = None,
+    need_runners: bool = True,
 ) -> tuple[PipelineConfig, LocalSampleStore, list]:
     config = load_config(args.config)
     if not config.runners:
         print("no runners configured", file=sys.stderr)
         raise SystemExit(2)
-    corpus = load_corpus()
     raw_dir = REPO_ROOT / config.storage.raw_dir
     store = LocalSampleStore(raw_dir)
+    if not need_runners:
+        return config, store, []
     runners = build_runners(config, week_id=week_id)
     if not runners:
         if week_id is not None:
@@ -375,7 +377,7 @@ def _cmd_estimate(args: argparse.Namespace) -> int:
 
 
 def _cmd_build_manifest(args: argparse.Namespace) -> int:
-    config, store, _runners = _build_context(args)
+    config, store, _runners = _build_context(args, need_runners=False)
     corpus = load_corpus()
     week_id = _resolve_week(args.week)
     display_info = _display_info_for(config)
@@ -662,7 +664,7 @@ def _cmd_dump_manifest(args: argparse.Namespace) -> int:
 
 
 def _cmd_silent_update(args: argparse.Namespace) -> int:
-    config, store, _runners = _build_context(args)
+    config, store, _runners = _build_context(args, need_runners=False)
     corpus = load_corpus()
     week_id = _resolve_week(args.week)
     manifest = build_manifest(
@@ -680,7 +682,7 @@ def _cmd_silent_update(args: argparse.Namespace) -> int:
 
 
 def _cmd_holdout_report(args: argparse.Namespace) -> int:
-    config, store, _runners = _build_context(args)
+    config, store, _runners = _build_context(args, need_runners=False)
     corpus = load_corpus()
     if not corpus.has_held_out:
         print("no held-out corpus found (meridian/corpus/held_out*.yaml)", file=sys.stderr)

@@ -58,6 +58,16 @@ jobs:
       - name: Install deps
         run: uv sync --frozen || uv sync
 
+      - name: Cache HuggingFace model
+        # Caches sentence-transformers/all-mpnet-base-v2 (~400 MB) used by
+        # the embedding-centroid drift metric. Cold restore is ~60 sec;
+        # warm restore is a few seconds. Bump the v# suffix to invalidate
+        # when intentionally upgrading the embedding model.
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-mpnet-base-v2-v1
+
       - name: Verify at least one provider secret is set
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
