@@ -380,10 +380,18 @@ def _cmd_build_manifest(args: argparse.Namespace) -> int:
     week_id = _resolve_week(args.week)
     display_info = _display_info_for(config)
     prior_manifests_dir = REPO_ROOT / "data" / "manifests"
+
+    stance_by_key = asyncio.run(_maybe_collect_stance(
+        config=config, store=store, corpus=corpus, week_id=week_id,
+    ))
+    embedding_model = build_embedding_model(config.embedding)
+
     manifest = build_manifest(
         store=store, corpus=corpus, week_id=week_id,
         history_weeks=args.history_weeks, display_info=display_info,
         prior_manifests_dir=prior_manifests_dir,
+        stance_by_key=stance_by_key,
+        embedding_model=embedding_model,
     )
     paths = _output_paths(week_id)
     write_manifest(manifest, paths)
@@ -396,6 +404,8 @@ def _cmd_build_manifest(args: argparse.Namespace) -> int:
             history_weeks=args.history_weeks, display_info=display_info,
             include_held_out=True,
             prior_manifests_dir=prior_manifests_dir,
+            stance_by_key=stance_by_key,
+            embedding_model=embedding_model,
         )
         internal_path = _internal_manifest_path(week_id)
         write_manifest(internal, [internal_path])
