@@ -4,6 +4,12 @@ variable "region" {
   default     = "us-east-2"
 }
 
+variable "aws_profile" {
+  description = "AWS CLI profile name to authenticate with. Leave null to use the default credential chain. Specter's Terraform pins this to \"tf\"; meridian operators usually want the same."
+  type        = string
+  default     = null
+}
+
 variable "tags" {
   description = "Additional tags applied to every taggable resource."
   type        = map(string)

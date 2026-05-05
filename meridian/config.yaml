@@ -23,23 +23,16 @@ sampling:
 
 storage:
   raw_dir: "data/raw"
-  # S3 archive: required for the EC2 cohabit architecture (the EC2
-  # wrapper uploads raw + manifest + snapshot here; CI downloads to
-  # publish). When absent the upload code path is dormant — local runs
-  # work but produce no S3 artifacts. See infra/terraform/s3/ for
-  # provisioning.
-  #
-  # Uncomment and fill in `bucket` to whatever name was passed to
-  # `terraform apply -var bucket_name=...` in infra/terraform/s3/.
-  # `prefix` MUST match var.archive_bucket_prefix in
-  # infra/terraform/ec2-cohabit/ — the IAM policies on both ends are
-  # scoped to it.
-  #
-  # s3:
-  #   bucket: "meridian-archive-prod"
-  #   region: "us-east-2"
-  #   prefix: "meridian/"
-  #   publish_latest_pointer: true
+  # S3 archive: the EC2 cohabit architecture uploads raw + manifest +
+  # snapshot here; CI downloads from here to publish. When absent the
+  # upload code path is dormant. `prefix` MUST match
+  # var.archive_bucket_prefix in infra/terraform/ec2-cohabit/ — the
+  # IAM policies on both ends are scoped to it.
+  s3:
+    bucket: "meridian-archive-prod"
+    region: "us-east-2"
+    prefix: "meridian/"
+    publish_latest_pointer: true
 
 runners:
   # Local baseline / control group. Every week because it costs nothing and

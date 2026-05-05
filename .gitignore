@@ -65,3 +65,14 @@ data/internal/
 *.tfplan
 *.auto.tfvars
 *.auto.tfvars.json
+# All tfvars are local. Operators pass values via terraform.tfvars (this
+# convention) or -var/-var-file at apply time. If we ever need a checked-in
+# template, name it *.example.tfvars and add `!*.example.tfvars` here.
+*.tfvars
+*.tfvars.json
+crash.log
+crash.*.log
+
+# AI tooling artifacts
+.claude/
+.aider*

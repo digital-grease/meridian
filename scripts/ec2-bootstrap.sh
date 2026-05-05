@@ -25,36 +25,92 @@ exec > >(tee -a /var/log/meridian-bootstrap.log) 2>&1
 
 MERIDIAN_USER="meridian"
 MERIDIAN_HOME="/data/meridian"
-MERIDIAN_DEVICE_CANDIDATES=(/dev/sdg /dev/xvdg /dev/nvme3n1 /dev/nvme4n1)
+MERIDIAN_FS_LABEL="meridian-data"
+# Set MERIDIAN_VOLUME_ID env var (e.g. "vol-08d8823e42d26e038") to match
+# by exact EBS volume id; otherwise we fall back to "first unformatted
+# block device" which is safe because specter's volume is already
+# formatted (LVM2_member or ext4) and gets skipped automatically.
+MERIDIAN_VOLUME_ID="${MERIDIAN_VOLUME_ID:-}"
 
-# 1. Find the meridian EBS volume. The kernel may rename /dev/sdg to
-# /dev/xvdg or /dev/nvmeXn1 depending on instance generation; specter's
-# data volume is already on /dev/xvdf (nvme2 typically), so we skip the
-# first nvme*n1 devices when probing.
-DEVICE=""
-for _ in $(seq 1 30); do
-  for candidate in "${MERIDIAN_DEVICE_CANDIDATES[@]}"; do
-    if [ -b "$candidate" ]; then
-      # Don't claim specter's volume by accident: a device with an
-      # existing ext4 fs labelled or mounted by specter must be skipped.
-      DEVICE="$candidate"
-      break 2
+# 1. Find the meridian EBS volume. Three-pass strategy, in order of
+# specificity. Each pass looks at the live state; we sleep between
+# attempts because the volume may not be visible immediately after
+# attach.
+#
+# Pass 1: an already-formatted ext4 volume with our label exists. This
+#   is the steady-state on every run after the first.
+# Pass 2: caller specified MERIDIAN_VOLUME_ID. Match by NVMe serial.
+# Pass 3: pick the first /dev/nvme*n1 that has no filesystem at all.
+#   Safe because specter's volume always has either LVM2 or ext4 on it
+#   and the root volume has its own fs; our brand-new EBS volume is the
+#   only unformatted candidate on first boot.
+find_meridian_device() {
+  local serial="" cand byid label_dev
+  if [ -n "$MERIDIAN_VOLUME_ID" ]; then
+    serial="$(echo "$MERIDIAN_VOLUME_ID" | tr -d -)"
+  fi
+
+  for _ in $(seq 1 30); do
+    # Pass 1: by FS label.
+    label_dev="$(blkid -L "$MERIDIAN_FS_LABEL" 2>/dev/null || true)"
+    if [ -n "$label_dev" ] && [ -b "$label_dev" ]; then
+      echo "$label_dev"; return 0
     fi
-  done
-  sleep 2
-done
 
+    # Pass 2: by NVMe serial (matches EBS volume id with dashes stripped).
+    if [ -n "$serial" ]; then
+      byid="$(lsblk -dno NAME,SERIAL 2>/dev/null \
+        | awk -v s="$serial" '$2 == s { print "/dev/" $1; exit }')"
+      if [ -n "$byid" ] && [ -b "$byid" ]; then
+        echo "$byid"; return 0
+      fi
+    fi
+
+    # Pass 3: first unformatted block device (excluding partitions).
+    for cand in /dev/nvme0n1 /dev/nvme1n1 /dev/nvme2n1 /dev/nvme3n1 \
+                /dev/nvme4n1 /dev/nvme5n1 /dev/nvme6n1 /dev/nvme7n1; do
+      [ -b "$cand" ] || continue
+      # Skip mounted devices and devices that already have any fs/PV.
+      if findmnt -nrS "$cand" >/dev/null 2>&1; then continue; fi
+      if blkid "$cand" >/dev/null 2>&1; then continue; fi
+      echo "$cand"; return 0
+    done
+
+    sleep 2
+  done
+  return 1
+}
+
+DEVICE="$(find_meridian_device || true)"
 if [ -z "$DEVICE" ]; then
-  echo "ERROR: meridian data volume not found among ${MERIDIAN_DEVICE_CANDIDATES[*]}"
-  echo "Check the Terraform module's var.data_volume_device_name and aws ec2 describe-volumes."
+  echo "ERROR: meridian data volume not found."
+  echo "Diagnose with: lsblk -dno NAME,SERIAL,SIZE,TYPE"
+  echo "If the volume is attached but already formatted with a different label,"
+  echo "set MERIDIAN_VOLUME_ID=vol-... in the environment and re-run."
   exit 1
 fi
 echo "found meridian data volume at $DEVICE"
 
+# Refuse to claim a device that has someone else's filesystem on it
+# (e.g. specter's LVM2 PV) — only ext4 with our label, or a blank
+# device, is acceptable. mkfs.ext4 below uses -L to stamp our label.
+existing_fs="$(blkid -s TYPE -o value "$DEVICE" 2>/dev/null || true)"
+existing_label="$(blkid -s LABEL -o value "$DEVICE" 2>/dev/null || true)"
+if [ -n "$existing_fs" ] && [ "$existing_fs" != "ext4" ]; then
+  echo "ERROR: $DEVICE has filesystem type '$existing_fs' (label '$existing_label')."
+  echo "Refusing to mount — looks like another project's volume."
+  exit 1
+fi
+if [ -n "$existing_label" ] && [ "$existing_label" != "$MERIDIAN_FS_LABEL" ]; then
+  echo "ERROR: $DEVICE has filesystem label '$existing_label' (expected '$MERIDIAN_FS_LABEL' or blank)."
+  echo "Refusing to mount — looks like another project's volume."
+  exit 1
+fi
+
 # 2. Format if blank, mount, persist via fstab.
-if ! blkid "$DEVICE" >/dev/null 2>&1; then
-  echo "formatting $DEVICE as ext4"
-  mkfs.ext4 -L meridian-data "$DEVICE"
+if [ -z "$existing_fs" ]; then
+  echo "formatting $DEVICE as ext4 with label $MERIDIAN_FS_LABEL"
+  mkfs.ext4 -L "$MERIDIAN_FS_LABEL" "$DEVICE"
 fi
 
 mkdir -p "$MERIDIAN_HOME"

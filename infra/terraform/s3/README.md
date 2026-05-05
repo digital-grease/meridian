@@ -45,7 +45,7 @@ storage:
   raw_dir: "data/raw"
   s3:
     bucket: "meridian-archive-prod"
-    region: "us-east-1"
+    region: "us-east-2"
     prefix: ""                      # or "meridian/" to namespace within a shared bucket
     publish_latest_pointer: true    # write manifests/latest.json each run
 ```
@@ -68,7 +68,7 @@ Export them where the pipeline runs:
 ```bash
 export AWS_ACCESS_KEY_ID=...
 export AWS_SECRET_ACCESS_KEY=...
-export AWS_REGION=us-east-1
+export AWS_REGION=us-east-2
 ```
 
 Rotate every 90 days. An access-key-age check in the runbook belongs on your
@@ -92,7 +92,7 @@ Take the output role ARN and add it to `.github/workflows/weekly-pipeline.yml`:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          aws-region: us-east-1
+          aws-region: us-east-2
 ```
 
 No long-lived keys anywhere.

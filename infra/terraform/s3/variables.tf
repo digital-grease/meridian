@@ -9,9 +9,15 @@ variable "bucket_name" {
 }
 
 variable "region" {
-  description = "AWS region for the bucket. Keep this pinned; cross-region replication is a v2 concern."
+  description = "AWS region for the bucket. Pinned to us-east-2 to colocate with specter's EC2 instance (free intra-region S3 transfer; cross-region replication is a v2 concern)."
   type        = string
-  default     = "us-east-1"
+  default     = "us-east-2"
+}
+
+variable "aws_profile" {
+  description = "AWS CLI profile name to authenticate with. Leave null to use the default credential chain (env vars, instance role, etc.). Specter's Terraform pins this to \"tf\"; meridian operators usually want the same."
+  type        = string
+  default     = null
 }
 
 variable "tags" {
