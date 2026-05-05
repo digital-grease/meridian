@@ -117,7 +117,7 @@ log "uv sync"
 uv sync --frozen >/dev/null || uv sync >/dev/null
 
 # ----------------------- 3. Run pipeline -------------------------------
-WEEK=$(date -u --date='yesterday' +'%G-W%V')
+WEEK="${WEEK:-$(date -u --date='yesterday' +'%G-W%V')}"
 log "running pipeline for ISO week $WEEK"
 
 # meridian.secrets.resolve_ssm_secrets() activates because
