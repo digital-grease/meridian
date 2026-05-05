@@ -23,12 +23,38 @@ sampling:
 
 storage:
   raw_dir: "data/raw"
+  # S3 archive: required for the EC2 cohabit architecture (the EC2
+  # wrapper uploads raw + manifest + snapshot here; CI downloads to
+  # publish). When absent the upload code path is dormant — local runs
+  # work but produce no S3 artifacts. See infra/terraform/s3/ for
+  # provisioning.
+  #
+  # Uncomment and fill in `bucket` to whatever name was passed to
+  # `terraform apply -var bucket_name=...` in infra/terraform/s3/.
+  # `prefix` MUST match var.archive_bucket_prefix in
+  # infra/terraform/ec2-cohabit/ — the IAM policies on both ends are
+  # scoped to it.
+  #
+  # s3:
+  #   bucket: "meridian-archive-prod"
+  #   region: "us-east-2"
+  #   prefix: "meridian/"
+  #   publish_latest_pointer: true
 
 runners:
   # Local baseline / control group. Every week because it costs nothing and
   # the silent-update detector needs a continuous reference.
+  #
+  # `digest` pins the exact model bytes the runner will accept. On startup
+  # the ollama runner queries /api/tags and refuses to sample if the served
+  # digest doesn't match — a re-pushed upstream model is treated as a
+  # broken control-group invariant, not silently rolled into the noise
+  # floor. To rotate: `ollama pull <model>`, capture the new digest, audit
+  # the change, then update this field. Bare 64-char hex (no "sha256:"
+  # prefix) — that's the form ollama's API emits.
   - provider: ollama
     model_id: "llama3.2:3b"
+    digest: "a80c4f17acd55265feec403c7aef86be0c25983ab279d83f3bcd3abbcb5b8b72"
     enabled: true
     cadence: every_week
 

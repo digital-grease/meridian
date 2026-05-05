@@ -23,6 +23,16 @@ class AuthError(RunnerError):
     """Missing or invalid credentials."""
 
 
+class IntegrityError(RunnerError):
+    """A runner-level invariant was violated.
+
+    Raised when a runner detects that its environment doesn't match what the
+    pipeline expects (e.g. a pinned model digest doesn't match what the
+    server is actually serving). The pipeline should never proceed past
+    this — the resulting samples would be silently mislabelled.
+    """
+
+
 class RateLimitError(RunnerError):
     """Upstream rate-limited us. Retry after ``retry_after_s`` if set."""
 
@@ -88,6 +98,17 @@ class Runner(abc.ABC):
 
     model_id: str
     provider: str
+
+    async def prepare(self) -> None:
+        """One-shot setup hook called by the orchestrator before any sample call.
+
+        Default no-op. Subclasses override to validate environment invariants
+        that need a network round-trip (e.g. ``OllamaRunner`` verifies the
+        served model digest matches the pinned one). Failure should raise an
+        :class:`IntegrityError`; the orchestrator treats that as fatal for
+        this runner — no samples are written under a mismatched digest.
+        """
+        return None
 
     @abc.abstractmethod
     async def sample(

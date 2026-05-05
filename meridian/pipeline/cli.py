@@ -34,6 +34,7 @@ from meridian.analysis.holdout_compare import compare_holdout
 from meridian.analysis.silent_update import detect_silent_updates
 from meridian.config import PipelineConfig, build_runners, load_config
 from meridian.corpus import load_corpus
+from meridian.secrets import resolve_ssm_secrets
 from meridian.pipeline.manifest_writer import (
     RunnerDisplayInfo,
     build_manifest,
@@ -710,6 +711,10 @@ def _cmd_holdout_report(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+
+    # Pull provider API keys from SSM if MERIDIAN_SECRETS_SSM=1 is set.
+    # No-op otherwise; existing env-var-based credential flows are unaffected.
+    resolve_ssm_secrets()
 
     parser = argparse.ArgumentParser(prog="meridian")
     parser.add_argument("--config", type=Path, default=None,

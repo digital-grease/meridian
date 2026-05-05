@@ -5,8 +5,11 @@ import httpx
 import pytest
 import respx
 
-from meridian.runners.base import UpstreamError
+from meridian.runners.base import IntegrityError, UpstreamError
 from meridian.runners.ollama import OllamaRunner
+
+PINNED_DIGEST = "a" * 64
+WRONG_DIGEST = "b" * 64
 
 
 @pytest.mark.asyncio
@@ -83,3 +86,72 @@ async def test_ollama_batch_yields_n_samples():
                 samples.append(s)
     assert len(samples) == 5
     assert {s.request_index for s in samples} == {0, 1, 2, 3, 4}
+
+
+@pytest.mark.asyncio
+async def test_ollama_prepare_no_pin_is_noop():
+    async with httpx.AsyncClient() as client:
+        runner = OllamaRunner("llama3.2:3b", client=client)
+        # Without expected_digest, prepare() must not call /api/tags at all.
+        with respx.mock(base_url="http://localhost:11434") as mock:
+            await runner.prepare()
+            assert not mock.calls
+
+
+@pytest.mark.asyncio
+async def test_ollama_prepare_digest_match_passes():
+    async with httpx.AsyncClient() as client:
+        runner = OllamaRunner(
+            "llama3.2:3b", client=client, expected_digest=PINNED_DIGEST,
+        )
+        with respx.mock(base_url="http://localhost:11434") as mock:
+            mock.get("/api/tags").respond(
+                200,
+                json={"models": [
+                    {"name": "llama3.2:3b", "digest": PINNED_DIGEST},
+                    {"name": "qwen2.5:7b", "digest": "c" * 64},
+                ]},
+            )
+            await runner.prepare()  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_ollama_prepare_digest_mismatch_raises_integrity():
+    async with httpx.AsyncClient() as client:
+        runner = OllamaRunner(
+            "llama3.2:3b", client=client, expected_digest=PINNED_DIGEST,
+        )
+        with respx.mock(base_url="http://localhost:11434") as mock:
+            mock.get("/api/tags").respond(
+                200,
+                json={"models": [{"name": "llama3.2:3b", "digest": WRONG_DIGEST}]},
+            )
+            with pytest.raises(IntegrityError, match="digest mismatch"):
+                await runner.prepare()
+
+
+@pytest.mark.asyncio
+async def test_ollama_prepare_model_not_installed_raises_integrity():
+    async with httpx.AsyncClient() as client:
+        runner = OllamaRunner(
+            "llama3.2:3b", client=client, expected_digest=PINNED_DIGEST,
+        )
+        with respx.mock(base_url="http://localhost:11434") as mock:
+            mock.get("/api/tags").respond(
+                200,
+                json={"models": [{"name": "qwen2.5:7b", "digest": "c" * 64}]},
+            )
+            with pytest.raises(IntegrityError, match="not installed"):
+                await runner.prepare()
+
+
+@pytest.mark.asyncio
+async def test_ollama_prepare_transport_error_raises_upstream():
+    async with httpx.AsyncClient() as client:
+        runner = OllamaRunner(
+            "llama3.2:3b", client=client, expected_digest=PINNED_DIGEST,
+        )
+        with respx.mock(base_url="http://localhost:11434") as mock:
+            mock.get("/api/tags").mock(side_effect=httpx.ConnectError("nope"))
+            with pytest.raises(UpstreamError):
+                await runner.prepare()

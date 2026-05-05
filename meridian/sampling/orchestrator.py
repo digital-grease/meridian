@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 
 from meridian.corpus import Corpus, Prompt
 from meridian.runners import Runner, RunnerError
+from meridian.runners.base import IntegrityError
 from meridian.storage import LocalSampleStore
 
 _log = logging.getLogger(__name__)
@@ -108,6 +109,30 @@ class Orchestrator:
             total = len(prompts)
             run_started = time.monotonic()
             samples_per_pair = self.plan.samples_per_pair
+            try:
+                await runner.prepare()
+            except IntegrityError as e:
+                _log.error("[%s] prepare failed: %s", runner_key, e)
+                outcome.errors.append(PairError(
+                    provider=runner.provider,
+                    model_id=runner.model_id,
+                    prompt_id="*",
+                    error_type="integrity",
+                    message=str(e),
+                ))
+                outcome.pairs_failed += total
+                return
+            except RunnerError as e:
+                _log.error("[%s] prepare failed: %s", runner_key, e)
+                outcome.errors.append(PairError(
+                    provider=runner.provider,
+                    model_id=runner.model_id,
+                    prompt_id="*",
+                    error_type="prepare",
+                    message=str(e),
+                ))
+                outcome.pairs_failed += total
+                return
             _log.info(
                 "[%s] starting: %d prompts × up to %d samples/pair",
                 runner_key, total, samples_per_pair,

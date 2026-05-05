@@ -18,6 +18,7 @@ import httpx
 
 from meridian.runners._retry import with_retry
 from meridian.runners.base import (
+    IntegrityError,
     Runner,
     Sample,
     UpstreamError,
@@ -34,12 +35,14 @@ class OllamaRunner(Runner):
         base_url: str = "http://localhost:11434",
         client: httpx.AsyncClient | None = None,
         timeout: float = 120.0,
+        expected_digest: str | None = None,
     ) -> None:
         self.model_id = model_id
         self.base_url = base_url.rstrip("/")
         self._client = client
         self._owns_client = client is None
         self.timeout = timeout
+        self.expected_digest = expected_digest
 
     async def aclose(self) -> None:
         if self._owns_client and self._client is not None:
@@ -50,6 +53,42 @@ class OllamaRunner(Runner):
         if self._client is None:
             self._client = httpx.AsyncClient(timeout=self.timeout)
         return self._client
+
+    async def prepare(self) -> None:
+        # No digest pinned → nothing to verify, behave as before.
+        if self.expected_digest is None:
+            return
+
+        client = self._get_client()
+        try:
+            resp = await client.get(f"{self.base_url}/api/tags")
+        except httpx.HTTPError as e:
+            raise UpstreamError(f"ollama transport error during digest check: {e}") from e
+        if resp.status_code != 200:
+            raise UpstreamError(
+                f"ollama /api/tags returned {resp.status_code}: {resp.text[:200]}"
+            )
+        try:
+            body = resp.json()
+        except ValueError as e:
+            raise UpstreamError(f"ollama /api/tags non-json body: {e}") from e
+
+        for entry in body.get("models", []):
+            if entry.get("name") == self.model_id or entry.get("model") == self.model_id:
+                served = entry.get("digest")
+                if served != self.expected_digest:
+                    raise IntegrityError(
+                        f"ollama model {self.model_id!r} digest mismatch: "
+                        f"expected {self.expected_digest}, got {served}. "
+                        "Refusing to sample — control-group invariance broken. "
+                        "Either re-pin to the new digest after auditing the change, "
+                        "or restore the previous model version."
+                    )
+                return
+        raise IntegrityError(
+            f"ollama model {self.model_id!r} not installed on server at {self.base_url}; "
+            f"expected digest {self.expected_digest}. Run `ollama pull {self.model_id}`."
+        )
 
     async def sample(
         self,

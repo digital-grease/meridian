@@ -1,118 +1,135 @@
-name: Weekly pipeline run
+name: Weekly pipeline publish
 
-# Runs the sampling pipeline Sunday 01:00 UTC, one hour before the site
-# build workflow. If this succeeds, the site workflow picks up the fresh
-# manifest; if this fails, an issue is opened for the maintainers.
+# Architecture (post-EC2 cutover):
 #
-# Secrets required in the repository settings:
-#   ANTHROPIC_API_KEY (optional — set to enable the Anthropic runner)
-#   OPENAI_API_KEY    (optional — same)
+#   Mon 04:00 America/Chicago  →  EventBridge Scheduler fires the
+#                                  meridian-orchestrator Lambda.
+#   Lambda starts the cohabit g5.2xlarge (or defers if specter is
+#   using it), waits for SSM-reachable, dispatches the wrapper script.
+#   Wrapper script samples ALL on-cadence runners (commercial APIs +
+#   open-weight roster), uploads raw + manifest + snapshot to S3,
+#   stops the instance.
 #
-# Ollama is not available in GitHub's hosted runners, so this workflow
-# sets MERIDIAN_SKIP_PROVIDERS=ollama at runtime. meridian/config.yaml
-# keeps Ollama enabled so local (maintainer) runs still use it.
+#   This workflow runs ~6 hours later and only PUBLISHES — it does no
+#   sampling. Pulls the freshly-uploaded artifacts from S3 and commits
+#   them to main. The site-build workflow (separate) renders the
+#   public dashboard from the committed manifest.
+#
+# Why CI doesn't sample:
+#   - GitHub-hosted runners' AUP restricts use to the repository's
+#     "production / testing / deployment / publication of the software
+#     project." A 30-90 minute LLM-inference batch is gray under that
+#     clause; EC2 takes the question off the table.
+#   - All sampling on one host means one snapshot rebuild — no merge
+#     dance between hosts.
+#
+# Required:
+#   AWS_ROLE_TO_ASSUME secret = OIDC role ARN with read access to the
+#                                meridian S3 archive bucket.
+#   `vars.S3_BUCKET` = the bucket name (matches storage.s3.bucket in
+#                      meridian/config.yaml).
+#   `vars.S3_PREFIX` = optional, defaults to "meridian/" (matches
+#                      storage.s3.prefix).
 
 on:
   schedule:
-    - cron: "0 1 * * 0"
+    # Mon 13:00 UTC = Mon 07:00 CDT / 06:00 CST. Buffers >=2h after the
+    # EC2 wrapper finishes and uploads (Mon ~04:30-05:30 local).
+    - cron: "0 13 * * 1"
   workflow_dispatch:
     inputs:
       week:
-        description: "ISO week id (optional — defaults to this week)"
+        description: "ISO week id (default: previous week, matching the EC2 wrapper)"
         required: false
         type: string
-      force:
-        description: "Re-sample pairs that already have complete counts"
-        required: false
-        type: boolean
-        default: false
 
 permissions:
-  contents: write   # needed to commit the updated manifest back to main
-  issues: write     # to open a failure issue on error
+  contents: write   # commit manifest+snapshot+run_log
+  id-token: write   # for AWS OIDC role assumption
+  issues: write     # to open a failure issue if S3 sync fails
 
 concurrency:
-  group: pipeline
+  group: pipeline-publish
   cancel-in-progress: false
 
 jobs:
-  sample:
+  publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: true
-
-      - name: Set up Python
-        # Pinned patch version keeps weekly pipeline output reproducible
-        # across minor CPython updates. Bump deliberately, not via drift.
-        run: uv python install 3.12.7
-
-      - name: Install deps
-        run: uv sync --frozen || uv sync
-
-      - name: Cache HuggingFace model
-        # Caches sentence-transformers/all-mpnet-base-v2 (~400 MB) used by
-        # the embedding-centroid drift metric. Cold restore is ~60 sec;
-        # warm restore is a few seconds. Bump the v# suffix to invalidate
-        # when intentionally upgrading the embedding model.
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/huggingface
-          key: hf-mpnet-base-v2-v1
-
-      - name: Verify at least one provider secret is set
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        # A silently-missing secret would produce a partial manifest with
-        # no failure signal. Fail here instead, loudly.
+      - name: Resolve target week
+        id: week
         run: |
           set -euo pipefail
-          if [ -z "${ANTHROPIC_API_KEY}" ] && [ -z "${OPENAI_API_KEY}" ]; then
-            echo "::error::No provider API keys are set. Configure ANTHROPIC_API_KEY and/or OPENAI_API_KEY in repository secrets before running." >&2
-            exit 2
-          fi
-          if [ -z "${ANTHROPIC_API_KEY}" ]; then
-            echo "::warning::ANTHROPIC_API_KEY is not set — the Anthropic runner will be skipped."
-          fi
-          if [ -z "${OPENAI_API_KEY}" ]; then
-            echo "::warning::OPENAI_API_KEY is not set — the OpenAI runner will be skipped."
+          if [ -n "${{ inputs.week }}" ]; then
+            echo "week=${{ inputs.week }}" >> "$GITHUB_OUTPUT"
+          else
+            # Default to the previous ISO week — matches the EC2
+            # wrapper's `date -u --date='yesterday' +'%G-W%V'` calc.
+            echo "week=$(date -u --date='yesterday' +'%G-W%V')" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Run pipeline
-        id: run
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: us-east-2
+
+      - name: Sync artifacts from S3
+        id: sync
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          # Hosted runners have no Ollama daemon; skip it without editing
-          # meridian/config.yaml (which stays accurate for local runs).
-          MERIDIAN_SKIP_PROVIDERS: ollama
+          BUCKET: ${{ vars.S3_BUCKET }}
+          PREFIX: ${{ vars.S3_PREFIX }}
+          WEEK: ${{ steps.week.outputs.week }}
         run: |
           set -euo pipefail
-          WEEK_ARG=""
-          if [ -n "${{ inputs.week }}" ]; then WEEK_ARG="--week ${{ inputs.week }}"; fi
-          FORCE_ARG=""
-          if [ "${{ inputs.force }}" = "true" ]; then FORCE_ARG="--force"; fi
-          uv run python -m meridian.pipeline.cli run --yes ${WEEK_ARG} ${FORCE_ARG}
+          PREFIX="${PREFIX:-meridian/}"
+          mkdir -p "data/manifests" "data/snapshots/${WEEK}" "site/fixtures"
 
-      - name: Commit fresh manifest
+          # Manifest. Required — abort if absent, the EC2 wrapper didn't
+          # produce a run.
+          aws s3 cp \
+            "s3://${BUCKET}/${PREFIX}manifests/${WEEK}.json" \
+            "data/manifests/${WEEK}.json"
+
+          # Site fixture is the same JSON in the build's expected path.
+          cp "data/manifests/${WEEK}.json" "site/fixtures/manifest-${WEEK}.json"
+
+          # Snapshot.
+          aws s3 cp \
+            "s3://${BUCKET}/${PREFIX}snapshots/${WEEK}/responses.jsonl.gz" \
+            "data/snapshots/${WEEK}/responses.jsonl.gz"
+
+          # Run-log: full overwrite from S3 (EC2 maintains it as the
+          # single appender now). If S3 has no run_log yet (first run),
+          # fall back to whatever's in the repo.
+          aws s3 cp \
+            "s3://${BUCKET}/${PREFIX}run_log.jsonl" \
+            "data/run_log.jsonl" || \
+            echo "(no run_log in S3 yet; keeping repo copy)"
+
+      - name: Commit fresh artifacts
         if: success()
+        env:
+          WEEK: ${{ steps.week.outputs.week }}
         run: |
+          set -euo pipefail
           git config user.name "meridian[bot]"
           git config user.email "meridian-bot@users.noreply.github.com"
-          git add site/fixtures/ data/manifests/ data/snapshots/ data/run_log.jsonl || true
+          git add \
+            "data/manifests/${WEEK}.json" \
+            "data/snapshots/${WEEK}/responses.jsonl.gz" \
+            "data/run_log.jsonl" \
+            "site/fixtures/manifest-${WEEK}.json" || true
           if git diff --cached --quiet; then
-            echo "no manifest changes to commit"
+            echo "no artifact changes to commit (S3 may not have updated yet)"
           else
-            git commit -m "chore(pipeline): weekly run for $(date -u +'%Y-W%V')"
+            git commit -m "chore(pipeline): publish ${WEEK} from S3"
             git push
           fi
 
@@ -126,13 +143,12 @@ jobs:
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `Pipeline failure: ${iso}`,
+              title: `Pipeline publish failed: ${iso}`,
               body: [
-                `The weekly pipeline run failed.`,
+                `The weekly publish step failed. Sampling lives on the EC2 cohabit instance now;`,
+                `if the artifact wasn't in S3, check the orchestrator Lambda CloudWatch logs.`,
                 ``,
                 `Run: ${run_url}`,
-                ``,
-                `Tail of \`data/run_log.jsonl\` (if persisted) may have details.`,
                 `Re-run via the \`workflow_dispatch\` button on this workflow.`,
               ].join("\n"),
               labels: ["pipeline", "automated", "bug"],

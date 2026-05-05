@@ -30,7 +30,11 @@
       </li>
       <li><a href="#statistics">Statistical rigor</a></li>
       <li><a href="#reproduce">Reproducing a chart</a></li>
-      <li><a href="#limits">Limitations and hard problems</a></li>
+      <li><a href="#limits">Limitations and hard problems</a>
+        <ul>
+          <li><a href="#data-gaps">Known data gaps</a></li>
+        </ul>
+      </li>
     </ul>
   </nav>
 
@@ -241,6 +245,24 @@
       are reported separately. Changes on clearly-harmful prompts are treated
       differently from changes on contested ones.</li>
   </ul>
+
+  <h3 id="data-gaps">Known data gaps</h3>
+  <p>
+    Weeks where a scheduled runner produced no samples are listed here
+    rather than silently interpolated. Time-series charts render these
+    as a break in the line; aggregate statistics exclude the missing
+    cell rather than imputing it. Backfilling after the fact is not
+    done &mdash; a sample taken later is not a sample taken that week,
+    and the local-baseline noise floor depends on real-time capture.
+  </p>
+  <dl class="metric-glossary">
+    <dt><code>2026-W17</code> &mdash; <code>llama3.2:3b</code></dt>
+    <dd>No samples written. The runner host for that week did not have
+      ollama installed; the failure was silent (no error in
+      <code>run_log.jsonl</code>) and was caught on review the
+      following week. Affects continuity of the local-baseline noise
+      floor for one week; does not affect any commercial-model metric.</dd>
+  </dl>
 
   <p class="callout">
     If you find a flaw in this methodology, open an issue. Transparency is the

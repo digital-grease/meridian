@@ -12,18 +12,21 @@ credentials leak.
 from __future__ import annotations
 
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Provider = Literal["anthropic", "openai", "ollama"]
 
 # A runner's schedule. v0.1 supports three patterns; cron expressions are
 # a v0.2 concern if we ever need finer control than "every / even / odd".
 Cadence = Literal["every_week", "even_weeks", "odd_weeks"]
+
+_DIGEST_RE = re.compile(r"^[a-f0-9]{64}$")
 
 
 class RunnerSpec(BaseModel):
@@ -33,6 +36,24 @@ class RunnerSpec(BaseModel):
     base_url: str | None = None   # for ollama / self-hosted
     enabled: bool = True
     cadence: Cadence = "every_week"
+    # Optional sha256 digest for control-group invariance. Currently
+    # honoured by the ollama runner: on startup the runner queries
+    # /api/tags and refuses to sample if the served digest doesn't
+    # match. Bare 64-char hex (no "sha256:" prefix) — that's the form
+    # ollama's API emits.
+    digest: str | None = None
+
+    @field_validator("digest")
+    @classmethod
+    def _validate_digest(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not _DIGEST_RE.match(v):
+            raise ValueError(
+                "digest must be a bare 64-char lowercase hex sha256 "
+                "(no 'sha256:' prefix); got " + repr(v)
+            )
+        return v
 
 
 def should_run_in_week(cadence: Cadence, week_id: str) -> bool:
@@ -172,7 +193,11 @@ def build_runners(config: PipelineConfig, *, week_id: str | None = None):
         elif spec.provider == "openai":
             out.append(OpenAIRunner(spec.model_id, api_key=os.environ.get("OPENAI_API_KEY")))
         elif spec.provider == "ollama":
-            out.append(OllamaRunner(spec.model_id, base_url=spec.base_url or "http://localhost:11434"))
+            out.append(OllamaRunner(
+                spec.model_id,
+                base_url=spec.base_url or "http://localhost:11434",
+                expected_digest=spec.digest,
+            ))
         else:  # pragma: no cover
             raise ValueError(f"unknown provider: {spec.provider}")
     return out

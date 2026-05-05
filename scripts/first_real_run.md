@@ -1,8 +1,16 @@
 # First real pipeline run — runbook
 
-This document is the step-by-step procedure for the project's first run
-against live LLM APIs. Follow it in order. Deviations should be recorded
-in the run log (`data/run_log.jsonl`) as comments if material.
+> **Architecture note (post-EC2 cutover):** Canonical weekly runs now
+> live on the cohabit `g5.2xlarge` per `infra/terraform/ec2-cohabit/`
+> and `scripts/ec2-runbook.md`. The procedure below is for **ad-hoc
+> local runs** — useful for one-off sampling, validating corpus
+> changes, and the historical first run. The EC2 path is what fires
+> automatically every Monday.
+
+This document is the step-by-step procedure for an interactive run
+against live LLM APIs from your local machine. Follow it in order.
+Deviations should be recorded in the run log (`data/run_log.jsonl`)
+as comments if material.
 
 ## Preconditions
 
@@ -104,3 +112,24 @@ This issue becomes the anchor for the second run's diff.
 
 Repeat above. The only change: the site now has real history to plot, so
 sparklines and the comparison analyzer produce meaningful output.
+
+## After the EC2 cutover
+
+For the routine weekly cadence, the EC2 path (`scripts/ec2-runbook.md`
+plus the Lambda + Scheduler in `infra/terraform/ec2-cohabit/`) replaces
+this runbook. CI fires Mon 13:00 UTC and only publishes — it pulls the
+manifest, snapshot, and run-log entry that the EC2 wrapper has already
+uploaded to S3 and commits them to `main`. No `meridian run` invocation
+on a GitHub-hosted runner.
+
+Local runs from this runbook are still useful for:
+
+- Verifying corpus changes against a small set of providers before
+  shipping them to the real weekly run.
+- Hand-debugging a flaky pair after the fact.
+- Sampling on a pre-launch corpus version (when the held-out set is in
+  flux).
+
+Local runs that produce data you want included in the public archive
+should also `aws s3 cp` their outputs into the bucket so the next CI
+publish picks them up.

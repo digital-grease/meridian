@@ -97,6 +97,23 @@ Take the output role ARN and add it to `.github/workflows/weekly-pipeline.yml`:
 
 No long-lived keys anywhere.
 
+### After the EC2 cutover: removing legacy provider-API secrets
+
+In the pre-EC2-cutover architecture, the weekly-pipeline workflow ran
+`meridian run` directly on a GitHub-hosted runner and pulled provider
+API keys from GitHub repository secrets. After the cutover (see
+`../ec2-cohabit/README.md`), sampling moves to EC2; CI becomes
+publish-only and authenticates via the OIDC role above. The legacy
+provider-API-key secrets in GitHub are no longer referenced by any
+workflow and should be removed — keeping unreferenced secrets is a
+passive attack surface (any contributor with workflow-edit access can
+exfiltrate them by adding a step that prints them).
+
+Delete via the GitHub UI (repo Settings → Secrets and variables →
+Actions) or `gh secret delete`. The provider keys themselves continue
+to exist — the EC2 wrapper fetches them from AWS SSM Parameter Store
+at sample time, per the cohabit module.
+
 ## Threat model notes
 
 - **Bucket takeover via typosquatted name.** Bucket names are globally unique
