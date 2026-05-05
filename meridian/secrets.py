@@ -61,8 +61,8 @@ def resolve_ssm_secrets() -> None:
     if not pending:
         return
 
-    # Lazy import — boto3 is in the project deps but the cli module loads
-    # for other subcommands that don't touch AWS at all.
+    # Lazy import — keeps the boto3 import cost off the hot path of every
+    # CLI subcommand even though boto3 is a guaranteed hard dependency.
     import boto3  # noqa: PLC0415
 
     client = boto3.client("ssm")

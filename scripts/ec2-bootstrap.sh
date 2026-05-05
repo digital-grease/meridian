@@ -152,7 +152,11 @@ mkdir -p "$MERIDIAN_HOME/ollama-models"
 chown -R "$MERIDIAN_USER:$MERIDIAN_USER" "$MERIDIAN_HOME/ollama-models"
 
 systemctl daemon-reload
-systemctl enable --now ollama
+systemctl enable ollama
+# `enable --now` is a no-op if the service is already running (the
+# ollama installer starts it before we lay down the meridian override),
+# so use restart to force the env vars to take effect on this run.
+systemctl restart ollama
 
 # 5. Install uv system-wide (idempotent — installer skips if same version).
 if ! command -v uv >/dev/null 2>&1; then

@@ -17,6 +17,11 @@ dependencies = [
   "tenacity>=8,<10",
   "anthropic>=0.40,<1",
   "openai>=1.40,<2",
+  # AWS — required for SSM-backed secrets resolution and S3 archival.
+  # Both are gated by config / env vars at runtime, but the EC2 path
+  # always needs them, so they're hard deps not optional groups.
+  "boto3>=1.34,<2",
+  "botocore>=1.34,<2",
 ]
 
 [dependency-groups]
@@ -46,12 +51,6 @@ search = [
 parquet = [
   # /data/{week}/metrics.parquet emission. Optional; adds ~20 MB.
   "pyarrow>=15,<21",
-]
-storage-s3 = [
-  # S3 archival of raw samples + published manifests. Config-gated in
-  # meridian/config.yaml; when disabled, not needed at runtime.
-  "boto3>=1.34,<2",
-  "botocore>=1.34,<2",
 ]
 storage-s3-dev = [
   # moto provides an in-process S3 mock for the uploader tests.

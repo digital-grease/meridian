@@ -86,8 +86,14 @@ variables.
 
 ```bash
 sudo -u meridian git clone https://github.com/digital-grease/meridian.git /data/meridian/repo
-sudo -u meridian bash -c 'cd /data/meridian/repo && uv sync'
+sudo -u meridian bash -c 'cd /data/meridian/repo && uv sync --group changepoint'
 ```
+
+`--group changepoint` adds `ruptures` for change-point detection in
+manifest builds. boto3 is in the main dependency block so plain
+`uv sync` already provides it; `analysis-heavy` (sentence-transformers
++ pytorch, ~5 GB) is only needed if you flip `embedding.enabled: true`
+in `config.yaml`.
 
 The wrapper script (`scripts/run-weekly.sh`) is now at the path
 `infra/terraform/ec2-cohabit/variables.tf` references as

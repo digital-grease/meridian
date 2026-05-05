@@ -88,13 +88,7 @@ class S3SampleUploader:
         if client is not None:
             self._client = client
         else:
-            try:
-                import boto3  # noqa: PLC0415
-            except ImportError as e:
-                raise RuntimeError(
-                    "S3 upload requires the `storage-s3` dep group. "
-                    "Install with: uv sync --group storage-s3"
-                ) from e
+            import boto3  # noqa: PLC0415
             kwargs: dict[str, object] = {}
             if spec.region:
                 kwargs["region_name"] = spec.region
