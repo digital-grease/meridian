@@ -335,13 +335,28 @@ def render_dashboard(
             env, "model.html",
             out_dir / "models" / m.model_id / "index.html", ctx,
         )
-        # Model x week drill-down: only the current week gets a page for v1.
+        # Model x week drill-down: render the current week and every
+        # historical week the manifest carries. URL stability is a hard
+        # project guarantee — once /models/<id>/<week>/ has been
+        # published, it must continue to resolve. Without this loop the
+        # link-rot guard fails every week as the current week rotates.
         render_page(
             env, "model_week.html",
             out_dir / "models" / m.model_id / manifest.snapshot.week_id / "index.html",
             dict(ctx, week_id=manifest.snapshot.week_id,
                  week_metrics=[mx for mx in manifest.metrics if mx.model_id == m.model_id]),
         )
+        for h in manifest.history:
+            # Render the page even when the model has no metrics that
+            # week — off-cadence weeks produce empty pages, but the URL
+            # itself must stay resolvable. The template handles
+            # empty week_metrics by showing a "no data this week" state.
+            week_metrics = [mx for mx in h.metrics if mx.model_id == m.model_id]
+            render_page(
+                env, "model_week.html",
+                out_dir / "models" / m.model_id / h.week_id / "index.html",
+                dict(ctx, week_id=h.week_id, week_metrics=week_metrics),
+            )
 
     render_page(
         env, "models_index.html",
