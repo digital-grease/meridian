@@ -188,6 +188,22 @@ class S3SampleUploader:
         )
         return report
 
+    def upload_run_log(self, run_log_path: Path) -> UploadReport:
+        """Upload the append-only run log to ``run_log.jsonl`` at the
+        bucket root (under the configured prefix). Each weekly run
+        overwrites the object with the latest full file — bucket
+        versioning preserves history. Missing local file is a no-op."""
+        report = UploadReport()
+        if not run_log_path.exists():
+            return report
+        self._put_file(
+            run_log_path,
+            _s3_key(self.spec.prefix, "run_log.jsonl"),
+            report=report,
+            content_type="application/x-ndjson",
+        )
+        return report
+
 
 def maybe_build_uploader(spec: S3StorageSpec | None) -> S3SampleUploader | None:
     """Construct an uploader when ``spec`` is present, else ``None``.

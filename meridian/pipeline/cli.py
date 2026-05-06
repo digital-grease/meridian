@@ -308,7 +308,9 @@ def _maybe_archive_to_s3(
     print(f"s3: raw samples — {raw_report.pretty()}")
     manifest_report = uploader.upload_manifest(public_manifest_path, week_id)
     print(f"s3: manifest    — {manifest_report.pretty()}")
-    reports = [raw_report, manifest_report]
+    run_log_report = uploader.upload_run_log(REPO_ROOT / "data" / "run_log.jsonl")
+    print(f"s3: run log     — {run_log_report.pretty()}")
+    reports = [raw_report, manifest_report, run_log_report]
     if responses_path is not None:
         responses_report = uploader.upload_responses_snapshot(responses_path, week_id)
         print(f"s3: responses   — {responses_report.pretty()}")
