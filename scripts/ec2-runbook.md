@@ -77,10 +77,15 @@ terraform -chdir=infra/terraform/ec2-cohabit output -raw alerts_topic_arn
 sudo nano /etc/meridian/config.env
 ```
 
-Replace `REPLACE-WITH-SNS-TOPIC-ARN` with the ARN from `terraform
-output`. The other defaults (region, SSM secret paths) match the
-Terraform module's defaults; only override if you customised the
-variables.
+Two fields need values:
+
+- `SNS_TOPIC_ARN` — paste the ARN from `terraform output -raw alerts_topic_arn`.
+- `MERIDIAN_S3_BUCKET` — paste your archive bucket name (matches
+  `bucket_name` in `infra/terraform/s3/terraform.tfvars` and
+  `storage.s3.bucket` in `meridian/config.yaml`).
+
+The other defaults (region, prefix, SSM secret paths) match the
+Terraform modules' defaults; only override if you customised them.
 
 ## Step 4 — Clone the meridian repo
 

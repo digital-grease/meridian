@@ -187,9 +187,10 @@ MERIDIAN_SECRETS_SSM_ANTHROPIC_PATH="/meridian/anthropic-api-key"
 MERIDIAN_SECRETS_SSM_OPENAI_PATH="/meridian/openai-api-key"
 
 # S3 archive — must match storage.s3 in meridian/config.yaml. The
-# wrapper does not read these; they're here for runbook clarity.
-# MERIDIAN_S3_BUCKET=""
-# MERIDIAN_S3_PREFIX="meridian/"
+# wrapper reads these to pre-sync raw before each run, so the
+# orchestrator's host-local idempotency check sees the global state.
+MERIDIAN_S3_BUCKET="REPLACE-WITH-ARCHIVE-BUCKET-NAME"
+MERIDIAN_S3_PREFIX="meridian/"
 EOF
   chmod 644 /etc/meridian/config.env
 fi

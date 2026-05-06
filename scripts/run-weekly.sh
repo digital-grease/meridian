@@ -118,6 +118,27 @@ uv sync --frozen >/dev/null || uv sync >/dev/null
 
 # ----------------------- 3. Run pipeline -------------------------------
 WEEK="${WEEK:-$(date -u --date='yesterday' +'%G-W%V')}"
+
+# Pre-sync any existing raw for the target week from S3. Raw data is
+# host-local (`data/raw/` is gitignored), but S3 is the cross-host
+# source of truth. Without this sync, a freshly-provisioned host sees
+# no existing samples and the orchestrator's idempotency check would
+# resample everything — burning API budget on data that already exists.
+S3_BUCKET="${MERIDIAN_S3_BUCKET:-}"
+S3_PREFIX="${MERIDIAN_S3_PREFIX:-meridian/}"
+if [ -n "$S3_BUCKET" ]; then
+  log "syncing s3://${S3_BUCKET}/${S3_PREFIX}raw/${WEEK}/ → data/raw/${WEEK}/"
+  mkdir -p "${REPO_DIR}/data/raw/${WEEK}"
+  if ! aws --region "$AWS_REGION" s3 sync \
+        "s3://${S3_BUCKET}/${S3_PREFIX}raw/${WEEK}/" \
+        "${REPO_DIR}/data/raw/${WEEK}/" \
+        --no-progress; then
+    log "WARN: s3 sync failed; continuing with local raw only — orchestrator may resample"
+  fi
+else
+  log "MERIDIAN_S3_BUCKET unset; skipping pre-run S3 sync (idempotency is host-local only)"
+fi
+
 log "running pipeline for ISO week $WEEK"
 
 # meridian.secrets.resolve_ssm_secrets() activates because
