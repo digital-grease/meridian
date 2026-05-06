@@ -149,7 +149,11 @@ Environment=OLLAMA_MODELS=$MERIDIAN_HOME/ollama-models
 Environment=OLLAMA_HOST=127.0.0.1:11434
 EOF
 mkdir -p "$MERIDIAN_HOME/ollama-models"
-chown -R "$MERIDIAN_USER:$MERIDIAN_USER" "$MERIDIAN_HOME/ollama-models"
+# The systemd ollama unit runs as User=ollama, Group=ollama (set by the
+# upstream installer). The models dir must be writable by that user, not
+# by meridian. /data/meridian itself stays meridian-owned at mode 755 so
+# the ollama user can traverse but not modify outside its subdir.
+chown -R ollama:ollama "$MERIDIAN_HOME/ollama-models"
 
 systemctl daemon-reload
 systemctl enable ollama

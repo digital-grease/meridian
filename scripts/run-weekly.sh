@@ -103,12 +103,11 @@ fi
 log "pre-flight: clear"
 
 # Wait for ollama to be reachable. systemd starts the unit at boot but
-# the daemon needs a few seconds to bind 11434; if we run the pipeline
-# before that, the ollama runner's digest-check prepare() fails with
-# "All connection attempts failed". 60s cap is generous — typical wait
-# is 5-15s on a g5.2xlarge cold boot.
+# the daemon needs a few seconds to bind 11434, and longer if the
+# models dir has to be scanned. 180s cap covers cold-boot with a
+# populated /data/meridian/ollama-models; typical wait is 5-30s.
 log "waiting for ollama to be reachable"
-for _ in $(seq 1 30); do
+for _ in $(seq 1 90); do
   if curl -fsS --max-time 2 http://localhost:11434/api/tags >/dev/null 2>&1; then
     log "ollama reachable"
     break
@@ -116,7 +115,7 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 if ! curl -fsS --max-time 2 http://localhost:11434/api/tags >/dev/null 2>&1; then
-  publish "FAILED — ollama not reachable" "ollama did not respond on http://localhost:11434/api/tags within 60s. Check 'systemctl status ollama' on the instance."
+  publish "FAILED — ollama not reachable" "ollama did not respond on http://localhost:11434/api/tags within 180s. Check 'systemctl status ollama' on the instance."
   exit 3
 fi
 
