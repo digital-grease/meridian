@@ -7,7 +7,7 @@ on:
   # the pipeline workflow uses to commit the new manifest — so this
   # workflow_run trigger is the actual mechanism that couples the two.
   workflow_run:
-    workflows: ["Weekly pipeline run"]
+    workflows: ["Weekly pipeline publish"]
     types: [completed]
     branches: [main]
   # Belt-and-suspenders cron in case the pipeline didn't run (missed
