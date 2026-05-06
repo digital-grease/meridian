@@ -120,6 +120,10 @@
         "lambda:GetFunctionConfiguration",
         "lambda:GetFunctionConcurrency",
         "lambda:GetFunctionCodeSigningConfig",
+        "lambda:GetFunctionEventInvokeConfig",
+        "lambda:PutFunctionEventInvokeConfig",
+        "lambda:UpdateFunctionEventInvokeConfig",
+        "lambda:DeleteFunctionEventInvokeConfig",
         "lambda:ListVersionsByFunction",
         "lambda:InvokeFunction",
         "lambda:UpdateFunctionCode",
@@ -208,10 +212,53 @@
     },
 
     {
+      "Sid": "EventBridgeSchedulerListAll",
+      "Effect": "Allow",
+      "Action": [
+        "scheduler:ListSchedules",
+        "scheduler:ListScheduleGroups"
+      ],
+      "Resource": "*"
+    },
+
+    {
+      "Sid": "CloudWatchMetricsReadForDebugging",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:GetMetricStatistics",
+        "cloudwatch:GetMetricData",
+        "cloudwatch:ListMetrics"
+      ],
+      "Resource": "*"
+    },
+
+    {
       "Sid": "StsCallerIdentity",
       "Effect": "Allow",
       "Action": "sts:GetCallerIdentity",
       "Resource": "*"
+    },
+
+    {
+      "Sid": "CloudTrailReadForDebugging",
+      "Effect": "Allow",
+      "Action": [
+        "cloudtrail:LookupEvents"
+      ],
+      "Resource": "*"
+    },
+
+    {
+      "Sid": "CloudWatchLogsReadForDebugging",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogStreams",
+        "logs:GetLogEvents",
+        "logs:FilterLogEvents",
+        "logs:StartLiveTail",
+        "logs:StopLiveTail"
+      ],
+      "Resource": "arn:aws:logs:*:*:log-group:/aws/lambda/meridian-*:*"
     }
   ]
 }

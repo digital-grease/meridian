@@ -167,8 +167,17 @@ Last step — confirm the scheduled path works end-to-end. With the
 instance stopped:
 
 ```bash
+# IMPORTANT: --cli-read-timeout 600 is required.
+# The Lambda's _wait_for_ready blocks for up to ~10 min while the
+# instance boots. Without this flag, AWS CLI's default 60s read
+# timeout fires; the CLI retries; AWS Lambda treats the retry as a
+# fresh invocation and fires the function a second time. The second
+# invocation finds the instance already running and takes the
+# deferral path (which is harmless but generates a noisy SNS email
+# and a misleading CloudTrail trail).
 aws lambda invoke \
     --function-name meridian-orchestrator \
+    --cli-read-timeout 600 --cli-connect-timeout 10 \
     --region us-east-2 \
     /tmp/meridian-orch.json
 

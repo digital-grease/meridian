@@ -119,3 +119,16 @@ resource "aws_cloudwatch_log_group" "lambda" {
   name              = "/aws/lambda/${aws_lambda_function.orchestrator.function_name}"
   retention_in_days = 14
 }
+
+# Pin async-invoke retries to zero. The Lambda's default is 2 retries on a
+# ~60s/120s interval, which compounds problems: a failed weekly run would
+# trigger two more invocations (and two more failure emails) instead of one.
+# We want failures to alert via SNS once and stop. EventBridge Scheduler
+# invokes Lambda async; this config takes effect for that path. (Sync invokes
+# don't read this config — for those, the read-timeout-then-retry behavior
+# of the AWS CLI is the operator's responsibility, see scripts/ec2-runbook.md.)
+resource "aws_lambda_function_event_invoke_config" "orchestrator" {
+  function_name                = aws_lambda_function.orchestrator.function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 60
+}
