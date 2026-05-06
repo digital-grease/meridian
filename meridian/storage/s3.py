@@ -118,12 +118,15 @@ class S3SampleUploader:
                 report.files_skipped += 1
                 return
             with path.open("rb") as body:
+                # Don't pass ContentMD5 — botocore defaults to a CRC32
+                # trailer checksum, which S3 accepts. Passing an empty
+                # string explicitly produces an "InvalidDigest" error
+                # because boto3 sends a literal empty Content-MD5 header.
                 self._client.put_object(
                     Bucket=self.spec.bucket,
                     Key=key,
                     Body=body,
                     ContentType=content_type,
-                    ContentMD5="",  # boto3 can compute on its own when needed
                 )
             report.files_uploaded += 1
             report.bytes_uploaded += path.stat().st_size
