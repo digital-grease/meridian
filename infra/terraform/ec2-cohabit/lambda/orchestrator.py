@@ -129,7 +129,14 @@ def _send_wrapper(we_own_lifecycle: bool) -> str:
     # control-plane mishap that could land shell metacharacters in a
     # Terraform-managed env var or path.
     flag = "1" if we_own_lifecycle else "0"
+    # SSM RunCommand runs as root by default. We `sudo -u meridian env`
+    # so the wrapper executes as the meridian system user — same UID
+    # that owns /data/meridian/repo, the venv, and the log directory.
+    # Without this, git refuses to operate (dubious ownership) and any
+    # files the wrapper writes end up owned by root, breaking the next
+    # run.
     cmd = (
+        f"sudo -u meridian env "
         f"WE_OWN_LIFECYCLE={shlex.quote(flag)} "
         f"SNS_TOPIC_ARN={shlex.quote(SNS_TOPIC_ARN)} "
         f"{shlex.quote(WRAPPER_SCRIPT_PATH)}"

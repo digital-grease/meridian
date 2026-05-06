@@ -121,6 +121,7 @@
         "lambda:GetFunctionConcurrency",
         "lambda:GetFunctionCodeSigningConfig",
         "lambda:ListVersionsByFunction",
+        "lambda:InvokeFunction",
         "lambda:UpdateFunctionCode",
         "lambda:UpdateFunctionConfiguration",
         "lambda:GetPolicy",
