@@ -167,11 +167,12 @@
       <code>sentence-transformers/all-mpnet-base-v2</code>; the
       pipeline exposes a Protocol so alternative models can be swapped
       in without changing the manifest contract.
-      <strong>Operating note:</strong> currently disabled by default
-      (config <code>embedding.enabled: false</code>) until the
-      ~400&nbsp;MB model load is benchmarked against a hosted CI runner;
-      <code>embedding_centroid_shift</code> on metric records is
-      <code>null</code> while the flag is off.</dd>
+      <strong>Operating note:</strong>
+      <code>embedding_centroid_shift</code> is populated once a model has a
+      prior on-cadence week to compare against. Because the commercial roster
+      alternates by ISO-week parity, each commercial model is compared with
+      the previous week <em>it</em> ran, not the immediately preceding
+      calendar week.</dd>
 
     <dt id="stance">Stance</dt>
     <dd>Each response is classified as pro / anti / neutral / na. The

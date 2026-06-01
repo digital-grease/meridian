@@ -130,8 +130,26 @@ cd "$REPO_DIR"
 git fetch --quiet origin main || log "WARN: git fetch failed; running with current code"
 git -c advice.detachedHead=false reset --hard origin/main || log "WARN: git reset failed"
 
-log "uv sync"
-uv sync --frozen >/dev/null || uv sync >/dev/null
+# The manifest build runs the heavy analyses on this host (embedding-
+# centroid drift + PELT change-point detection), so their optional
+# dependency groups must be installed here. Plain `uv sync` installs only
+# the default group; without --group the analysis-heavy (sentence-
+# transformers + numpy) and changepoint (ruptures) deps are absent, the
+# lazy imports fail, and embedding_centroid_shift / change_points come out
+# silently empty on every record. CI never installs these — it only
+# publishes the manifest this host already built. The GPU on the cohabit
+# g5.2xlarge makes the embedding pass cheap; deps cache on the persistent
+# EBS volume so the cost is paid once.
+# The non-frozen fallback mirrors .github/workflows/weekly-build.yml: a fresh
+# resolve must still honour the 7-day dependency cooldown (renovate.json /
+# COOLDOWNS.md), and this host produces the data of record, so an un-cooled
+# resolve here is worse than in CI. --exclude-newer "7 days" needs uv>=0.9.17
+# (what ec2-bootstrap installs); the final bare resolve is a last-ditch guard
+# if an older uv on a long-lived instance can't parse the relative duration.
+log "uv sync (+ analysis-heavy, changepoint)"
+uv sync --frozen --group analysis-heavy --group changepoint >/dev/null \
+  || uv sync --exclude-newer "7 days" --group analysis-heavy --group changepoint >/dev/null \
+  || uv sync --group analysis-heavy --group changepoint >/dev/null
 
 # ----------------------- 3. Run pipeline -------------------------------
 WEEK="${WEEK:-$(date -u --date='yesterday' +'%G-W%V')}"

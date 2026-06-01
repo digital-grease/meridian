@@ -1065,14 +1065,19 @@ def notable_shifts(manifest: Manifest, *, top_n: int = 3) -> list[dict]:
     """
     if not manifest.history:
         return []
+    # Most-recent prior value PER (prompt × model), walking newest→oldest.
+    # We must NOT stop at the first non-empty snapshot: the commercial roster
+    # alternates by ISO-week parity, so on (say) an even-week publish the
+    # immediately-prior snapshot holds the odd-week model only. Breaking there
+    # would leave every even-week model without a prior and silently drop it
+    # from the headline cards. Accumulating per-key instead pairs each model
+    # with the previous week *it* ran (matching the manifest's drift logic).
     prior_metrics_by_key: dict[tuple[str, str], "MetricRecord"] = {}
     for h in reversed(manifest.history):
         for m in h.metrics:
             key = (m.prompt_id, m.model_id)
             if key not in prior_metrics_by_key:
                 prior_metrics_by_key[key] = m
-        if prior_metrics_by_key:
-            break
     if not prior_metrics_by_key:
         return []
 
@@ -1179,7 +1184,7 @@ def _metric_status(manifest: Manifest) -> list[dict]:
          "status": "live" if has_embedding else "off",
          "note": ("Sentence-transformers cosine-distance week over week"
                   if has_embedding
-                  else "Currently off (config: embedding.enabled=false)")},
+                  else "No embedding_centroid_shift on any row this week")},
         {"metric": "Silent-update warnings",
          "status": "live" if has_silent_update else "live (no flags this week)",
          "note": ("Anomalies on the neutral-control axis"

@@ -11,6 +11,7 @@ site consumes. It is the bridge between pipeline and presentation.
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -56,6 +57,10 @@ class RunnerDisplayInfo:
     display_name: str
     provider: str
 
+
+# Child of the "meridian" logger the CLI configures, so warnings here
+# surface on stderr in the EC2 weekly run (captured in run-weekly.sh's log).
+_log = logging.getLogger("meridian.manifest")
 
 MIN_SAMPLES_FOR_PUBLICATION = 10
 
@@ -186,6 +191,13 @@ def _populate_change_points(
     try:
         from meridian.analysis.change_point import detect_change_points
     except Exception:
+        _log.warning(
+            "change-point detection unavailable (ruptures import failed); "
+            "change_points will be empty for every record this run. "
+            "Ensure the 'changepoint' dependency group is installed "
+            "(uv sync --group changepoint).",
+            exc_info=True,
+        )
         return
 
     # Build a lookup: (prompt_id, model_id) -> oldest-first list of (week_id, record).
@@ -242,10 +254,59 @@ def _apply_bh_correction(metrics: list[dict], *, fdr: float = BH_FDR) -> None:
         entry["significant_after_bh"] = decision.rejected
 
 
-def _prior_week_in_storage(store: LocalSampleStore, week_id: str) -> str | None:
-    """The chronologically-nearest week before ``week_id`` present in storage."""
-    prior = [w for w in store.weeks() if w < week_id]
-    return prior[-1] if prior else None
+def _prior_week_for_model(
+    store: LocalSampleStore, week_id: str, model_id: str
+) -> str | None:
+    """Nearest week before ``week_id`` in which ``model_id`` was actually sampled.
+
+    The roster runs on an alternating cadence (e.g. one commercial model on
+    even ISO weeks, another on odd — see ``meridian/sampling/weeks.py``), so
+    the calendar-previous week usually does NOT contain a given commercial
+    model. Week-over-week drift must therefore compare a model against the
+    last week *it* ran, not the immediately-preceding week.
+
+    Resolving against the immediately-preceding week instead (the original
+    behaviour) meant alternating-cadence models never had a prior bucket to
+    diff against, so their refusal/hedge/length/embedding drift was always
+    ``None`` — the headline drift signal for exactly the commercial models
+    the project exists to track. ``llama3.2:3b`` (every week) was unaffected
+    and masked the bug.
+
+    The comparison window is therefore variable: usually one cadence gap
+    (e.g. an even-week model vs. two ISO weeks prior), but wider if the model
+    skipped a scheduled week. Drift is "since this model last ran", not a
+    fixed 7-day delta.
+    """
+    for w in reversed(store.weeks()):  # store.weeks() is sorted ascending
+        if w < week_id and model_id in store.models_for_week(w):
+            return w
+    return None
+
+
+def _probe_embedding_model(embedding_model: "EmbeddingModel") -> bool:
+    """Encode a throwaway string to surface a dead embedding backend loudly.
+
+    ``SentenceTransformerModel`` loads its transformer lazily on first
+    ``encode``, and the per-record centroid call swallows exceptions to keep
+    an optional analysis from failing the whole build. Together that means a
+    missing ``analysis-heavy`` dependency group (sentence-transformers /
+    numpy not installed) produces ``embedding_centroid_shift=None`` on *every*
+    record with no signal anywhere. Probe once up front and log an error so
+    "embedding drift silently disabled" is visible in the run log instead of
+    looking like "no drift detected".
+    """
+    try:
+        embedding_model.encode(["probe"])
+        return True
+    except Exception:  # intentionally broad: any failure means "no embeddings"
+        _log.error(
+            "embedding model unavailable (encode probe failed); "
+            "embedding_centroid_shift will be None for every record this run. "
+            "Ensure the 'analysis-heavy' dependency group is installed "
+            "(uv sync --group analysis-heavy).",
+            exc_info=True,
+        )
+        return False
 
 
 def _metrics_for_week(
@@ -262,18 +323,27 @@ def _metrics_for_week(
     """Compute per-(prompt × model) metrics for one week over ``prompts``.
 
     When ``include_drift_tests`` is True, also compute per-metric
-    two-sample p-values against the chronologically-nearest prior week
-    in storage. BH correction is *not* applied here — see
+    two-sample p-values against the last week *this model* ran (see
+    :func:`_prior_week_for_model` — not the calendar-previous week, which
+    the alternating cadence usually leaves empty for a given commercial
+    model). BH correction is *not* applied here — see
     :func:`_apply_bh_correction`, which must run over the whole
     returned list.
     """
     metrics: list[dict] = []
-    prior_week = (
-        _prior_week_in_storage(store, week_id)
-        if (embedding_model or include_drift_tests)
-        else None
-    )
+    want_prior = embedding_model is not None or include_drift_tests
+    # The embedding backend loads lazily on first encode, so we probe it
+    # lazily too — on the first record that actually has a prior week to
+    # compare against. A dead backend (e.g. the analysis-heavy dep group
+    # missing on the host) is then reported loudly and disabled for the rest
+    # of the run, instead of silently nulling every record. On weeks where no
+    # model has a prior bucket yet, nothing is embeddable and the probe never
+    # runs — so we neither pay the model load nor log a spurious error.
+    embedding_ok: bool | None = None
     for model_id in store.models_for_week(week_id):
+        prior_week = (
+            _prior_week_for_model(store, week_id, model_id) if want_prior else None
+        )
         for prompt in prompts:
             samples = store.read(week_id, model_id, prompt.id)
             if not samples:
@@ -284,15 +354,23 @@ def _metrics_for_week(
                 prior_samples = store.read(prior_week, model_id, prompt.id)
             cshift: float | None = None
             if embedding_model is not None and prior_samples:
-                try:
-                    from meridian.analysis.embedding import centroid_shift
-                    cshift = centroid_shift(
-                        [s.text for s in samples],
-                        [s.text for s in prior_samples],
-                        embedding_model,
-                    )
-                except Exception:
-                    cshift = None
+                if embedding_ok is None:
+                    embedding_ok = _probe_embedding_model(embedding_model)
+                if embedding_ok:
+                    try:
+                        from meridian.analysis.embedding import centroid_shift
+                        cshift = centroid_shift(
+                            [s.text for s in samples],
+                            [s.text for s in prior_samples],
+                            embedding_model,
+                        )
+                    except Exception:
+                        _log.warning(
+                            "centroid_shift failed for %s/%s; leaving "
+                            "embedding_centroid_shift=None",
+                            model_id, prompt.id, exc_info=True,
+                        )
+                        cshift = None
             metrics.append(
                 _metric_record_dict(
                     prompt_id=prompt.id,

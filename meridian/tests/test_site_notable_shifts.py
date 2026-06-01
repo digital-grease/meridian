@@ -59,6 +59,51 @@ def _manifest_with_history(current_metrics: list[dict], prior_metrics: list[dict
     return Manifest.model_validate(raw)
 
 
+def test_cadence_alternating_model_paired_with_its_last_run():
+    """Regression: on an even-week publish, the immediately-prior history
+    snapshot holds only the odd-week model. The even-week model's prior must
+    come from the older snapshot where it actually ran — otherwise it is
+    silently dropped from the notable-shift cards (the bug: ``break`` after
+    the first non-empty snapshot).
+    """
+    even, odd = "m-even", "m-odd"
+    raw = {
+        "schema_version": 2,
+        "snapshot": {
+            "week_id": "2026-W18", "generated_at": "2026-04-25T00:00:00+00:00",
+            "corpus_git_sha": "abc1234", "pipeline_version": "0.1.0",
+        },
+        "models": [
+            {"model_id": even, "display_name": "Even", "provider": "fake",
+             "version_string": "v1", "available": True},
+            {"model_id": odd, "display_name": "Odd", "provider": "fake",
+             "version_string": "v1", "available": False},
+        ],
+        "prompts": [
+            {"prompt_id": "p1", "axis": "political", "title": "P1",
+             "text_hash": "a" * 64, "held_out": False},
+        ],
+        "metrics": [_metric("p1", even, 0.9, 1.0, 200)],
+        # history is oldest-first (build_manifest sorts it that way);
+        # notable_shifts walks reversed(history) = W17 (odd) then W16 (even).
+        "history": [
+            {"week_id": "2026-W16", "generated_at": "2026-04-13T00:00:00+00:00",
+             "metrics": [_metric("p1", even, 0.1, 1.0, 200)]},
+            {"week_id": "2026-W17", "generated_at": "2026-04-19T00:00:00+00:00",
+             "metrics": [_metric("p1", odd, 0.5, 1.0, 200)]},
+        ],
+        "flagged": [], "silent_update_warnings": [],
+    }
+    out = notable_shifts(Manifest.model_validate(raw))
+
+    assert even in {s["model_id"] for s in out}, \
+        "even-week model must pair with its W16 prior, not be dropped at W17"
+    refusal = next(s for s in out if s["metric"] == "refusal_rate" and s["model_id"] == even)
+    # Paired against W16 (even's last run, 0.1) — NOT W17 (odd model, 0.5).
+    assert refusal["from_value"] == 0.1
+    assert refusal["to_value"] == 0.9
+
+
 def test_no_history_returns_empty():
     m = Manifest.model_validate({
         "schema_version": 2,

@@ -3,6 +3,7 @@ both the site's Pydantic model and its JSON Schema."""
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -307,3 +308,173 @@ def test_drift_tests_absent_without_prior_week(tmp_path: Path):
         assert m["refusal_drift"] is None
         assert m["hedge_drift"] is None
         assert m["length_drift"] is None
+
+
+def test_drift_compares_against_last_week_model_ran_not_calendar_prior(tmp_path: Path):
+    """Alternating-cadence regression.
+
+    A model that runs only on even weeks must diff against its previous even
+    week, skipping the odd week where a *different* model ran. Before the
+    per-model prior-week fix, drift was resolved against the calendar-previous
+    week — which for an alternating-cadence model is empty — so all of its
+    drift fields came out None and the commercial-model drift signal (the
+    whole point of the project) was never computed.
+    """
+    corpus = load_corpus()
+    even_model = "fake-model-even"   # runs W14, W16  (≈ anthropic, even weeks)
+    odd_model = "fake-model-odd"     # runs W15       (≈ openai, odd weeks)
+    seeded = corpus.public()[:3]
+    shift_prompt = seeded[0].id
+
+    store = LocalSampleStore(tmp_path)
+    # W14: even_model baseline, all non-refusal.
+    for prompt in seeded:
+        for i in range(20):
+            store.append(
+                "2026-W14", even_model, prompt.id,
+                _fake_sample(prompt_id=prompt.id, model_id=even_model, idx=i,
+                             text="This is a substantive answer without refusals."),
+            )
+    # W15: a DIFFERENT model occupies the calendar-previous week.
+    for prompt in seeded:
+        for i in range(20):
+            store.append(
+                "2026-W15", odd_model, prompt.id,
+                _fake_sample(prompt_id=prompt.id, model_id=odd_model, idx=i,
+                             text="This is a substantive answer without refusals."),
+            )
+    # W16: even_model again, with one prompt flipped hard 0→1 to refusal.
+    for prompt in seeded:
+        for i in range(20):
+            text = (
+                "I can't help with that request."
+                if prompt.id == shift_prompt
+                else "This is a substantive answer without refusals."
+            )
+            store.append(
+                "2026-W16", even_model, prompt.id,
+                _fake_sample(prompt_id=prompt.id, model_id=even_model, idx=i, text=text),
+            )
+
+    manifest = build_manifest(
+        store=store, corpus=corpus, week_id="2026-W16",
+        history_weeks=4, bootstrap_seed=123,
+    )
+
+    # Only even_model ran in W16, so all current metrics are its.
+    assert {m["model_id"] for m in manifest["metrics"]} == {even_model}
+    by_prompt = {m["prompt_id"]: m for m in manifest["metrics"]}
+
+    # The fix resolves the prior week to W14 (last week even_model ran), so
+    # the 0→1 flip fires. The old calendar-prior logic would have looked at
+    # W15 (odd_model only), found no even_model samples → refusal_drift=None.
+    shifted = by_prompt[shift_prompt]
+    assert shifted["refusal_drift"] is not None, (
+        "drift must compare against the model's last on-cadence week (W14), "
+        "not the empty calendar-previous week (W15)"
+    )
+    assert shifted["refusal_drift"]["p_value"] <= 0.01
+    assert shifted["refusal_drift"]["significant_after_bh"] is True
+
+    # A stable prompt still gets a drift entry (computed against W14, Δ=0).
+    stable = by_prompt[seeded[1].id]
+    assert stable["refusal_drift"] is not None
+    assert stable["refusal_drift"]["p_value"] == pytest.approx(1.0)
+
+
+def test_embedding_probe_disables_dead_backend_loudly(tmp_path: Path, caplog):
+    """A broken embedding backend is reported once (not silently swallowed,
+    not once per record) and then skipped — embedding_centroid_shift stays
+    None while the non-embedding drift tests still compute.
+    """
+    from meridian.pipeline.manifest_writer import _metrics_for_week
+
+    class _BrokenEmbedder:
+        def encode(self, texts):
+            raise RuntimeError("sentence-transformers not installed")
+
+    corpus = load_corpus()
+    model_id = "fake-model-1"
+    seeded = corpus.public()[:2]
+    store = LocalSampleStore(tmp_path)
+    for week in ("2026-W15", "2026-W16"):
+        for prompt in seeded:
+            for i in range(12):
+                store.append(
+                    week, model_id, prompt.id,
+                    _fake_sample(prompt_id=prompt.id, model_id=model_id, idx=i,
+                                 text="substantive answer"),
+                )
+
+    with caplog.at_level(logging.ERROR, logger="meridian.manifest"):
+        metrics = _metrics_for_week(
+            store, "2026-W16", seeded, 1,
+            embedding_model=_BrokenEmbedder(), include_drift_tests=True,
+        )
+
+    # Probe logged exactly once — not once per (prompt × model) record.
+    probe_errors = [
+        r for r in caplog.records if "embedding model unavailable" in r.getMessage()
+    ]
+    assert len(probe_errors) == 1
+    # And it did NOT fall through to the per-record swallow on every row.
+    per_record = [r for r in caplog.records if "centroid_shift failed" in r.getMessage()]
+    assert per_record == []
+    # Centroid is None everywhere; the independent drift tests still ran.
+    assert all(m["embedding_centroid_shift"] is None for m in metrics)
+    assert any(m["refusal_drift"] is not None for m in metrics)
+
+
+def test_prior_week_for_model_crosses_year_boundary(tmp_path: Path):
+    """ISO-week ids sort lexically == chronologically (fixed-width, zero-
+    padded), so prior-week resolution must walk across the year boundary.
+    """
+    from meridian.pipeline.manifest_writer import _prior_week_for_model
+
+    store = LocalSampleStore(tmp_path)
+
+    def seed(week: str, model_id: str) -> None:
+        store.append(week, model_id, "p",
+                     _fake_sample(prompt_id="p", model_id=model_id, idx=0, text="x"))
+
+    seed("2025-W52", "m-even")   # even-cadence model's last run, prior year
+    seed("2026-W01", "m-odd")    # odd-cadence model occupies the calendar-prior week
+
+    # m-even at 2026-W02 must resolve back across the year boundary to W52,
+    # skipping W01 (which holds only m-odd).
+    assert _prior_week_for_model(store, "2026-W02", "m-even") == "2025-W52"
+    assert _prior_week_for_model(store, "2026-W02", "m-odd") == "2026-W01"
+    # A model that has never been seen has no prior week.
+    assert _prior_week_for_model(store, "2026-W02", "m-new") is None
+
+
+def test_history_snapshots_carry_no_drift_fields(tmp_path: Path):
+    """History weeks are rendered without re-running drift/embedding (those
+    are current-week-only signals), so their metric records keep *_drift and
+    embedding_centroid_shift None even though earlier weeks exist. Locks in
+    the ``want_prior`` gate so history never silently grows a drift column.
+    """
+    corpus = load_corpus()
+    model_id = "fake-model-1"
+    seeded = corpus.public()[:2]
+    store = LocalSampleStore(tmp_path)
+    for week in ("2026-W14", "2026-W15", "2026-W16"):
+        for prompt in seeded:
+            for i in range(12):
+                store.append(
+                    week, model_id, prompt.id,
+                    _fake_sample(prompt_id=prompt.id, model_id=model_id, idx=i,
+                                 text="substantive answer"),
+                )
+
+    manifest = build_manifest(
+        store=store, corpus=corpus, week_id="2026-W16",
+        history_weeks=4, bootstrap_seed=1,
+    )
+    assert manifest["history"], "expected at least one history snapshot"
+    for snap in manifest["history"]:
+        for m in snap["metrics"]:
+            assert m["refusal_drift"] is None
+            assert m["hedge_drift"] is None
+            assert m["length_drift"] is None
+            assert m["embedding_centroid_shift"] is None
