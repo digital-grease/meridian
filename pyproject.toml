@@ -50,7 +50,7 @@ search = [
 ]
 parquet = [
   # /data/{week}/metrics.parquet emission. Optional; adds ~20 MB.
-  "pyarrow>=15,<21",
+  "pyarrow>=23.0.1,<24",
 ]
 storage-s3-dev = [
   # moto provides an in-process S3 mock for the uploader tests.
