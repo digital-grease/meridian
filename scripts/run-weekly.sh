@@ -33,6 +33,23 @@ if [ -f /etc/meridian/config.env ]; then
   set +a
 fi
 
+# ----------------------- 0. Self-update + re-exec ----------------------
+# This wrapper lives inside the repo it deploys. Updating the repo with
+# `git reset --hard` does NOT change the code the running shell executes:
+# bash holds this file's original inode open and keeps reading it, so
+# every edit to the steps below would otherwise not take effect until the
+# *next* weekly run — and a stale plain `uv sync` would prune the heavy
+# analysis deps (sentence-transformers / ruptures) on each lagged run.
+# Pull first, then re-exec the freshly-pulled copy exactly once; the
+# sentinel env var guards against a re-exec loop.
+REPO_DIR="${REPO_DIR:-/data/meridian/repo}"
+if [ -z "${MERIDIAN_WRAPPER_REEXECED:-}" ] && [ -d "$REPO_DIR/.git" ]; then
+  git -C "$REPO_DIR" fetch --quiet origin main || true
+  git -C "$REPO_DIR" -c advice.detachedHead=false reset --hard origin/main || true
+  export MERIDIAN_WRAPPER_REEXECED=1
+  exec bash "$REPO_DIR/scripts/run-weekly.sh" "$@"
+fi
+
 LOG_DIR="${LOG_DIR:-/data/meridian/logs}"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/run-weekly-$(date -u +%Y%m%dT%H%M%SZ).log"
@@ -125,10 +142,11 @@ if [ ! -d "$REPO_DIR/.git" ]; then
   exit 3
 fi
 
-log "git pull origin main"
+# The repo was already fetched and hard-reset to origin/main in step 0
+# (before the re-exec), so the code running now is current. cd in for the
+# uv / pipeline commands below.
 cd "$REPO_DIR"
-git fetch --quiet origin main || log "WARN: git fetch failed; running with current code"
-git -c advice.detachedHead=false reset --hard origin/main || log "WARN: git reset failed"
+log "repo at $(git rev-parse --short HEAD) (fetched + reset in step 0)"
 
 # The manifest build runs the heavy analyses on this host (embedding-
 # centroid drift + PELT change-point detection), so their optional
