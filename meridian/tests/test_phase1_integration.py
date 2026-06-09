@@ -132,7 +132,7 @@ def test_all_phase1_signals_reach_rendered_html(tmp_path: Path):
     manifest_path = tmp_path / "manifest-2026-W16.json"
     write_manifest(manifest, [manifest_path])
 
-    # Sanity-check the manifest before invoking the site builder.
+    # Validate the manifest before invoking the site builder.
     raw = json.loads(manifest_path.read_text())
     by_prompt = {m["prompt_id"]: m for m in raw["metrics"]}
 

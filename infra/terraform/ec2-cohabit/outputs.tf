@@ -9,7 +9,7 @@ output "data_volume_device_name" {
 }
 
 output "instance_id" {
-  description = "Resolved EC2 instance id (specter's), echoed for sanity-check."
+  description = "Resolved EC2 instance id (specter's), echoed for verification."
   value       = local.instance_id
 }
 
