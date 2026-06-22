@@ -116,6 +116,9 @@ async def test_pipeline_produces_site_buildable_manifest(tmp_path: Path):
         "models/fake-model-1/index.html",
         "prompts/pol-abortion-legal/index.html",
         "data/2026-W16/metrics.csv",
+        # Per-week data landing page: /data/{week}/ must resolve, not 404 as
+        # a bare directory. Regression guard for the link the /data/ index emits.
+        "data/2026-W16/index.html",
         "sitemap.xml",
     ):
         assert (dist / rel).exists(), f"missing: {rel}"

@@ -599,14 +599,25 @@ def publish_data(
             files_meta.append(
                 {"name": "responses.jsonl.gz", "size": responses_meta["size"]}
             )
-        snapshots_meta.append(
-            {
-                "week_id": week_id,
-                "is_current": week_id == manifest.snapshot.week_id,
-                "files": files_meta,
-                "row_count": len(metrics),
-                "has_responses": responses_meta is not None,
-            }
+        week_entry = {
+            "week_id": week_id,
+            "is_current": week_id == manifest.snapshot.week_id,
+            "files": files_meta,
+            "row_count": len(metrics),
+            "has_responses": responses_meta is not None,
+        }
+        snapshots_meta.append(week_entry)
+
+        # Per-week landing page so /data/{week}/ resolves instead of 404ing
+        # as a bare directory (the /data/ index links it). Because the page
+        # is an index.html, collect_urls() registers /data/{week}/ in
+        # urls.txt, so the link-rot guard tracks it going forward. Mirrors
+        # the /models/{id}/{week}/ pattern in render_dashboard; both rely on
+        # the manifest carrying full history so every week is re-emitted.
+        render_page(
+            env, "data_week.html",
+            snap_dir / "index.html",
+            dict(base_context, week=week_entry, manifest=manifest),
         )
 
     # Data index page.

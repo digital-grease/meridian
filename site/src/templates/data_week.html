@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% set path = "/data/" ~ week.week_id ~ "/" %}
+
+{% block title %}Data {{ week.week_id }} — Meridian{% endblock %}
+{% block description %}Meridian data snapshot for ISO week {{ week.week_id }}: {{ week.row_count }} per-(prompt × model) metric rows in CSV and JSONL{% if week.has_responses %}, plus raw response bodies{% endif %}, with SHA-256 checksums. CC BY-SA 4.0.{% endblock %}
+
+{% block main %}
+{% set crumbs = [
+  {"href": "/", "text": "Home"},
+  {"href": "/data/", "text": "Data"},
+  {"text": week.week_id}
+] %}
+{% include "_breadcrumbs.html" %}
+
+{% set descriptions = {
+  "metrics.csv": "One row per (prompt × model): refusal rate and CI, hedge density, length quantiles, stance, embedding shift, and review flags.",
+  "metrics.jsonl": "Same rows as metrics.csv, one JSON object per line.",
+  "metrics.parquet": "Same rows, columnar Parquet. Present when the builder had pyarrow installed.",
+  "manifest.json": "The full schema-validated manifest the site renders from. Current-week snapshot only.",
+  "README.md": "Plain-text description of these files and the license.",
+  "responses.jsonl.gz": "Gzipped raw Sample records for every public prompt this week: full response text, token counts, stop reasons, and provider metadata. Held-out prompts are excluded."
+} %}
+
+<article class="page">
+  <h1>Data snapshot: <code>{{ week.week_id }}</code>{% if week.is_current %} <span class="tag">current</span>{% endif %}</h1>
+  <p class="lede">
+    ISO week {{ week.week_id }}. {{ week.row_count }} metric rows, one per
+    (prompt&nbsp;×&nbsp;model). Every number the dashboard shows for this week
+    is derived from these files. License: CC&nbsp;BY-SA&nbsp;4.0.
+  </p>
+
+  <h2>Files</h2>
+  <table class="metric-table">
+    <caption>Artifacts in the {{ week.week_id }} snapshot.</caption>
+    <thead>
+      <tr>
+        <th scope="col">File</th>
+        <th scope="col">Size</th>
+        <th scope="col">Contents</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in week.files %}
+      <tr>
+        <th scope="row"><a href="/data/{{ week.week_id }}/{{ f.name }}"><code>{{ f.name }}</code></a></th>
+        <td><code>{{ f.size }}&nbsp;B</code></td>
+        <td>{{ descriptions.get(f.name, "") }}</td>
+      </tr>
+      {% endfor %}
+      <tr>
+        <th scope="row"><a href="/data/{{ week.week_id }}/SHA256SUMS"><code>SHA256SUMS</code></a></th>
+        <td class="muted">&mdash;</td>
+        <td>SHA-256 digest for every file above. Verify with <code>sha256sum -c SHA256SUMS</code>.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    Column definitions live in the
+    <a href="/data/schema/">schema documentation</a>. The full snapshot index,
+    across every published week, is at <a href="/data/">/data/</a>.
+  </p>
+
+  <h2>Citing this snapshot</h2>
+  <pre><code>@misc{meridian_{{ week.week_id | replace("-", "_") }},
+  title        = {{ '{{' }}Meridian snapshot {{ week.week_id }}{{ '}}' }},
+  author       = {Meridian},
+  year         = {{ '{' }}{{ week.week_id[:4] }}{{ '}' }},
+  howpublished = {\url{https://meridianaudit.org/data/{{ week.week_id }}/}},
+  note         = {CC BY-SA 4.0; accessed YYYY-MM-DD}
+}</code></pre>
+
+  <h2>Reproducibility</h2>
+  <p>
+    This URL is permanent: <code>/data/{{ week.week_id }}/</code> and every
+    file under it resolve to the same bytes indefinitely. A researcher can
+    recompute any dashboard metric for this week from <code>prompts.yaml</code>
+    {% if week.has_responses %}plus this week&rsquo;s
+    <code>responses.jsonl.gz</code>{% else %}plus the raw responses{% endif %}.
+  </p>
+</article>
+{% endblock %}
