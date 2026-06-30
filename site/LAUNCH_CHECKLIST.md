@@ -30,7 +30,7 @@ checklist records manual sign-off.
 ## Manual gates (pre-launch)
 
 - [x] Funding disclosure page reflects the *actual* funding situation, not a placeholder
-      *(`/funding/` lists current $86/mo Level-0 config, names the hard rules,
+      *(`/funding/` lists current $45/mo Level-0 config, names the hard rules,
       and maps the dollar-tier ladder to concrete corpus/roster upgrades).*
 - [x] `/methodology/reproduce/` walkthrough has been verified end-to-end against a published snapshot
       *(exercised on 2026-04-22: `curl

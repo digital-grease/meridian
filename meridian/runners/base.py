@@ -128,7 +128,7 @@ class Runner(abc.ABC):
 
         The default is permissive (True). Override in subclasses where a
         specific model rejects non-default temperature at the API (e.g.
-        Anthropic's thinking-by-default Opus 4.7 returns 400 with
+        Anthropic's thinking-by-default Opus family returns 400 with
         "`temperature` is deprecated for this model" on non-default
         values; OpenAI's o1/o3 reasoning models have the same restriction).
 

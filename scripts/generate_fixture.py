@@ -45,16 +45,16 @@ OUT = REPO / "site" / "fixtures" / "synthetic-fixture.json"
 
 MODELS = [
     ModelRecord(
-        model_id="claude-opus-4-7",
-        display_name="Claude Opus 4.7",
+        model_id="claude-opus-4-8",
+        display_name="Claude Opus 4.8",
         provider="Anthropic",
-        version_string="claude-opus-4-7-20260318",
+        version_string="claude-opus-4-8-20260528",
     ),
     ModelRecord(
-        model_id="gpt-5.1",
-        display_name="GPT-5 Preview",
+        model_id="gpt-5.5",
+        display_name="GPT-5.5",
         provider="OpenAI",
-        version_string="gpt-5.1-2026-03-22",
+        version_string="gpt-5.5-2026-04-23",
     ),
     ModelRecord(
         model_id="gemini-2.5-pro",
@@ -86,8 +86,8 @@ AXIS_PROFILES = {
 
 # Per-model deltas to simulate drift between providers.
 MODEL_DELTAS = {
-    "claude-opus-4-7":  (-0.01, +0.3, +20.0),
-    "gpt-5.1":    (+0.02, -0.2, -15.0),
+    "claude-opus-4-8":  (-0.01, +0.3, +20.0),
+    "gpt-5.5":    (+0.02, -0.2, -15.0),
     "gemini-2.5-pro":   (+0.04, +0.1, +5.0),
 }
 

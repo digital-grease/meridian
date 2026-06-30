@@ -29,6 +29,7 @@ from meridian.runners.base import (
 #: this list when a new thinking-default model errors with that message.
 _TEMPERATURE_DEPRECATED_PREFIXES: tuple[str, ...] = (
     "claude-opus-4-7",
+    "claude-opus-4-8",
 )
 
 #: Anthropic Messages API treats 1.0 as the default; only this value is

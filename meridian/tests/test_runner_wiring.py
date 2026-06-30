@@ -24,23 +24,23 @@ from meridian.runners.openai import (
 
 
 def test_anthropic_runner_constructs():
-    r = AnthropicRunner("claude-opus-4-7", api_key="sk-dummy")
+    r = AnthropicRunner("claude-opus-4-8", api_key="sk-dummy")
     assert r.provider == "anthropic"
-    assert r.model_id == "claude-opus-4-7"
+    assert r.model_id == "claude-opus-4-8"
     assert r.client is not None
 
 
 def test_openai_runner_constructs():
-    r = OpenAIRunner("gpt-5.1", api_key="sk-dummy")
+    r = OpenAIRunner("gpt-5.5", api_key="sk-dummy")
     assert r.provider == "openai"
-    assert r.model_id == "gpt-5.1"
+    assert r.model_id == "gpt-5.5"
     assert r.client is not None
 
 
 @pytest.mark.parametrize(
     "model_id,expected",
     [
-        ("gpt-5.1", "max_completion_tokens"),
+        ("gpt-5.5", "max_completion_tokens"),
         ("gpt-5-nano", "max_completion_tokens"),
         ("gpt-5", "max_completion_tokens"),
         ("o1-preview", "max_completion_tokens"),
@@ -63,11 +63,14 @@ def test_openai_token_kwarg_for_model(model_id: str, expected: str):
 @pytest.mark.parametrize(
     "model_id,temp,supported",
     [
-        # Opus 4.7 accepts the API default (1.0) and rejects anything else
+        # Opus 4.7+ accepts the API default (1.0) and rejects anything else
         # with "`temperature` is deprecated for this model".
+        ("claude-opus-4-8", 1.0, True),
+        ("claude-opus-4-8", 0.0, False),
         ("claude-opus-4-7", 1.0, True),
         ("claude-opus-4-7", 0.0, False),
         ("claude-opus-4-7", 0.5, False),
+        ("claude-opus-4-8-20260528", 0.0, False),  # date-pinned alias
         ("claude-opus-4-7-20250114", 0.0, False),  # date-pinned alias
         # Non-thinking Claude families still accept any temperature.
         ("claude-sonnet-4-6", 0.0, True),
@@ -91,8 +94,8 @@ def test_anthropic_supports_temperature(model_id: str, temp: float, supported: b
         ("o3-mini", 1.0, False),
         ("o4-mini", 0.0, False),
         # GPT-5 family currently accepts temperature.
-        ("gpt-5.1", 0.0, True),
-        ("gpt-5.1", 1.0, True),
+        ("gpt-5.5", 0.0, True),
+        ("gpt-5.5", 1.0, True),
         # Legacy GPT-4 family accepts temperature.
         ("gpt-4o", 0.0, True),
         ("gpt-4.1-mini", 1.0, True),
@@ -102,26 +105,26 @@ def test_openai_supports_temperature(model_id: str, temp: float, supported: bool
     assert _openai_supports_temperature(model_id, temp) is supported
 
 
-def test_build_message_kwargs_omits_temperature_for_opus_47():
+def test_build_message_kwargs_omits_temperature_for_current_opus():
     """Anthropic's migration guidance is to omit `temperature` entirely
     for thinking-by-default models. We currently rely on the implicit
     default (1.0); explicitly sending it would 400 if Anthropic ever
     changes that default. Omitting future-proofs the runner."""
     kwargs = _build_message_kwargs(
-        model_id="claude-opus-4-7",
+        model_id="claude-opus-4-8",
         prompt="hi",
         temperature=1.0,
         max_tokens=1024,
     )
     assert "temperature" not in kwargs
-    assert kwargs["model"] == "claude-opus-4-7"
+    assert kwargs["model"] == "claude-opus-4-8"
     assert kwargs["max_tokens"] == 1024
     assert kwargs["messages"] == [{"role": "user", "content": "hi"}]
 
 
 def test_build_message_kwargs_omits_temperature_for_date_pinned_opus():
     kwargs = _build_message_kwargs(
-        model_id="claude-opus-4-7-20250114",
+        model_id="claude-opus-4-8-20260528",
         prompt="hi", temperature=1.0, max_tokens=1024,
     )
     assert "temperature" not in kwargs

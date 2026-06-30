@@ -11,14 +11,13 @@ from dataclasses import dataclass
 # (provider, model_id) -> (input_usd_per_mm, output_usd_per_mm).
 # A "*" model_id is a wildcard for any model under that provider (used when
 # a provider's whole family is priced the same, e.g. self-hosted Ollama).
-# Values checked 2026-04 from each provider's pricing page.
+# Values checked 2026-06 from each provider's pricing page / model docs.
 PRICING: dict[tuple[str, str], tuple[float, float]] = {
-    ("anthropic", "claude-opus-4-7"):          (15.00, 75.00),
+    ("anthropic", "claude-opus-4-8"):          ( 5.00, 25.00),
+    ("anthropic", "claude-opus-4-7"):          ( 5.00, 25.00),
     ("anthropic", "claude-sonnet-4-6"):        ( 3.00, 15.00),
     ("anthropic", "claude-haiku-4-5-20251001"):( 0.80,  4.00),
-    # TODO: verify at https://platform.openai.com/pricing. These values
-    # were inherited from the retired `gpt-5-preview` placeholder; the
-    # model ID was swapped on 2026-04-23.
+    ("openai",    "gpt-5.5"):                  ( 5.00, 30.00),
     ("openai",    "gpt-5.1"):                  (10.00, 30.00),
     ("openai",    "gpt-4o"):                   ( 2.50, 10.00),
     ("openai",    "gpt-4.1-mini"):             ( 0.15,  0.60),

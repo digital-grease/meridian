@@ -8,10 +8,10 @@
 # tier ladder and the rationale for this schedule.
 #
 #   Ollama:        every week         (free, local baseline)
-#   Claude Opus:   even ISO weeks     (W16, W18, ... alternating with GPT-5)
-#   GPT-5 Preview: odd ISO weeks      (W15, W17, ... alternating with Opus)
+#   Claude Opus:   even ISO weeks     (W16, W18, ... newest Opus until Fable unlocks)
+#   GPT-5.5:       odd ISO weeks      (W15, W17, ... alternating with Opus)
 #
-# Average monthly cost: ~$86 on a 30-prompt corpus at N=25 samples/pair.
+# Average monthly cost: ~$45 on a 30-prompt corpus at N=25 samples/pair.
 
 sampling:
   n_default_temp: 20
@@ -54,18 +54,18 @@ runners:
   # Frontier models, alternating to halve the monthly bill on the two
   # line items that dominate it.
   - provider: anthropic
-    model_id: "claude-opus-4-7"
+    model_id: "claude-opus-4-8"
     enabled: true
     cadence: even_weeks
 
   - provider: openai
-    model_id: "gpt-5.1"
+    model_id: "gpt-5.5"
     enabled: true
     cadence: odd_weeks
 
 # Stance classifier — pinned to Haiku 4.5 for stability:
 #   - Cheapest reasonable Claude tier (~$0.80/MT input).
-#   - Accepts temperature=0 (Opus 4.7 deprecated it; Haiku still
+#   - Accepts temperature=0 (current Opus deprecated it; Haiku still
 #     honours it), so classifications are deterministic-ish week to week.
 #   - Not in the cadence-alternated frontier set, so the classifier
 #     itself doesn't drift between weeks while we're measuring drift on

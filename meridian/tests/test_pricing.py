@@ -18,9 +18,9 @@ def test_ollama_costs_zero():
 
 
 def test_anthropic_opus_nonzero():
-    est = estimate_cost([_R("anthropic", "claude-opus-4-7")], n_prompts=20, samples_per_pair=25)
-    assert est.by_runner["anthropic/claude-opus-4-7"] > 0.0
-    assert est.total == est.by_runner["anthropic/claude-opus-4-7"]
+    est = estimate_cost([_R("anthropic", "claude-opus-4-8")], n_prompts=20, samples_per_pair=25)
+    assert est.by_runner["anthropic/claude-opus-4-8"] > 0.0
+    assert est.total == est.by_runner["anthropic/claude-opus-4-8"]
 
 
 def test_unknown_model_falls_back_to_zero():
@@ -30,11 +30,11 @@ def test_unknown_model_falls_back_to_zero():
 
 def test_multiple_runners_sum_correctly():
     runners = [
-        _R("anthropic", "claude-opus-4-7"),
+        _R("anthropic", "claude-opus-4-8"),
         _R("openai", "gpt-4o"),
         _R("ollama", "llama3.2:3b"),
     ]
     est = estimate_cost(runners, n_prompts=20, samples_per_pair=25)
     assert est.total == round(sum(est.by_runner.values()), 2)
     assert est.by_runner["ollama/llama3.2:3b"] == 0.0
-    assert est.by_runner["anthropic/claude-opus-4-7"] > est.by_runner["openai/gpt-4o"]
+    assert est.by_runner["anthropic/claude-opus-4-8"] > est.by_runner["openai/gpt-4o"]

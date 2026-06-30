@@ -80,7 +80,7 @@ class PromptRecord(Frozen):
 
 
 class ModelRecord(Frozen):
-    model_id: str           # stable slug, e.g. "claude-opus-4-7"
+    model_id: str           # stable slug, e.g. "claude-opus-4-8"
     display_name: str
     provider: str
     version_string: str     # exact provider-reported version at capture time

@@ -8,7 +8,7 @@ context that explains why that config looks the way it does.
 All numbers from `meridian.sampling.pricing.estimate_cost` at the
 default sampling plan (`n_default_temp=20`, `n_zero_temp=5`,
 `avg_input_chars=80`, `avg_output_tokens=500`). Provider pricing as of
-2026-04. Actual usage is typically within ±30% of estimate.
+2026-06. Actual usage is typically within ±30% of estimate.
 
 ---
 
@@ -16,16 +16,16 @@ default sampling plan (`n_default_temp=20`, `n_zero_temp=5`,
 
 - Corpus: 30 prompts public
 - Ollama `llama3.2:3b` — every week (free, local baseline)
-- Claude Opus 4.7 — **even ISO weeks only**
-- GPT-5 Preview — **odd ISO weeks only**
+- Claude Opus 4.8 — **even ISO weeks only** (newest Opus until Fable unlocks)
+- GPT-5.5 — **odd ISO weeks only**
 
-**Weekly cost: $0 (Ollama) + $28.35 (Opus) OR $11.40 (Preview), alternating.**
-**Monthly average: ~$86 ($1,035/yr.)**
+**Weekly cost: $0 (Ollama) + $9.45 (Opus) OR $11.32 (GPT-5.5), alternating.**
+**Monthly average: ~$45 ($540/yr.)**
 
 This gives us frontier-model coverage on both OpenAI and Anthropic
 without paying for both every week. Ollama produces a continuous
 baseline every week so the silent-update detector has a stable
-reference. Alternation halves the time-resolution on Opus and Preview
+reference. Alternation halves the time-resolution on Opus and GPT-5.5
 individually — acceptable when drift on the frontier models is a
 months-scale story, not a weeks-scale one.
 
@@ -35,16 +35,16 @@ months-scale story, not a weeks-scale one.
 
 | Prompts | Per week | **Per month** | Per year |
 |---:|---:|---:|---:|
-| 30 | $50.95 | **$221** | $2,649 |
-| 50 | $84.91 | **$368** | $4,415 |
-| 75 | $127.37 | **$552** | $6,623 |
-| 100 | $169.82 | **$736** | $8,831 |
-| 150 | $254.73 | **$1,104** | $13,246 |
-| 200 | $339.64 | **$1,472** | $17,661 |
-| 300 | $509.47 | **$2,208** | $26,492 |
+| 30 | $31.97 | **$139** | $1,662 |
+| 50 | $53.29 | **$231** | $2,771 |
+| 75 | $79.93 | **$346** | $4,156 |
+| 100 | $106.57 | **$462** | $5,542 |
+| 150 | $159.86 | **$693** | $8,313 |
+| 200 | $213.14 | **$924** | $11,083 |
+| 300 | $319.72 | **$1,385** | $16,625 |
 
-Scaling is linear in prompts × samples × tokens × price. Opus + GPT-5
-Preview consume ~80% of the bill at every scale.
+Scaling is linear in prompts × samples × tokens × price. Opus + GPT-5.5
+consume ~65% of the bill at every scale.
 
 ---
 
@@ -52,11 +52,11 @@ Preview consume ~80% of the bill at every scale.
 
 | Config | Per month |
 |---|---:|
-| N=20 weekly, full roster | $736 |
-| N=15 weekly, full roster | $552 |
-| N=20 weekly, Opus alternated biweekly | $566 |
-| **N=15 weekly, Opus alternated biweekly, held-out monthly** | **~$380** |
-| N=20 weekly, cheap-tier only (Haiku + 4.1-mini + Ollama) | ~$25 |
+| N=20 weekly, full roster | $369 |
+| N=15 weekly, full roster | $277 |
+| N=20 weekly, Opus alternated biweekly | $315 |
+| **N=15 weekly, Opus alternated biweekly, held-out monthly** | **~$180** |
+| N=20 weekly, cheap-tier only (Haiku + 4.1-mini + Ollama) | ~$20 |
 
 The penultimate option is the recommended target when the corpus grows.
 
@@ -76,38 +76,38 @@ The penultimate option is the recommended target when the corpus grows.
 ## Tier ladder for future upgrades
 
 ### Level 0 — Current: alternation
-- 30 prompts, Ollama every week, Opus + Preview alternating.
-- **~$86/mo / $1,035/yr.**
+- 30 prompts, Ollama every week, Opus + GPT-5.5 alternating.
+- **~$45/mo / $540/yr.**
 - Hits: both OpenAI and Anthropic frontier, Ollama baseline, at a volunteer-sustainable cost.
 - Misses: no mid-tier (Sonnet, Haiku, GPT-4o, 4.1-mini), no Gemini, biweekly granularity on frontier.
 
 ### Level 1 — Add the cheap tier every week
 - 30 prompts, + Haiku and GPT-4.1-mini every week.
-- Additional cost: ~$7.50/mo. Total **~$93/mo.**
+- Additional cost: ~$7.50/mo. Total **~$53/mo.**
 - Value: two more per-provider data points, better silent-update coverage, faster accumulation of hand-labelable refusals.
 - Suggested trigger: any time; this is basically free.
 
 ### Level 2 — Unalternate frontier, add Gemini
-- 30 prompts, Opus + Preview every week, + Gemini 2.5 Pro weekly.
-- **~$250/mo** (estimated; Gemini pricing TBD in the pricing table).
+- 30 prompts, Opus + GPT-5.5 every week, + Gemini 2.5 Pro weekly.
+- **~$90/mo before Gemini** (Gemini pricing TBD in the pricing table).
 - Value: weekly frontier granularity, all three major providers, suitable for regular public reporting.
 - Suggested trigger: confirmed funding of ~$300/mo or first-run results warrant weekly frontier cadence.
 
 ### Level 3 — Expand corpus
 - 50–75 prompts on Level 2 roster.
-- ~$368–$552/mo.
+- ~$231–$346/mo before Gemini.
 - Value: credible axis coverage (~10 per axis), approaches CLAUDE.md v0.2 target.
 - Suggested trigger: methodology credibility becomes a gating factor for press/research engagement.
 
 ### Level 4 — v1.0 target
 - 150 prompts on full roster.
-- **~$1,100/mo** ($13,250/yr).
+- **~$700/mo** ($8,300/yr) before Gemini.
 - Value: the CLAUDE.md-spec corpus. Journalism-quality evidence base.
 - Suggested trigger: grant-funded, or institutional patronage landed.
 
 ### Level 5 — CLAUDE.md full spec
 - 200–300 prompts on full roster.
-- **~$1,500–$2,200/mo.**
+- **~$900–$1,400/mo** before Gemini.
 - Suggested trigger: sustained institutional funding.
 
 ---
@@ -120,18 +120,18 @@ These are the sponsor-unlock triggers. None of them are aspirational —
 each level is already implemented in code or requires only minor config
 changes. The gate is funding.
 
-- **Level 1 (+$7/mo over Level 0)**: enable Haiku + GPT-4.1-mini every
+- **Level 1 (+$8/mo over Level 0)**: enable Haiku + GPT-4.1-mini every
   week. Config change only; no new code.
-- **Level 2 (+$165/mo over Level 0)**: unalternate Opus + Preview and
+- **Level 2 (+$45/mo over Level 0, before Gemini)**: unalternate Opus + GPT-5.5 and
   add Gemini 2.5 Pro. Requires a Gemini runner (not yet implemented)
   and funding for weekly frontier sampling.
-- **Level 3 (+$470/mo over Level 0)**: expand corpus from 30 to
+- **Level 3 (+$300/mo over Level 0, before Gemini)**: expand corpus from 30 to
   75 prompts. Requires ~45 new curated prompts through the GitHub Issue
   template process (Phase 3.1) plus sustained funding.
-- **Level 4 (+$1,000/mo over Level 0)**: full v1.0 corpus (150 prompts)
+- **Level 4 (+$650/mo over Level 0, before Gemini)**: full v1.0 corpus (150 prompts)
   plus durable storage (S3 uploader + IPFS pinning, Phase 4). Makes the
   &ldquo;retention forever&rdquo; guarantee real.
-- **Level 5 (+$2,100/mo over Level 0)**: CLAUDE.md spec corpus
+- **Level 5 (+$1,300/mo over Level 0, before Gemini)**: CLAUDE.md spec corpus
   (200&ndash;300 prompts) plus trained refusal classifier (Phase 5.4)
   plus Postgres index for researchers (Phase 4.6).
 
