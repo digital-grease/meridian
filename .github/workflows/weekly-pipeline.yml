@@ -133,6 +133,16 @@ jobs:
             git push
           fi
 
+      # Fail the job loudly if the run itself recorded failures, even
+      # though the artifacts published cleanly. Runs AFTER the commit so
+      # the raw record is preserved (append-only retention is a hard
+      # rule); a non-zero exit here still fires the issue step below.
+      - name: Verify run health
+        if: success()
+        env:
+          WEEK: ${{ steps.week.outputs.week }}
+        run: python3 scripts/check_run_health.py "${WEEK}"
+
       - name: Open issue on failure
         if: failure()
         uses: actions/github-script@v7
@@ -140,16 +150,31 @@ jobs:
           script: |
             const iso = new Date().toISOString().slice(0, 10);
             const run_url = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const health = process.env.HEALTH_DETAIL;
+            const body = health
+              ? [
+                  `The weekly run published its artifacts but recorded failures:`,
+                  ``,
+                  `    ${health}`,
+                  ``,
+                  `The raw manifest/snapshot/run_log for ${{ steps.week.outputs.week }} were`,
+                  `committed (append-only retention), but the run is not clean. Inspect the`,
+                  `run_log entry and the orchestrator Lambda CloudWatch logs, fix the cause,`,
+                  `and decide per the no-backfill policy whether to re-run or document the gap.`,
+                  ``,
+                  `Run: ${run_url}`,
+                ].join("\n")
+              : [
+                  `The weekly publish step failed. Sampling lives on the EC2 cohabit instance now;`,
+                  `if the artifact wasn't in S3, check the orchestrator Lambda CloudWatch logs.`,
+                  ``,
+                  `Run: ${run_url}`,
+                  `Re-run via the \`workflow_dispatch\` button on this workflow.`,
+                ].join("\n");
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `Pipeline publish failed: ${iso}`,
-              body: [
-                `The weekly publish step failed. Sampling lives on the EC2 cohabit instance now;`,
-                `if the artifact wasn't in S3, check the orchestrator Lambda CloudWatch logs.`,
-                ``,
-                `Run: ${run_url}`,
-                `Re-run via the \`workflow_dispatch\` button on this workflow.`,
-              ].join("\n"),
+              title: `Pipeline ${health ? "run had failures" : "publish failed"}: ${iso}`,
+              body,
               labels: ["pipeline", "automated", "bug"],
             });
