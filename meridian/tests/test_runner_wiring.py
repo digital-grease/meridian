@@ -93,9 +93,12 @@ def test_anthropic_supports_temperature(model_id: str, temp: float, supported: b
         ("o3", 0.5, False),
         ("o3-mini", 1.0, False),
         ("o4-mini", 0.0, False),
-        # GPT-5 family currently accepts temperature.
-        ("gpt-5.5", 0.0, True),
+        # gpt-5.5 is reasoning-default: accepts only the API default (1.0)
+        # and 400s on non-default temperature (e.g. the zero-temp batch).
+        ("gpt-5.5", 0.0, False),
+        ("gpt-5.5", 0.5, False),
         ("gpt-5.5", 1.0, True),
+        ("gpt-5.5-2026-04-23", 0.0, False),  # date-pinned alias
         # Legacy GPT-4 family accepts temperature.
         ("gpt-4o", 0.0, True),
         ("gpt-4.1-mini", 1.0, True),

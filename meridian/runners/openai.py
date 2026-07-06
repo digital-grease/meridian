@@ -23,24 +23,37 @@ from meridian.runners.base import (
 
 
 #: o-series reasoning model prefixes reject the `temperature` parameter
-#: outright. GPT-5 family currently accepts temperature but OpenAI's
-#: docs signal the same transition is in progress for reasoning-default
-#: models; extend this list when a 400 on temperature appears for a
-#: new family.
+#: at ANY value (400 `unsupported_value`). Extend this list when a 400
+#: on temperature at every value appears for a new family.
 _TEMPERATURE_UNSUPPORTED_PREFIXES: tuple[str, ...] = (
     "o1",
     "o3",
     "o4",
 )
 
+#: Reasoning-default GPT-5 model prefixes that accept ONLY the API
+#: default temperature (1.0) and 400 on anything else with
+#: "'temperature' does not support 0 ... Only the default (1) value is
+#: supported." gpt-5.5 joined this class on the 2026-06-30 cadence swap;
+#: gpt-5.1 (the prior frontier) still accepted any value. Extend this
+#: list when that specific 400 appears for a new GPT-5.x model.
+_TEMPERATURE_DEFAULT_ONLY_PREFIXES: tuple[str, ...] = (
+    "gpt-5.5",
+)
+
+#: OpenAI chat-completions treats 1.0 as the default temperature; only
+#: this value is accepted by the default-only prefixes above.
+_OPENAI_DEFAULT_TEMPERATURE = 1.0
+
 
 def _openai_supports_temperature(model_id: str, temperature: float) -> bool:
     """Pure-function helper mirroring the runner method, so tests can
     exercise it without constructing an SDK-backed runner."""
-    del temperature  # o-series rejects temperature at any value
     mid = model_id.lower()
     if any(mid.startswith(p) for p in _TEMPERATURE_UNSUPPORTED_PREFIXES):
-        return False
+        return False  # o-series rejects temperature at any value
+    if any(mid.startswith(p) for p in _TEMPERATURE_DEFAULT_ONLY_PREFIXES):
+        return temperature == _OPENAI_DEFAULT_TEMPERATURE
     return True
 
 
