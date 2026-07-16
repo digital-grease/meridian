@@ -373,6 +373,7 @@ def render_dashboard(
             models=manifest.models,
             weeks=weeks,
             axis_prompts=axis_prompts,
+            table=axis_metric_table(manifest, axis),
             manifest=manifest,
             timeseries=manifest.timeseries,
             og_slug=f"axis-{axis}",
@@ -822,6 +823,140 @@ _DRIFT_SCALES = {
     "hedge_density": 5.0,        # typical 0-10 markers/100 tok
     "length_median": None,       # uses relative scale at compute time
 }
+
+# Headline metric for each axis's model x week table.
+#
+# The table used to hardcode refusal_rate, but refusal_rate only
+# carries signal on refusal-boundary. Measured across the W17-W28
+# corpus, the spread of per-(model, week) axis means was *exactly*
+# 0.00 on factual-stability, historical-contested, neutral-control and
+# scientific-consensus, and 0.03 on political: five of six axis pages
+# rendered a wall of true-but-vacuous zeros. Each axis now leads with
+# the metric that actually moves on it:
+#
+#   refusal-boundary      refusal_rate:  what the model declines is
+#                                          the whole point of the axis
+#   political             hedge_density: stance-bearing axes drift in
+#   historical-contested                   framing, not refusal; hedge
+#   scientific-consensus                   density is CLAUDE.md's
+#                                          framing measure
+#   neutral-control       length_median: these axes exist to detect
+#   factual-stability                      "the model itself changed";
+#                                          length distribution shift is
+#                                          the canonical silent-update
+#                                          detector
+#
+# Axes not listed fall back to refusal_rate. Adding an axis to the
+# corpus therefore never breaks the build, it just gets the default
+# until someone picks a better metric for it.
+_AXIS_HEADLINE_METRIC = {
+    "refusal-boundary": "refusal_rate",
+    "political": "hedge_density",
+    "historical-contested": "hedge_density",
+    "scientific-consensus": "hedge_density",
+    "neutral-control": "length_median",
+    "factual-stability": "length_median",
+}
+_DEFAULT_AXIS_METRIC = "refusal_rate"
+
+# Presentation for each renderable metric. `fixed_max` pins the colour
+# ramp's top; None means "scale to the largest cell in this table".
+#
+# Only refusal_rate gets a fixed ceiling: it is a probability, so 0.80
+# means 80% of samples refused regardless of which axis you are looking
+# at, and pinning it to 1.0 keeps that reading comparable across pages.
+# hedge_density and length_median have no comparable natural ceiling
+# (observed hedge_density tops out near 1.1 against a _DRIFT_SCALES
+# reference of 5.0, which would flatten the whole table into the dark
+# end of the ramp), so they scale to the data.
+#
+# Every ramp is anchored at zero rather than at the table's minimum.
+# Min-max normalisation would stretch a trivial spread across the full
+# colour range and invent visual drift where there is none, which is
+# the exact failure this project exists not to commit.
+_METRIC_META = {
+    "refusal_rate": {
+        "label": "Refusal rate",
+        "fmt": "%.2f",
+        "fixed_max": 1.0,
+        "blurb": "Fraction of samples that declined to answer, "
+                 "averaged across the prompts in this axis.",
+    },
+    "hedge_density": {
+        "label": "Hedge density",
+        "fmt": "%.2f",
+        "fixed_max": None,
+        "blurb": "Hedging markers (“it’s important to note”, "
+                 "“some argue”) per 100 tokens, averaged across the "
+                 "prompts in this axis. A framing measure, not a "
+                 "refusal measure.",
+    },
+    "length_median": {
+        "label": "Median response length",
+        "fmt": "%.0f",
+        "fixed_max": None,
+        "blurb": "Median response length in tokens, averaged across the "
+                 "prompts in this axis. Sustained shifts often "
+                 "accompany a model update.",
+    },
+}
+
+
+def axis_metric_table(manifest: Manifest, axis: str) -> dict:
+    """Build the per-axis model x week table of that axis's headline
+    metric.
+
+    Returns a dict with:
+      * ``metric`` / ``meta``: the chosen metric id and its presentation
+      * ``weeks``: column order (oldest-first)
+      * ``rows``: one per model, ``{"model": Model, "cells": [...]}``
+        where each cell is a float mean or ``None`` for "not sampled
+        that week"
+      * ``max``: top of the colour ramp (ramp is anchored at 0.0)
+      * ``has_gaps``: True if any cell is None, so the template only
+        explains the gap marker on tables that actually have one
+
+    A None cell means the model produced no samples that week, most
+    often because frontier models alternate on a biweekly cadence.
+    That is emphatically not a measurement of zero, and the two must
+    never render alike.
+    """
+    metric = _AXIS_HEADLINE_METRIC.get(axis, _DEFAULT_AXIS_METRIC)
+    meta = _METRIC_META[metric]
+    prompts = [p for p in manifest.prompts if p.axis == axis]
+    weeks = manifest.all_weeks
+
+    rows = []
+    observed: list[float] = []
+    has_gaps = False
+    for model in manifest.models:
+        by_week: dict[str, list[float]] = {}
+        for p in prompts:
+            for week_id, value in manifest.timeseries(p.prompt_id, model.model_id, metric):
+                by_week.setdefault(week_id, []).append(value)
+        cells: list[float | None] = []
+        for w in weeks:
+            vals = by_week.get(w)
+            if vals:
+                mean = sum(vals) / len(vals)
+                observed.append(mean)
+                cells.append(mean)
+            else:
+                has_gaps = True
+                cells.append(None)
+        rows.append({"model": model, "cells": cells})
+
+    top = meta["fixed_max"]
+    if top is None:
+        top = max(observed) if observed else 0.0
+    if not top or top <= 0:
+        # Every cell is zero or absent. Any positive ramp top renders
+        # them all at the ramp's floor, which is the honest picture.
+        top = 1.0
+    return {
+        "metric": metric, "meta": meta, "weeks": weeks,
+        "rows": rows, "max": top, "has_gaps": has_gaps,
+    }
 
 
 def _avg(records, attr):

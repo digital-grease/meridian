@@ -2,7 +2,7 @@
 {% set path = "/axes/" + axis + "/" %}
 
 {% block title %}{{ axis | replace('-', ' ') | capitalize }} — axes — Meridian{% endblock %}
-{% block description %}Drift observations for the {{ axis | replace('-', ' ') }} axis, with a model × week refusal-rate heatmap.{% endblock %}
+{% block description %}Drift observations for the {{ axis | replace('-', ' ') }} axis, with a model × week {{ table.meta.label | lower }} heatmap.{% endblock %}
 
 {% block main %}
 {% set crumbs = [
@@ -20,36 +20,42 @@
     over {{ weeks | length }} week{{ 's' if weeks | length != 1 else '' }}.
   </p>
 
-  <h2>Refusal rate — model × week</h2>
+  <h2>{{ table.meta.label }} — model × week</h2>
   <table class="metric-table">
     <caption>
-      Mean refusal rate per model per week, averaged across the
-      {{ axis_prompts | length }} prompts in this axis. Cell shade
-      uses a viridis (colorblind-safe) palette; darker = lower,
-      brighter = higher. Numeric values are in each cell for programmatic access.
+      {{ table.meta.blurb }}
+      Cell shade uses a viridis (colorblind-safe) palette, anchored at
+      zero and scaled to {{ table.meta.fmt % table.max }};
+      darker = lower, brighter = higher. Numeric values are in each cell
+      for programmatic access.
+      {% if table.has_gaps %}
+      A <span class="heatmap-empty-key">&middot;</span> means the model was not
+      sampled that week and is not a measurement of zero. Frontier models
+      alternate on a biweekly cadence, so roughly half of their cells are
+      unsampled by design.
+      {% endif %}
+      This axis leads with {{ table.meta.label | lower }} because that is
+      the measure that moves on it.
+      <a href="/methodology/#metrics">How this is computed</a>.
     </caption>
     <thead>
       <tr>
         <th scope="col">Model</th>
-        {% for w in weeks %}<th scope="col">{{ w }}</th>{% endfor %}
+        {% for w in table.weeks %}<th scope="col">{{ w }}</th>{% endfor %}
       </tr>
     </thead>
     <tbody>
-      {% for m in models %}
+      {% for row in table.rows %}
       <tr>
-        <th scope="row"><a href="/models/{{ m.model_id }}/">{{ m.display_name }}</a></th>
-        {% for w in weeks %}
-        {% set vals = [] %}
-        {% for p in axis_prompts %}
-        {% set ts = timeseries(p.prompt_id, m.model_id, "refusal_rate") %}
-        {% for pair in ts if pair[0] == w %}
-        {% set _ = vals.append(pair[1]) %}
-        {% endfor %}
-        {% endfor %}
-        {% set mean = (vals | sum / (vals | length)) if vals else 0.0 %}
-        <td class="heatmap-cell" style="{{ heatmap_cell_style(mean, 0.0, 1.0) }}">
-          <span class="visually-hidden">refusal rate </span>{{ "%.2f" % mean }}
+        <th scope="row"><a href="/models/{{ row.model.model_id }}/">{{ row.model.display_name }}</a></th>
+        {% for cell in row.cells %}
+        {% if cell is none %}
+        <td class="heatmap-cell heatmap-empty" aria-label="not sampled this week">&middot;</td>
+        {% else %}
+        <td class="heatmap-cell" style="{{ heatmap_cell_style(cell, 0.0, table.max) }}">
+          <span class="visually-hidden">{{ table.meta.label | lower }} </span>{{ table.meta.fmt % cell }}
         </td>
+        {% endif %}
         {% endfor %}
       </tr>
       {% endfor %}
