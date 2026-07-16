@@ -71,6 +71,16 @@ target-version = "py312"
 select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF"]
 ignore = ["E501"]  # line-length handled by formatter
 
+[tool.ruff.lint.per-file-ignores]
+# RUF001/2/3 flag "ambiguous" Unicode punctuation (U+2019 vs ASCII ').
+# In these two files that punctuation is the subject matter, not a typo:
+# text_norm folds provider punctuation to ASCII, and test_refusal pins
+# verbatim provider output whose curly apostrophes are the regression
+# under test. Suppress here rather than per-line so the tables stay
+# readable; everywhere else the lint still applies.
+"meridian/analysis/text_norm.py" = ["RUF001", "RUF002", "RUF003"]
+"meridian/tests/test_refusal.py" = ["RUF001", "RUF002", "RUF003"]
+
 [tool.pytest.ini_options]
 testpaths = ["meridian/tests", "site/tests"]
 asyncio_mode = "auto"

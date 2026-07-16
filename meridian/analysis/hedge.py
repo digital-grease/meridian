@@ -5,8 +5,15 @@ Sourced from corpus linguistics on epistemic hedging + manual curation
 from LLM response samples. The list is intentionally conservative:
 false positives (e.g. "to be fair" used literally) are acceptable; false
 negatives for hedges characteristic of LLM framing are what we care about.
+
+Text is folded to ASCII punctuation before matching, for the same reason
+as the refusal classifier: markers like "it's important to note" are
+written with an ASCII apostrophe and would otherwise never match a
+provider that emits U+2019. See :mod:`meridian.analysis.text_norm`.
 """
 from __future__ import annotations
+
+from meridian.analysis.text_norm import normalize_for_matching
 
 # Multi-word hedging markers. Matched case-insensitively as substrings.
 _HEDGES: tuple[str, ...] = (
@@ -61,6 +68,6 @@ def hedge_density(text: str) -> float:
     tokens = text.split()
     if not tokens:
         return 0.0
-    lower = text.lower()
+    lower = normalize_for_matching(text).lower()
     count = sum(lower.count(h) for h in _HEDGES)
     return round(count * 100.0 / len(tokens), 3)

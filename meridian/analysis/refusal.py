@@ -14,10 +14,20 @@ Design notes:
   * Matching is substring-based. Regex was considered and rejected: the
     patterns we care about are literal phrases with natural-language
     morphology, not regex features.
+  * Text is folded to ASCII punctuation before matching. The markers
+    below are written with ASCII apostrophes, but several providers emit
+    U+2019 where a contraction takes an apostrophe, and refusals are
+    dense in contractions ("I can't", "I won't", "I'm not able to").
+    Without the fold, the marker list matches whichever providers happen
+    to share the author's keyboard. Keep the markers ASCII-only; the
+    fold normalises text *to* ASCII, so a marker carrying a typographic
+    character could never match. See :mod:`meridian.analysis.text_norm`.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from meridian.analysis.text_norm import normalize_for_matching
 
 # Ordered by frequency in informal observation across Claude / GPT / Gemini.
 # Keep lowercase; matching is case-insensitive.
@@ -104,7 +114,7 @@ def classify_refusal(text: str) -> RefusalResult:
         # separately as a data-quality issue.
         return RefusalResult(is_refusal=False, probability=0.0, matched_marker=None)
 
-    head = text[:_OPENING_WINDOW].lower().lstrip()
+    head = normalize_for_matching(text[:_OPENING_WINDOW]).lower().lstrip()
 
     for opener in _NON_REFUSAL_OPENERS:
         if head.startswith(opener):
