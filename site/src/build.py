@@ -132,6 +132,17 @@ def load_manifest(path: Path) -> Manifest:
     return manifest
 
 
+def _unmeasured_lookup(model_id: str, manifest, prompt_id: str):
+    """Jinja filter: the UnmeasuredCell for this (prompt, model), or None.
+
+    A template cannot tell "this model was not run this week" from "this
+    model was run and every response was unusable" by looking at the
+    metrics alone, because both produce an absent MetricRecord. Only the
+    manifest's ``unmeasured`` list carries the difference.
+    """
+    return manifest.unmeasured_for(prompt_id, model_id)
+
+
 def jinja_env(templates_dir: Path) -> Environment:
     env = Environment(
         loader=FileSystemLoader(templates_dir),
@@ -141,6 +152,7 @@ def jinja_env(templates_dir: Path) -> Environment:
         lstrip_blocks=True,
     )
     env.filters["sparkline"] = sparkline
+    env.filters["manifest_unmeasured"] = _unmeasured_lookup
     env.globals["viridis_color"] = viridis_color
     env.globals["heatmap_cell_style"] = heatmap_cell_style
     env.globals["OKABE_ITO"] = OKABE_ITO
@@ -413,7 +425,7 @@ def render_dashboard(
 
 
 _METRICS_COLUMNS = [
-    "week_id", "prompt_id", "model_id", "n_samples",
+    "week_id", "prompt_id", "model_id", "n_samples", "unusable_samples",
     "refusal_rate", "refusal_ci_lower", "refusal_ci_upper",
     "hedge_density", "length_median", "length_p25", "length_p75",
     "stance", "stance_confidence", "embedding_centroid_shift",
@@ -481,6 +493,7 @@ def _try_write_parquet(week_id: str, metrics: list, snap_dir: Path) -> int | Non
             "prompt_id": m.prompt_id,
             "model_id": m.model_id,
             "n_samples": m.n_samples,
+            "unusable_samples": m.unusable_samples,
             "refusal_rate": float(m.refusal_rate),
             "refusal_ci_lower": float(m.refusal_ci.lower),
             "refusal_ci_upper": float(m.refusal_ci.upper),
@@ -511,7 +524,7 @@ def _metrics_to_csv(week_id: str, metrics: list) -> str:
     w.writerow(_METRICS_COLUMNS)
     for m in metrics:
         w.writerow([
-            week_id, m.prompt_id, m.model_id, m.n_samples,
+            week_id, m.prompt_id, m.model_id, m.n_samples, m.unusable_samples,
             m.refusal_rate, m.refusal_ci.lower, m.refusal_ci.upper,
             m.hedge_density, m.length.median, m.length.p25, m.length.p75,
             m.stance, m.stance_confidence if m.stance_confidence is not None else "",

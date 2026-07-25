@@ -273,6 +273,12 @@
           ],
           "default": null,
           "title": "Stance Confidence"
+        },
+        "unusable_samples": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Unusable Samples",
+          "type": "integer"
         }
       },
       "required": [
@@ -464,6 +470,39 @@
       ],
       "title": "Snapshot",
       "type": "object"
+    },
+    "UnmeasuredCell": {
+      "additionalProperties": false,
+      "description": "A (prompt \u00d7 model) cell that was sampled but yielded no metric.\n\nDistinct from a cell that is simply absent from ``metrics``. Absent\nmeans the model was not run that week, normally because the frontier\nroster alternates by ISO-week parity. This means we did run it, the\nrequests succeeded, and every response came back with no usable\ncontent, so there is nothing honest to publish as a number.\n\nThe distinction is the whole point: a refusal rate of 0.00 and a\nmedian length of 0 for a model that answered nothing would read as\n\"complied fully, wrote nothing\" to anyone consuming the data.",
+      "properties": {
+        "model_id": {
+          "title": "Model Id",
+          "type": "string"
+        },
+        "prompt_id": {
+          "title": "Prompt Id",
+          "type": "string"
+        },
+        "reasons": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Reasons",
+          "type": "object"
+        },
+        "unusable_samples": {
+          "minimum": 0,
+          "title": "Unusable Samples",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "prompt_id",
+        "model_id",
+        "unusable_samples"
+      ],
+      "title": "UnmeasuredCell",
+      "type": "object"
     }
   },
   "$id": "https://meridianaudit.org/schemas/manifest.schema.json",
@@ -518,6 +557,13 @@
     },
     "snapshot": {
       "$ref": "#/$defs/Snapshot"
+    },
+    "unmeasured": {
+      "items": {
+        "$ref": "#/$defs/UnmeasuredCell"
+      },
+      "title": "Unmeasured",
+      "type": "array"
     }
   },
   "required": [

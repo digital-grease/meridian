@@ -90,7 +90,14 @@ class ModelRecord(Frozen):
 class MetricRecord(Frozen):
     prompt_id: str
     model_id: str
+    #: Samples the metrics on this record were computed from. Excludes
+    #: any that returned no usable content — see ``unusable_samples``.
     n_samples: int = Field(ge=0)
+    #: Samples captured for this cell that carried no measurement and
+    #: were excluded (empty body, typically a completion truncated by
+    #: the token cap before emitting output). Defaulted to 0 so
+    #: manifests published before 2026-07-24 stay valid.
+    unusable_samples: int = Field(default=0, ge=0)
     refusal_rate: float = Field(ge=0.0, le=1.0)
     refusal_ci: ConfidenceInterval
     hedge_density: float = Field(ge=0.0)
@@ -105,6 +112,26 @@ class MetricRecord(Frozen):
     sample_s3_uris: list[str] = Field(default_factory=list)
     flagged_for_review: bool = False
     flag_reason: str | None = None
+
+
+class UnmeasuredCell(Frozen):
+    """A (prompt × model) cell that was sampled but yielded no metric.
+
+    Distinct from a cell that is simply absent from ``metrics``. Absent
+    means the model was not run that week, normally because the frontier
+    roster alternates by ISO-week parity. This means we did run it, the
+    requests succeeded, and every response came back with no usable
+    content, so there is nothing honest to publish as a number.
+
+    The distinction is the whole point: a refusal rate of 0.00 and a
+    median length of 0 for a model that answered nothing would read as
+    "complied fully, wrote nothing" to anyone consuming the data.
+    """
+    prompt_id: str
+    model_id: str
+    unusable_samples: int = Field(ge=0)
+    #: Reason code -> count, from ``meridian.analysis.usability``.
+    reasons: dict[str, int] = Field(default_factory=dict)
 
 
 class Snapshot(Frozen):
@@ -148,8 +175,18 @@ class Manifest(Frozen):
     prompts: list[PromptRecord]
     metrics: list[MetricRecord]
     history: list[HistorySnapshot] = Field(default_factory=list)  # oldest-first
+    unmeasured: list[UnmeasuredCell] = Field(default_factory=list)
     flagged: list[str] = Field(default_factory=list)
     silent_update_warnings: list[SilentUpdateWarning] = Field(default_factory=list)
+
+    def unmeasured_for(self, pid: str, mid: str) -> UnmeasuredCell | None:
+        return next(
+            (
+                u for u in self.unmeasured
+                if u.prompt_id == pid and u.model_id == mid
+            ),
+            None,
+        )
 
     def prompt_by_id(self, pid: str) -> PromptRecord | None:
         return next((p for p in self.prompts if p.prompt_id == pid), None)

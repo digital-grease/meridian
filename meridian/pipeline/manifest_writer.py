@@ -30,6 +30,7 @@ from meridian.analysis.length import summarize_lengths
 from meridian.analysis.multiple_testing import bh_correct
 from meridian.analysis.refusal import classify_refusal
 from meridian.analysis.silent_update import detect_silent_updates
+from meridian.analysis import usability
 from meridian.corpus import Corpus
 from meridian.runners.base import Sample
 from meridian.storage import LocalSampleStore
@@ -91,8 +92,15 @@ def _metric_record_dict(
     centroid_shift: float | None = None,
     prior_samples: list[Sample] | None = None,
     insufficient_data_n: int = MIN_SAMPLES_FOR_PUBLICATION,
+    unusable_count: int = 0,
 ) -> dict:
-    """Compute a single MetricRecord's dict shape from raw samples."""
+    """Compute a single MetricRecord's dict shape from raw samples.
+
+    ``samples`` must already be filtered to usable ones (see
+    :mod:`meridian.analysis.usability`); ``unusable_count`` is how many
+    were dropped, carried onto the record so the published data states
+    its own sample loss rather than quietly reporting a smaller ``n``.
+    """
     refusals = [1.0 if classify_refusal(s.text).is_refusal else 0.0 for s in samples]
     refusal_rate = sum(refusals) / len(refusals) if refusals else 0.0
     ci = bootstrap_ci(refusals, seed=bootstrap_seed)
@@ -100,11 +108,19 @@ def _metric_record_dict(
     combined_text = "\n\n".join(s.text for s in samples)
     hedge = hedge_density(combined_text)
 
-    flagged = len(samples) < insufficient_data_n
-    flag_reason = (
-        f"insufficient data (n={len(samples)} < {insufficient_data_n})"
-        if flagged else None
-    )
+    reasons: list[str] = []
+    if len(samples) < insufficient_data_n:
+        reasons.append(
+            f"insufficient data (n={len(samples)} < {insufficient_data_n})"
+        )
+    if unusable_count:
+        total = len(samples) + unusable_count
+        reasons.append(
+            f"{unusable_count}/{total} sample(s) returned no usable content "
+            f"and were excluded"
+        )
+    flagged = bool(reasons)
+    flag_reason = "; ".join(reasons) if reasons else None
 
     drift_p_values: dict[str, float | None] = {m: None for m in _DRIFT_METRICS}
     if prior_samples:
@@ -122,6 +138,7 @@ def _metric_record_dict(
         "prompt_id": prompt_id,
         "model_id": model_id,
         "n_samples": len(samples),
+        "unusable_samples": unusable_count,
         "refusal_rate": round(refusal_rate, 3),
         "refusal_ci": {
             "lower": round(max(0.0, ci.lower), 3),
@@ -229,6 +246,82 @@ def _populate_change_points(
             rec["change_points"][site_name] = [cp.index for cp in cps]
 
 
+#: How many (prompt × model) cells get flagged for human eyes each week
+#: on the strength of movement alone. CLAUDE.md's spot-check requirement
+#: is "every week, flag prompts with highest metric deltas for human
+#: review"; this is that rule.
+REVIEW_TOP_N = 3
+
+#: Reference scale per metric for making deltas comparable. Mirrors
+#: ``_DRIFT_SCALES`` in ``site/src/build.py``: refusal_rate is a
+#: probability so its full range is 1.0, hedge_density is markers per
+#: 100 tokens against a nominal 5.0 ceiling. Length is handled
+#: separately because it has no fixed scale (relative shift instead).
+_REVIEW_SCALES: dict[str, float] = {
+    "refusal_rate": 1.0,
+    "hedge_density": 5.0,
+}
+
+
+def _flag_largest_deltas(
+    current_metrics: list[dict],
+    history: list[dict],
+    *,
+    top_n: int = REVIEW_TOP_N,
+) -> None:
+    """Flag the ``top_n`` biggest week-over-week movers for review.
+
+    Until 2026-07-24 ``flagged_for_review`` could only ever be set by
+    the insufficient-sample rule, and since every cell carries 20-25
+    samples against a threshold of 10, it had never once been true
+    across 13 weeks and 690 records. The weekly human spot-check that
+    CLAUDE.md specifies therefore had an empty worklist by
+    construction, which is how two weeks of empty gpt-5.5 completions
+    went unreviewed.
+
+    Each model is compared against the last week *it* ran, matching the
+    drift tests: the frontier roster alternates by ISO-week parity, so
+    the calendar-previous week usually holds a different model
+    entirely. Flagging here is advisory and additive: it never clears a
+    flag another rule set, and it does not touch the statistics.
+    """
+    prior_by_key: dict[tuple[str, str], dict] = {}
+    for snap in reversed(history):  # newest first
+        for rec in snap.get("metrics", []):
+            prior_by_key.setdefault((rec["prompt_id"], rec["model_id"]), rec)
+
+    scored: list[tuple[float, str, dict]] = []
+    for rec in current_metrics:
+        prior = prior_by_key.get((rec["prompt_id"], rec["model_id"]))
+        if prior is None:
+            continue
+        for metric, scale in _REVIEW_SCALES.items():
+            delta = abs(rec.get(metric, 0.0) - prior.get(metric, 0.0))
+            scored.append((delta / scale, metric, rec))
+        cur_len = (rec.get("length") or {}).get("median") or 0.0
+        prior_len = (prior.get("length") or {}).get("median") or 0.0
+        if prior_len:
+            denom = max(prior_len, cur_len) / 2 or 1.0
+            scored.append((abs(cur_len - prior_len) / denom, "length_median", rec))
+
+    scored.sort(key=lambda s: s[0], reverse=True)
+    seen: set[tuple[str, str]] = set()
+    for magnitude, metric, rec in scored:
+        if len(seen) >= top_n:
+            break
+        if magnitude <= 0.0:
+            break
+        key = (rec["prompt_id"], rec["model_id"])
+        if key in seen:
+            continue
+        seen.add(key)
+        note = f"largest weekly delta ({metric}, normalized {magnitude:.3f})"
+        rec["flagged_for_review"] = True
+        rec["flag_reason"] = (
+            f"{rec['flag_reason']}; {note}" if rec.get("flag_reason") else note
+        )
+
+
 def _apply_bh_correction(metrics: list[dict], *, fdr: float = BH_FDR) -> None:
     """Fill in adjusted p-values and rejection decisions in-place.
 
@@ -319,6 +412,7 @@ def _metrics_for_week(
     embedding_model: "EmbeddingModel | None" = None,
     include_drift_tests: bool = False,
     insufficient_data_n: int = MIN_SAMPLES_FOR_PUBLICATION,
+    unmeasured_out: list[dict] | None = None,
 ) -> list[dict]:
     """Compute per-(prompt × model) metrics for one week over ``prompts``.
 
@@ -329,6 +423,15 @@ def _metrics_for_week(
     model). BH correction is *not* applied here — see
     :func:`_apply_bh_correction`, which must run over the whole
     returned list.
+
+    Samples carrying no measurement (:mod:`meridian.analysis.usability`)
+    are excluded from every metric. A cell where *nothing* was usable
+    yields no MetricRecord at all: publishing one would mean publishing
+    a refusal rate of 0.00 and a median length of 0 for a model that
+    answered nothing, which is precisely the fabricated-zero failure
+    this pipeline exists not to commit. Those cells are appended to
+    ``unmeasured_out`` instead, so the manifest can say "we sampled and
+    got nothing back" rather than staying silent.
     """
     metrics: list[dict] = []
     want_prior = embedding_model is not None or include_drift_tests
@@ -345,13 +448,35 @@ def _metrics_for_week(
             _prior_week_for_model(store, week_id, model_id) if want_prior else None
         )
         for prompt in prompts:
-            samples = store.read(week_id, model_id, prompt.id)
+            stored = store.read(week_id, model_id, prompt.id)
+            if not stored:
+                continue
+            samples, unusable = usability.partition(stored)
             if not samples:
+                # Sampled, nothing measurable came back. Emit no record.
+                if unmeasured_out is not None:
+                    unmeasured_out.append({
+                        "prompt_id": prompt.id,
+                        "model_id": model_id,
+                        "unusable_samples": len(unusable),
+                        "reasons": usability.count_reasons(unusable),
+                    })
+                _log.error(
+                    "%s/%s in %s: all %d sample(s) unusable (%s); emitting no "
+                    "metric record for this cell",
+                    model_id, prompt.id, week_id, len(unusable),
+                    usability.count_reasons(unusable),
+                )
                 continue
             stance = (stance_by_key or {}).get((prompt.id, model_id))
             prior_samples: list[Sample] = []
             if prior_week is not None:
-                prior_samples = store.read(prior_week, model_id, prompt.id)
+                # Prior-week comparisons must use the same usable-only
+                # basis, or a drift test compares real text against a
+                # bucket half full of empty strings.
+                prior_samples, _ = usability.partition(
+                    store.read(prior_week, model_id, prompt.id)
+                )
             cshift: float | None = None
             if embedding_model is not None and prior_samples:
                 if embedding_ok is None:
@@ -382,6 +507,7 @@ def _metrics_for_week(
                     centroid_shift=cshift,
                     prior_samples=prior_samples if include_drift_tests else None,
                     insufficient_data_n=insufficient_data_n,
+                    unusable_count=len(unusable),
                 )
             )
     return metrics
@@ -494,11 +620,13 @@ def build_manifest(
 
     scoped_prompts = corpus.all() if include_held_out else corpus.public()
 
+    unmeasured: list[dict] = []
     current_metrics = _metrics_for_week(
         store, week_id, scoped_prompts, bootstrap_seed,
         stance_by_key=stance_by_key, embedding_model=embedding_model,
         include_drift_tests=True,
         insufficient_data_n=insufficient_data_n,
+        unmeasured_out=unmeasured,
     )
     _apply_bh_correction(current_metrics)
     models = _models_from_storage(store, week_id, display_info, scoped_prompts)
@@ -563,6 +691,9 @@ def build_manifest(
     # oldest-first time series. The site reads these directly rather
     # than invoking the analysis library at render time.
     _populate_change_points(current_metrics, history)
+    # Runs last: it reads the assembled history and only sets advisory
+    # flags, so it must not influence any statistic computed above.
+    _flag_largest_deltas(current_metrics, history)
 
     prompts_out = [
         {
@@ -588,6 +719,7 @@ def build_manifest(
         "prompts": prompts_out,
         "metrics": current_metrics,
         "history": history,
+        "unmeasured": unmeasured,
         "flagged": [m["prompt_id"] for m in current_metrics if m["flagged_for_review"]],
         "silent_update_warnings": [],
     }

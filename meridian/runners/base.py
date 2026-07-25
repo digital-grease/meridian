@@ -99,6 +99,16 @@ class Runner(abc.ABC):
     model_id: str
     provider: str
 
+    #: Per-runner completion cap, overriding ``SamplingPlan.max_tokens``
+    #: when set. Exists because the shared cap is a poor fit for
+    #: reasoning-default models: on those, the cap covers reasoning
+    #: tokens *plus* visible output, so a budget that is generous for a
+    #: non-reasoning model can be consumed entirely by reasoning and
+    #: return an empty completion with ``finish_reason="length"``. See
+    #: ``meridian/analysis/usability.py`` for what happens downstream
+    #: when that goes unnoticed.
+    max_tokens_override: int | None = None
+
     async def prepare(self) -> None:
         """One-shot setup hook called by the orchestrator before any sample call.
 

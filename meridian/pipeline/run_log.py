@@ -42,6 +42,12 @@ class RunLogEntry:
     actual_cost_usd: float
     errors: list[dict] = field(default_factory=list)
     note: str | None = None
+    # Stored-but-unmeasurable samples, "provider/model" -> reason -> count.
+    # Distinct from `errors`: those requests failed, these succeeded and
+    # returned nothing usable. Defaulted so entries written before
+    # 2026-07-24 stay parseable (retention is forever; the reader must
+    # never break on an old line).
+    unusable_samples: dict[str, dict[str, int]] = field(default_factory=dict)
 
 
 def _config_hash(config: PipelineConfig) -> str:
@@ -80,6 +86,9 @@ def append_run_log(
         pairs_skipped=outcome.pairs_skipped,
         pairs_failed=outcome.pairs_failed,
         per_runner_samples=dict(outcome.per_runner_samples),
+        unusable_samples={
+            k: dict(v) for k, v in outcome.unusable_samples.items() if v
+        },
         estimated_cost_usd=round(estimated_cost_usd, 4),
         actual_cost_usd=round(actual_cost_usd, 4),
         errors=[

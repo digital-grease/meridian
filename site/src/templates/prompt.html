@@ -27,6 +27,34 @@
   </section>
   {% endif %}
 
+  {% set unmeasured_here = models | map(attribute='model_id')
+       | map('manifest_unmeasured', manifest, prompt.prompt_id) | select | list %}
+  {% if unmeasured_here %}
+  <section class="notice notice-warn" aria-labelledby="pm-unmeasured">
+    <h2 id="pm-unmeasured">Not measurable this week</h2>
+    <p>
+      For {{ manifest.snapshot.week_id }} the following models were
+      sampled on this prompt but returned no usable content, so no
+      metrics are published for them here. This is a gap in our
+      measurement, not a finding about the model.
+    </p>
+    <ul>
+      {% for u in unmeasured_here %}
+      <li>
+        <a href="/models/{{ u.model_id }}/">{{ u.model_id }}</a>:
+        {{ u.unusable_samples }} sample(s), all unusable
+        ({% for reason, count in u.reasons | dictsort %}{{ reason }} × {{ count }}{% if not loop.last %}, {% endif %}{% endfor %}).
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="muted">
+      <code>truncated-empty</code> means the model reached its
+      completion-token limit without emitting any visible output. The
+      raw responses are still published in the week's snapshot.
+    </p>
+  </section>
+  {% endif %}
+
   {% set metric_specs = [
     {"key": "refusal_rate",   "label": "Refusal rate",   "fmt": "{:.2f}"},
     {"key": "hedge_density",  "label": "Hedge density",  "fmt": "{:.2f}"},

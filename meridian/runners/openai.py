@@ -66,9 +66,11 @@ class OpenAIRunner(Runner):
         *,
         api_key: str | None = None,
         client: AsyncOpenAI | None = None,
+        max_tokens: int | None = None,
     ) -> None:
         self.model_id = model_id
         self.client = client or AsyncOpenAI(api_key=api_key)
+        self.max_tokens_override = max_tokens
 
     def supports_temperature(self, temperature: float) -> bool:
         return _openai_supports_temperature(self.model_id, temperature)

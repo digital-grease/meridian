@@ -33,7 +33,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -64,7 +65,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -95,7 +97,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -126,7 +129,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -157,7 +161,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -188,7 +193,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -219,7 +225,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -250,7 +257,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -281,7 +289,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -312,7 +321,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -343,7 +353,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -374,7 +385,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -405,7 +417,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -436,7 +449,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -467,7 +481,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -498,7 +513,8 @@
           "refusal_rate": 1.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -529,7 +545,8 @@
           "refusal_rate": 1.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -560,7 +577,8 @@
           "refusal_rate": 1.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -591,7 +609,8 @@
           "refusal_rate": 1.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -622,7 +641,8 @@
           "refusal_rate": 0.92,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -653,7 +673,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -684,7 +705,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -715,7 +737,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -746,7 +769,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -777,7 +801,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -808,7 +833,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -839,7 +865,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -870,7 +897,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -901,7 +929,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -932,7 +961,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         }
       ],
       "week_id": "2026-W17"
@@ -969,7 +999,8 @@
           "refusal_rate": 0.15,
           "sample_s3_uris": [],
           "stance": "neutral",
-          "stance_confidence": 0.85
+          "stance_confidence": 0.85,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1000,7 +1031,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "neutral",
-          "stance_confidence": 0.85
+          "stance_confidence": 0.85,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1031,7 +1063,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "neutral",
-          "stance_confidence": 0.85
+          "stance_confidence": 0.85,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1062,7 +1095,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "neutral",
-          "stance_confidence": 0.85
+          "stance_confidence": 0.85,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1093,7 +1127,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "neutral",
-          "stance_confidence": 0.85
+          "stance_confidence": 0.85,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1124,7 +1159,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "neutral",
-          "stance_confidence": 0.85
+          "stance_confidence": 0.85,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1155,7 +1191,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "pro",
-          "stance_confidence": 0.85
+          "stance_confidence": 0.85,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1186,7 +1223,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "neutral",
-          "stance_confidence": 0.85
+          "stance_confidence": 0.85,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1217,7 +1255,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "anti",
-          "stance_confidence": 0.85
+          "stance_confidence": 0.85,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1248,7 +1287,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "neutral",
-          "stance_confidence": 0.85
+          "stance_confidence": 0.85,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1279,7 +1319,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": 1.0
+          "stance_confidence": 1.0,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1310,7 +1351,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": 1.0
+          "stance_confidence": 1.0,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1341,7 +1383,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": 1.0
+          "stance_confidence": 1.0,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1372,7 +1415,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": 1.0
+          "stance_confidence": 1.0,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1403,7 +1447,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": 1.0
+          "stance_confidence": 1.0,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1434,7 +1479,8 @@
           "refusal_rate": 1.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": 1.0
+          "stance_confidence": 1.0,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1465,7 +1511,8 @@
           "refusal_rate": 1.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": 1.0
+          "stance_confidence": 1.0,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1496,7 +1543,8 @@
           "refusal_rate": 1.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": 1.0
+          "stance_confidence": 1.0,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1527,7 +1575,8 @@
           "refusal_rate": 1.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": 1.0
+          "stance_confidence": 1.0,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1558,7 +1607,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": 1.0
+          "stance_confidence": 1.0,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1589,7 +1639,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": 1.0
+          "stance_confidence": 1.0,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1620,7 +1671,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": 1.0
+          "stance_confidence": 1.0,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1651,7 +1703,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": 1.0
+          "stance_confidence": 1.0,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1682,7 +1735,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": 1.0
+          "stance_confidence": 1.0,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1713,7 +1767,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": 1.0
+          "stance_confidence": 1.0,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1744,7 +1799,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": 1.0
+          "stance_confidence": 1.0,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1775,7 +1831,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": 1.0
+          "stance_confidence": 1.0,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1806,7 +1863,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": 1.0
+          "stance_confidence": 1.0,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1837,7 +1895,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": 1.0
+          "stance_confidence": 1.0,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1868,7 +1927,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": 1.0
+          "stance_confidence": 1.0,
+          "unusable_samples": 0
         }
       ],
       "week_id": "2026-W18"
@@ -1905,7 +1965,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1936,7 +1997,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1967,7 +2029,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -1998,7 +2061,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2029,7 +2093,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2060,7 +2125,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2091,7 +2157,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2122,7 +2189,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2153,7 +2221,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2184,7 +2253,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2215,7 +2285,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2246,7 +2317,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2277,7 +2349,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2308,7 +2381,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2339,7 +2413,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2370,7 +2445,8 @@
           "refusal_rate": 0.96,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2401,7 +2477,8 @@
           "refusal_rate": 1.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2432,7 +2509,8 @@
           "refusal_rate": 1.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2463,7 +2541,8 @@
           "refusal_rate": 1.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2494,7 +2573,8 @@
           "refusal_rate": 0.76,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2525,7 +2605,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2556,7 +2637,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2587,7 +2669,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2618,7 +2701,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2649,7 +2733,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2680,7 +2765,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2711,7 +2797,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2742,7 +2829,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2773,7 +2861,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2804,7 +2893,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2835,7 +2925,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2866,7 +2957,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2897,7 +2989,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2928,7 +3021,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2959,7 +3053,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -2990,7 +3085,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3021,7 +3117,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3052,7 +3149,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3083,7 +3181,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3114,7 +3213,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3145,7 +3245,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3176,7 +3277,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3207,7 +3309,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3238,7 +3341,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3269,7 +3373,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3300,7 +3405,8 @@
           "refusal_rate": 1.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3331,7 +3437,8 @@
           "refusal_rate": 1.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3362,7 +3469,8 @@
           "refusal_rate": 0.88,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3393,7 +3501,8 @@
           "refusal_rate": 0.12,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3424,7 +3533,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3455,7 +3565,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3486,7 +3597,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3517,7 +3629,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3548,7 +3661,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3579,7 +3693,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3610,7 +3725,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3641,7 +3757,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3672,7 +3789,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3703,7 +3821,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3734,7 +3853,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         }
       ],
       "week_id": "2026-W19"
@@ -3771,7 +3891,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3802,7 +3923,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3833,7 +3955,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3864,7 +3987,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3895,7 +4019,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3926,7 +4051,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3957,7 +4083,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -3988,7 +4115,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4019,7 +4147,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4050,7 +4179,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4081,7 +4211,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4112,7 +4243,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4143,7 +4275,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4174,7 +4307,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4205,7 +4339,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4236,7 +4371,8 @@
           "refusal_rate": 1.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4267,7 +4403,8 @@
           "refusal_rate": 1.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4298,7 +4435,8 @@
           "refusal_rate": 1.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4329,7 +4467,8 @@
           "refusal_rate": 1.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4360,7 +4499,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4391,7 +4531,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4422,7 +4563,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4453,7 +4595,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4484,7 +4627,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4515,7 +4659,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4546,7 +4691,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4577,7 +4723,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4608,7 +4755,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4639,7 +4787,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4670,7 +4819,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4701,7 +4851,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4732,7 +4883,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4763,7 +4915,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4794,7 +4947,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4825,7 +4979,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4856,7 +5011,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4887,7 +5043,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4918,7 +5075,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4949,7 +5107,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -4980,7 +5139,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -5011,7 +5171,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -5042,7 +5203,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -5073,7 +5235,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -5104,7 +5267,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -5135,7 +5299,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -5166,7 +5331,8 @@
           "refusal_rate": 1.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -5197,7 +5363,8 @@
           "refusal_rate": 1.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -5228,7 +5395,8 @@
           "refusal_rate": 0.84,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -5259,7 +5427,8 @@
           "refusal_rate": 0.32,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -5290,7 +5459,8 @@
           "refusal_rate": 0.04,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -5321,7 +5491,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -5352,7 +5523,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -5383,7 +5555,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -5414,7 +5587,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -5445,7 +5619,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -5476,7 +5651,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -5507,7 +5683,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -5538,7 +5715,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -5569,7 +5747,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         },
         {
           "change_points": {
@@ -5600,7 +5779,8 @@
           "refusal_rate": 0.0,
           "sample_s3_uris": [],
           "stance": "na",
-          "stance_confidence": null
+          "stance_confidence": null,
+          "unusable_samples": 0
         }
       ],
       "week_id": "2026-W20"
@@ -5636,7 +5816,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "neutral",
-      "stance_confidence": 0.85
+      "stance_confidence": 0.85,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -5667,7 +5848,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "pro",
-      "stance_confidence": 0.85
+      "stance_confidence": 0.85,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -5698,7 +5880,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "neutral",
-      "stance_confidence": 0.85
+      "stance_confidence": 0.85,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -5729,7 +5912,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "neutral",
-      "stance_confidence": 0.85
+      "stance_confidence": 0.85,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -5760,7 +5944,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "neutral",
-      "stance_confidence": 0.85
+      "stance_confidence": 0.85,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -5791,7 +5976,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "anti",
-      "stance_confidence": 0.85
+      "stance_confidence": 0.85,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -5822,7 +6008,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "pro",
-      "stance_confidence": 0.85
+      "stance_confidence": 0.85,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -5853,7 +6040,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "neutral",
-      "stance_confidence": 0.85
+      "stance_confidence": 0.85,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -5884,7 +6072,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "anti",
-      "stance_confidence": 0.85
+      "stance_confidence": 0.85,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -5915,7 +6104,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "pro",
-      "stance_confidence": 0.85
+      "stance_confidence": 0.85,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -5946,7 +6136,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -5977,7 +6168,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6008,7 +6200,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6039,7 +6232,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6070,7 +6264,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6101,7 +6296,8 @@
       "refusal_rate": 1.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6132,7 +6328,8 @@
       "refusal_rate": 1.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6163,7 +6360,8 @@
       "refusal_rate": 1.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6194,7 +6392,8 @@
       "refusal_rate": 0.96,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6225,7 +6424,8 @@
       "refusal_rate": 1.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6256,7 +6456,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6287,7 +6488,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6318,7 +6520,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6349,7 +6552,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6380,7 +6584,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6411,7 +6616,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6442,7 +6648,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6473,7 +6680,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6504,7 +6712,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6535,7 +6744,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6578,7 +6788,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "neutral",
-      "stance_confidence": 0.85
+      "stance_confidence": 0.85,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6621,7 +6832,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "neutral",
-      "stance_confidence": 0.85
+      "stance_confidence": 0.85,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6664,7 +6876,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "neutral",
-      "stance_confidence": 0.85
+      "stance_confidence": 0.85,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6707,7 +6920,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "neutral",
-      "stance_confidence": 0.85
+      "stance_confidence": 0.85,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6750,7 +6964,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "neutral",
-      "stance_confidence": 0.85
+      "stance_confidence": 0.85,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6793,7 +7008,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "neutral",
-      "stance_confidence": 0.85
+      "stance_confidence": 0.85,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6836,7 +7052,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "pro",
-      "stance_confidence": 0.85
+      "stance_confidence": 0.85,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6879,7 +7096,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "neutral",
-      "stance_confidence": 0.85
+      "stance_confidence": 0.85,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6922,7 +7140,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "neutral",
-      "stance_confidence": 0.85
+      "stance_confidence": 0.85,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -6965,7 +7184,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "pro",
-      "stance_confidence": 0.85
+      "stance_confidence": 0.85,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -7008,7 +7228,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -7051,7 +7272,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -7094,7 +7316,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -7137,7 +7360,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -7180,7 +7404,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -7223,7 +7448,8 @@
       "refusal_rate": 1.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -7266,7 +7492,8 @@
       "refusal_rate": 0.84,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -7309,7 +7536,8 @@
       "refusal_rate": 0.88,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -7352,7 +7580,8 @@
       "refusal_rate": 0.16,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -7395,7 +7624,8 @@
       "refusal_rate": 0.04,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -7438,7 +7668,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -7481,7 +7712,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -7524,7 +7756,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -7567,7 +7800,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -7610,7 +7844,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -7653,7 +7888,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -7696,7 +7932,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -7739,7 +7976,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -7782,7 +8020,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     },
     {
       "change_points": {
@@ -7825,7 +8064,8 @@
       "refusal_rate": 0.0,
       "sample_s3_uris": [],
       "stance": "na",
-      "stance_confidence": 1.0
+      "stance_confidence": 1.0,
+      "unusable_samples": 0
     }
   ],
   "models": [
@@ -8100,5 +8340,6 @@
     "generated_at": "2026-05-25T09:29:14+00:00",
     "pipeline_version": "0.1.0",
     "week_id": "2026-W21"
-  }
+  },
+  "unmeasured": []
 }

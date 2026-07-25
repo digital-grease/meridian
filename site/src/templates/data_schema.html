@@ -31,7 +31,8 @@
     <dt><code>week_id</code></dt><dd>ISO 8601 week identifier, e.g. <code>2026-W16</code>.</dd>
     <dt><code>prompt_id</code></dt><dd>Stable slug; see <a href="/corpus/">/corpus/</a>.</dd>
     <dt><code>model_id</code></dt><dd>Stable slug per observed model.</dd>
-    <dt><code>n_samples</code></dt><dd>Number of samples in the aggregate (integer).</dd>
+    <dt><code>n_samples</code></dt><dd>Number of samples the metrics on this row were computed from (integer). Excludes any that returned no usable content.</dd>
+    <dt><code>unusable_samples</code></dt><dd>Samples captured for this cell that carried no measurable response and were excluded from every metric, typically a completion truncated by the token limit before any visible output. The raw responses are still published in the week&rsquo;s snapshot. Where <em>every</em> sample was unusable no row is emitted at all; the cell is listed under the manifest&rsquo;s <code>unmeasured</code> key instead, because a refusal rate of 0.00 for a model that answered nothing would be worse than no number. Added 2026-07-24; absent on earlier snapshots, where it should be read as 0.</dd>
     <dt><code>refusal_rate</code></dt><dd>Fraction of samples that declined to answer, in [0, 1].</dd>
     <dt><code>refusal_ci_lower</code>, <code>refusal_ci_upper</code></dt><dd>Bootstrap 95% CI on refusal rate, in [0, 1].</dd>
     <dt><code>hedge_density</code></dt><dd>Hedging markers per 100 tokens.</dd>

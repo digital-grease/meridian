@@ -36,6 +36,7 @@ class OllamaRunner(Runner):
         client: httpx.AsyncClient | None = None,
         timeout: float = 120.0,
         expected_digest: str | None = None,
+        max_tokens: int | None = None,
     ) -> None:
         self.model_id = model_id
         self.base_url = base_url.rstrip("/")
@@ -43,6 +44,7 @@ class OllamaRunner(Runner):
         self._owns_client = client is None
         self.timeout = timeout
         self.expected_digest = expected_digest
+        self.max_tokens_override = max_tokens
 
     async def aclose(self) -> None:
         if self._owns_client and self._client is not None:

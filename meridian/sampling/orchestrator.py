@@ -22,9 +22,10 @@ import logging
 import time
 from dataclasses import dataclass, field
 
+from meridian.analysis.usability import unusable_reason
 from meridian.corpus import Corpus, Prompt
 from meridian.runners import Runner, RunnerError
-from meridian.runners.base import IntegrityError
+from meridian.runners.base import IntegrityError, Sample
 from meridian.storage import LocalSampleStore
 
 _log = logging.getLogger(__name__)
@@ -76,6 +77,18 @@ class RunOutcome:
     pairs_failed: int = 0
     per_runner_samples: dict[str, int] = field(default_factory=dict)
     errors: list[PairError] = field(default_factory=list)
+    #: Samples that were captured and stored but carry no measurement
+    #: (see :mod:`meridian.analysis.usability`), keyed
+    #: ``"provider/model_id"`` -> reason code -> count. Non-empty means
+    #: the run produced holes: the artifacts still publish, but
+    #: ``scripts/check_run_health.py`` turns the job red so a human
+    #: looks. Kept separate from ``errors``, which mean "the request
+    #: failed"; these requests succeeded and returned nothing.
+    unusable_samples: dict[str, dict[str, int]] = field(default_factory=dict)
+
+    @property
+    def total_unusable(self) -> int:
+        return sum(sum(v.values()) for v in self.unusable_samples.values())
 
 
 class Orchestrator:
@@ -133,9 +146,15 @@ class Orchestrator:
                 ))
                 outcome.pairs_failed += total
                 return
+            # A runner may pin its own completion cap (reasoning-default
+            # models need a bigger budget because reasoning tokens are
+            # billed against it); otherwise the plan's shared cap applies.
+            run_max_tokens = runner.max_tokens_override or self.plan.max_tokens
             _log.info(
-                "[%s] starting: %d prompts × up to %d samples/pair",
-                runner_key, total, samples_per_pair,
+                "[%s] starting: %d prompts × up to %d samples/pair "
+                "(max_tokens=%d%s)",
+                runner_key, total, samples_per_pair, run_max_tokens,
+                " [runner override]" if runner.max_tokens_override else "",
             )
             for idx, prompt in enumerate(prompts, 1):
                 pair_started = time.monotonic()
@@ -184,7 +203,7 @@ class Orchestrator:
                                 prompt_id=prompt.id,
                                 n=n_default_batch,
                                 temperature=self.plan.default_temperature,
-                                max_tokens=self.plan.max_tokens,
+                                max_tokens=run_max_tokens,
                                 concurrency=self.plan.concurrency_per_provider,
                                 start_index=start_default,
                             ):
@@ -196,6 +215,9 @@ class Orchestrator:
                                 )
                                 outcome.total_samples_written += 1
                                 outcome.per_runner_samples[runner_key] += 1
+                                self._note_usability(
+                                    outcome, runner_key, prompt.id, s
+                                )
 
                     if n_zero_batch > 0:
                         if not runner.supports_temperature(
@@ -215,7 +237,7 @@ class Orchestrator:
                                 prompt_id=prompt.id,
                                 n=n_zero_batch,
                                 temperature=self.plan.zero_temperature,
-                                max_tokens=self.plan.max_tokens,
+                                max_tokens=run_max_tokens,
                                 concurrency=self.plan.concurrency_per_provider,
                                 start_index=start_zero,
                             ):
@@ -227,6 +249,9 @@ class Orchestrator:
                                 )
                                 outcome.total_samples_written += 1
                                 outcome.per_runner_samples[runner_key] += 1
+                                self._note_usability(
+                                    outcome, runner_key, prompt.id, s
+                                )
 
                     outcome.pairs_complete += 1
                     status = "OK"
@@ -255,15 +280,52 @@ class Orchestrator:
                     pair_started, run_started, samples_added=samples_added,
                 )
 
+            holes = outcome.unusable_samples.get(runner_key, {})
             _log.info(
                 "[%s] complete in %s — %d ok, %d skipped, %d failed",
                 runner_key, _fmt_secs(time.monotonic() - run_started),
                 outcome.pairs_complete, outcome.pairs_skipped,
                 outcome.pairs_failed,
             )
+            if holes:
+                _log.error(
+                    "[%s] %d sample(s) returned no usable content (%s). These "
+                    "are stored but excluded from every metric. If the reason "
+                    "is 'truncated-empty', the model spent its whole "
+                    "completion budget without emitting output — raise this "
+                    "runner's max_tokens in config.yaml.",
+                    runner_key, sum(holes.values()),
+                    ", ".join(f"{k}={v}" for k, v in sorted(holes.items())),
+                )
 
         await asyncio.gather(*[run_one_runner(r) for r in self.runners])
         return outcome
+
+    @staticmethod
+    def _note_usability(
+        outcome: RunOutcome,
+        runner_key: str,
+        prompt_id: str,
+        sample: Sample,
+    ) -> None:
+        """Tally a stored sample that carries no measurement.
+
+        The sample is already persisted by the time this runs, and stays
+        persisted — retention is append-only and a non-answer is itself
+        evidence. This only records that the metrics must not count it.
+        """
+        reason = unusable_reason(sample)
+        if reason is None:
+            return
+        by_reason = outcome.unusable_samples.setdefault(runner_key, {})
+        by_reason[reason] = by_reason.get(reason, 0) + 1
+        _log.warning(
+            "unusable sample: %s / %s (index %d): %s "
+            "(finish_reason=%r, output_tokens=%s, max_tokens=%d)",
+            runner_key, prompt_id, sample.request_index, reason,
+            sample.finish_reason or sample.stop_reason,
+            sample.output_tokens, sample.max_tokens,
+        )
 
     @staticmethod
     def _log_progress(

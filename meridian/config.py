@@ -36,6 +36,14 @@ class RunnerSpec(BaseModel):
     base_url: str | None = None   # for ollama / self-hosted
     enabled: bool = True
     cadence: Cadence = "every_week"
+    # Optional per-runner completion cap, overriding sampling.max_tokens.
+    # Reasoning-default models bill reasoning tokens against the same
+    # budget as visible output, so the shared cap that is generous for a
+    # non-reasoning model can be spent entirely on reasoning, returning
+    # an empty completion with finish_reason="length". Raise it for
+    # those models rather than raising it for everyone, which would
+    # inflate cost on the models that do not need it.
+    max_tokens: int | None = Field(default=None, gt=0)
     # Optional sha256 digest for control-group invariance. Currently
     # honoured by the ollama runner: on startup the runner queries
     # /api/tags and refuses to sample if the served digest doesn't
@@ -189,14 +197,23 @@ def build_runners(config: PipelineConfig, *, week_id: str | None = None):
         if week_id is not None and not should_run_in_week(spec.cadence, week_id):
             continue
         if spec.provider == "anthropic":
-            out.append(AnthropicRunner(spec.model_id, api_key=os.environ.get("ANTHROPIC_API_KEY")))
+            out.append(AnthropicRunner(
+                spec.model_id,
+                api_key=os.environ.get("ANTHROPIC_API_KEY"),
+                max_tokens=spec.max_tokens,
+            ))
         elif spec.provider == "openai":
-            out.append(OpenAIRunner(spec.model_id, api_key=os.environ.get("OPENAI_API_KEY")))
+            out.append(OpenAIRunner(
+                spec.model_id,
+                api_key=os.environ.get("OPENAI_API_KEY"),
+                max_tokens=spec.max_tokens,
+            ))
         elif spec.provider == "ollama":
             out.append(OllamaRunner(
                 spec.model_id,
                 base_url=spec.base_url or "http://localhost:11434",
                 expected_digest=spec.digest,
+                max_tokens=spec.max_tokens,
             ))
         else:  # pragma: no cover
             raise ValueError(f"unknown provider: {spec.provider}")

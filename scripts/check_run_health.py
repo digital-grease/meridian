@@ -41,18 +41,28 @@ def latest_entry_for_week(entries: list[dict], week: str) -> dict | None:
 def evaluate(entry: dict) -> tuple[bool, str]:
     """Return ``(healthy, detail)`` for a run_log entry.
 
-    Unhealthy when any pair failed or any error was recorded. A run that
-    merely *skips* on-cadence batches (e.g. a thinking-default model that
-    only exposes the API-default temperature, so the zero-temp batch is
-    skipped) is healthy: skips don't increment ``pairs_failed``.
+    Unhealthy when any pair failed, any error was recorded, or any
+    sample came back with no usable content. A run that merely *skips*
+    on-cadence batches (e.g. a thinking-default model that only exposes
+    the API-default temperature, so the zero-temp batch is skipped) is
+    healthy: skips don't increment ``pairs_failed``.
+
+    The unusable-sample check was added 2026-07-24. Until then this
+    function only read ``pairs_failed``/``errors``, which are request
+    *failures* — so gpt-5.5 returning HTTP 200 with an empty body on 43
+    of 600 samples passed as a clean run for two consecutive weeks. A
+    request that succeeds and returns nothing is not an error by any
+    transport measure and still has to stop the pipeline.
     """
     failed = int(entry.get("pairs_failed", 0) or 0)
     errors = entry.get("errors") or []
+    unusable = entry.get("unusable_samples") or {}
+    n_unusable = sum(sum(v.values()) for v in unusable.values())
     week = entry.get("week_id", "?")
     summary = (
         f"week={week} pairs_complete={entry.get('pairs_complete')} "
         f"pairs_failed={failed} pairs_skipped={entry.get('pairs_skipped')} "
-        f"errors={len(errors)}"
+        f"errors={len(errors)} unusable_samples={n_unusable}"
     )
     if failed > 0 or errors:
         first = errors[0] if errors else {}
@@ -61,6 +71,20 @@ def evaluate(entry: dict) -> tuple[bool, str]:
             f"{failed} failed pair(s) in {week}. "
             f"first error: {first.get('provider')}/{first.get('model_id')} "
             f"{first.get('error_type')}: {msg}"
+        )
+        return False, detail
+    if n_unusable:
+        breakdown = "; ".join(
+            f"{runner} " + ", ".join(f"{r}={c}" for r, c in sorted(reasons.items()))
+            for runner, reasons in sorted(unusable.items())
+        )
+        detail = (
+            f"{n_unusable} sample(s) in {week} returned no usable content "
+            f"({breakdown}). They are stored but excluded from every metric, "
+            f"so affected cells are under-sampled or absent. A "
+            f"'truncated-empty' reason means the model exhausted its "
+            f"completion budget without emitting output: raise that runner's "
+            f"max_tokens in meridian/config.yaml."
         )
         return False, detail
     return True, summary

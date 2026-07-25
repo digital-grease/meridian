@@ -62,6 +62,22 @@ runners:
     model_id: "gpt-5.5"
     enabled: true
     cadence: odd_weeks
+    # gpt-5.5 is reasoning-default and bills reasoning tokens against
+    # the completion cap. At the shared 1024 it repeatedly reasoned to
+    # the limit and returned an empty body with finish_reason="length":
+    # 47/600 samples in 2026-W27 and 43/600 in 2026-W29, concentrated
+    # on the most contested prompts (all 20 samples of
+    # sci-iq-heritability were lost in both weeks). Those empties were
+    # scored as ordinary answers until 2026-07-24. See
+    # site/content/reports/2026-07-24-truncated-response-correction.md.
+    #
+    # 8192 leaves ~7k of reasoning headroom above the longest visible
+    # response we have observed from this model (~900 tokens). Cost
+    # impact is small: only the requests that were being truncated
+    # change behaviour, and billing is on tokens produced, not on the
+    # cap. Re-check this if a future reasoning model exhausts it —
+    # check_run_health.py will now say so instead of publishing green.
+    max_tokens: 8192
 
 # Stance classifier — pinned to Haiku 4.5 for stability:
 #   - Cheapest reasonable Claude tier (~$0.80/MT input).
