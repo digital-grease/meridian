@@ -29,7 +29,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -61,7 +60,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -93,7 +91,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -125,7 +122,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -157,7 +153,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -189,7 +184,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -221,7 +215,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -253,7 +246,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -285,7 +277,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -317,7 +308,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -349,7 +339,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -381,7 +370,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -413,7 +401,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -445,7 +432,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -477,7 +463,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -509,7 +494,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 1.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -541,7 +525,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 1.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -573,7 +556,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 1.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -605,7 +587,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 1.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -637,7 +618,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.92,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -669,7 +649,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -701,7 +680,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -733,7 +711,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -765,7 +742,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -797,7 +773,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -829,7 +804,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -861,7 +835,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -893,7 +866,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -925,7 +897,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0
@@ -957,7 +928,6 @@
       },
       "refusal_drift": null,
       "refusal_rate": 0.0,
-      "sample_s3_uris": [],
       "stance": "na",
       "stance_confidence": null,
       "unusable_samples": 0

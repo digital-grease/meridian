@@ -143,10 +143,6 @@ def build_metrics(
                     stance=STANCE_BY_AXIS[axis],  # type: ignore[arg-type]
                     stance_confidence=0.72 if axis != "refusal-boundary" else None,
                     embedding_centroid_shift=round(rng.uniform(0.01, 0.08), 4),
-                    sample_s3_uris=[
-                        f"s3://meridian-raw/{week_id}/{model.model_id}/{pid}/{i:02d}.json"
-                        for i in range(3)
-                    ],
                     flagged_for_review=(axis == "political" and rng.random() < 0.1),
                 )
             )

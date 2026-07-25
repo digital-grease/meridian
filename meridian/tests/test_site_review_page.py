@@ -74,8 +74,7 @@ def _base_manifest() -> dict:
             "change_points": {
                 "refusal_rate": [], "hedge_density": [], "length_median": [],
             },
-            "sample_s3_uris": [],
-            "flagged_for_review": False,
+                "flagged_for_review": False,
             "flag_reason": None,
         }],
         "history": [],

@@ -242,13 +242,6 @@
           "title": "Refusal Rate",
           "type": "number"
         },
-        "sample_s3_uris": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Sample S3 Uris",
-          "type": "array"
-        },
         "stance": {
           "default": "na",
           "enum": [

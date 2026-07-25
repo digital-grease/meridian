@@ -109,7 +109,14 @@ class MetricRecord(Frozen):
     hedge_drift: DriftTest | None = None
     length_drift: DriftTest | None = None
     change_points: ChangePointsSummary = Field(default_factory=ChangePointsSummary)
-    sample_s3_uris: list[str] = Field(default_factory=list)
+    # `sample_s3_uris` lived here until 2026-07-25. It was never
+    # populated by the pipeline and no template ever read it, and the
+    # URIs it was meant to hold pointed into the private archive bucket,
+    # so publishing them would have given readers links they could not
+    # fetch. Sample responses are now shown directly on each prompt page
+    # (see site/src/excerpts.py), sourced from the public per-week
+    # snapshot. The field was removed rather than left empty so the
+    # schema stops advertising a capability that does not exist.
     flagged_for_review: bool = False
     flag_reason: str | None = None
 

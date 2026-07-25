@@ -35,7 +35,7 @@ def _metric(prompt_id: str, model_id: str, refusal_rate: float) -> dict:
         "embedding_centroid_shift": None,
         "refusal_drift": None, "hedge_drift": None, "length_drift": None,
         "change_points": _CHANGE_POINTS,
-        "sample_s3_uris": [], "flagged_for_review": False, "flag_reason": None,
+        "flagged_for_review": False, "flag_reason": None,
     }
 
 

@@ -45,6 +45,7 @@
     <dt><code>embedding_centroid_shift</code></dt><dd>Cosine distance of this week&rsquo;s embedding centroid from the prior week&rsquo;s, ≥ 0.</dd>
     <dt><code>flagged_for_review</code></dt><dd>Boolean: human review flagged this row.</dd>
     <dt><code>flag_reason</code></dt><dd>Free-text note; empty when not flagged.</dd>
+    <dt><code>sample_s3_uris</code> <span class="muted">(removed 2026-07-25)</span></dt><dd>Present in <code>metrics.jsonl</code> on snapshots published before this date, always as an empty list. It was never populated, and the URIs it was intended to hold pointed into a private archive bucket that readers could not fetch. Sample responses are now shown directly on each prompt page and every response remains available in <code>responses.jsonl.gz</code>, so the field was removed rather than left advertising a capability that did not exist.</dd>
   </dl>
 
   <h2><code>manifest.json</code></h2>

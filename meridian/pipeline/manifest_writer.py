@@ -163,7 +163,6 @@ def _metric_record_dict(
             "hedge_density": [],
             "length_median": [],
         },
-        "sample_s3_uris": [],
         "flagged_for_review": flagged,
         "flag_reason": flag_reason,
     }
