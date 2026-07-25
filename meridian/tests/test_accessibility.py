@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import http.server
 import json
+import os
 import shutil
 import socket
 import socketserver
@@ -132,10 +133,24 @@ def test_axe_no_violations(axe_server: str, built_dist: Path, tmp_path: Path) ->
     # axe-core/cli 4.x resolves --save as cwd-relative and strips leading
     # slashes, so we run from tmp_path and pass a bare filename.
     out_json = tmp_path / "axe.json"
+    # Point axe at the *system* chromedriver, mirroring what
+    # weekly-build.yml does. Without this, axe falls back to the driver
+    # bundled with @axe-core/cli, which tracks whatever Chrome was
+    # current when that package was published — on a rolling distro it
+    # is reliably behind the installed browser, and axe dies with
+    # "session not created" before writing any JSON. CI carried this
+    # workaround from the start; the test did not, so the local run of
+    # the accessibility gate had been failing for an environmental
+    # reason unrelated to accessibility.
+    driver_flag: list[str] = []
+    driver = os.environ.get("CHROMEDRIVER_PATH") or shutil.which("chromedriver")
+    if driver:
+        driver_flag = ["--chromedriver-path", driver]
     result = subprocess.run(
         [
             "npx", "--yes", "-p", "@axe-core/cli@4", "axe",
             *urls,
+            *driver_flag,
             "--save", out_json.name,
         ],
         capture_output=True, text=True, cwd=tmp_path,

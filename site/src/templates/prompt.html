@@ -160,5 +160,59 @@
     </table>
   </section>
   {% endif %}
+
+  {% set excerpt_rows = [] %}
+  {% for m in models %}
+    {% set ex = excerpts_for(m.model_id) %}
+    {% if ex %}{% set _ = excerpt_rows.append((m, ex)) %}{% endif %}
+  {% endfor %}
+  {% if excerpt_rows %}
+  <section class="metric-section" aria-labelledby="pm-samples">
+    <h2 id="pm-samples">Sample responses</h2>
+    <p class="muted">
+      Actual responses from {{ manifest.snapshot.week_id }}, so the numbers
+      above can be checked against what the models said. Selection is
+      mechanical, not editorial: we show the <strong>shortest</strong>, the
+      <strong>median-length</strong> and the <strong>longest</strong> usable
+      response for each model, breaking ties by sample index. Where a model
+      both refused and answered, at least one of each is included. Every
+      sample, not just these, is in
+      <a href="/data/{{ manifest.snapshot.week_id }}/">the week&rsquo;s raw data</a>.
+      <a href="/methodology/#samples">How these are chosen</a>.
+    </p>
+    {% for m, ex in excerpt_rows %}
+    <div class="samples-model">
+      <h3 id="samples-{{ m.model_id }}">
+        <a href="/models/{{ m.model_id }}/">{{ m.display_name }}</a>
+      </h3>
+      <p class="muted">
+        {{ ex.usable }} usable sample{{ 's' if ex.usable != 1 }} this week{% if ex.unusable %},
+        plus {{ ex.unusable }} that returned no usable content and are excluded
+        from the metrics{% endif %}.
+      </p>
+      {% for e in ex.excerpts %}
+      <details class="sample">
+        <summary>
+          <span class="sample-role">{{ e.role }}</span>
+          <span class="muted">
+            sample #{{ e.request_index }} · temp {{ e.temperature }} ·
+            {{ e.length }} chars ·
+            {{ 'classified refusal' if e.is_refusal else 'classified answer' }}
+          </span>
+        </summary>
+        <blockquote class="sample-text">{{ e.text }}</blockquote>
+        {% if e.truncated %}
+        <p class="muted sample-truncated">
+          Shown to the first {{ max_excerpt_chars }} characters of
+          {{ e.length }}. Full text in
+          <a href="/data/{{ manifest.snapshot.week_id }}/">the raw snapshot</a>.
+        </p>
+        {% endif %}
+      </details>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
 </article>
 {% endblock %}

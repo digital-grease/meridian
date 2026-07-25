@@ -137,7 +137,18 @@ class UnmeasuredCell(Frozen):
 class Snapshot(Frozen):
     week_id: str            # ISO week, e.g. "2026-W16"
     generated_at: datetime
+    #: Commit that last changed the public corpus file. Scoped to that
+    #: file, not repo HEAD, so it only moves when the prompts do.
+    #: ``"unknown"`` on manifests built outside a git checkout, and
+    #: suffixed ``-dirty`` when built against uncommitted corpus edits.
     corpus_git_sha: str
+    #: The corpus's own declared version from ``prompts.yaml``, e.g.
+    #: ``"2026.04.19-v0.2"``. Human-readable counterpart to the sha, and
+    #: the identifier the corpus-versioning contract is written in
+    #: (prompts are superseded across versions, never edited in place).
+    #: Defaulted for manifests published before 2026-07-25, which
+    #: predate the field.
+    corpus_version: str = "unknown"
     pipeline_version: str
 
 

@@ -40,6 +40,7 @@ _REPO_ROOT_FOR_IMPORTS = _HERE.parent.parent
 if str(_REPO_ROOT_FOR_IMPORTS) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT_FOR_IMPORTS))
 
+import excerpts  # noqa: E402
 from chart import OKABE_ITO, heatmap_cell_style, sparkline, viridis_color  # noqa: E402
 from schema import SCHEMA_VERSION, Manifest  # noqa: E402
 
@@ -402,6 +403,16 @@ def render_dashboard(
     )
 
     # ---- per-prompt pages + index ----
+    # Sample responses behind this week's numbers, keyed (prompt, model).
+    # Restricted to the public corpus: the snapshot is the one input on
+    # this path that could carry held-out prompts, and they must never
+    # reach a rendered page.
+    week_excerpts = excerpts.load_for_week(
+        manifest.snapshot.week_id,
+        REPO_ROOT / "data" / "snapshots" / manifest.snapshot.week_id
+        / "responses.jsonl.gz",
+        prompt_ids={p.prompt_id for p in manifest.prompts},
+    )
     for p in manifest.prompts:
         ctx = dict(
             base_context,
@@ -410,6 +421,8 @@ def render_dashboard(
             weeks=weeks,
             manifest=manifest,
             timeseries=manifest.timeseries,
+            excerpts_for=lambda mid, _pid=p.prompt_id: week_excerpts.get((_pid, mid)),
+            max_excerpt_chars=excerpts.MAX_EXCERPT_CHARS,
             og_slug=f"prompt-{p.prompt_id}",
         )
         render_page(

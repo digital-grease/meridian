@@ -4124,7 +4124,8 @@
   "schema_version": 2,
   "silent_update_warnings": [],
   "snapshot": {
-    "corpus_git_sha": "unknown",
+    "corpus_git_sha": "ab955c87d80058071fca3d45b2738c6728c7726a",
+    "corpus_version": "2026.04.19-v0.2",
     "generated_at": "2026-05-11T09:02:29+00:00",
     "pipeline_version": "0.1.0",
     "week_id": "2026-W19"

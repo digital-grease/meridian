@@ -379,6 +379,37 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
 .notice h2 { margin-top: 0; font-size: 1.05rem; }
 .notice ul { margin-bottom: 0.5rem; }
 .notice-warn { border-left-color: var(--fg); }
+
+/* Sample-response drill-down. <details> is used so the receipts are in
+ * the HTML and readable with JS off, without burying the metrics under
+ * a wall of prose. */
+.samples-model { margin: 1.5rem 0; }
+.samples-model h3 { margin-bottom: 0.2rem; }
+.sample {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin: 0.5rem 0;
+  padding: 0.4rem 0.7rem;
+  background: var(--bg-subtle);
+}
+.sample > summary { cursor: pointer; line-height: 1.7; }
+.sample-role {
+  display: inline-block;
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 0.5em;
+}
+.sample-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0.6rem 0 0.2rem;
+  padding-left: 0.8rem;
+  border-left: 2px solid var(--border);
+  font-size: 0.94em;
+}
+.sample-truncated { margin-top: 0.4rem; }
 .cell-score { font-variant-numeric: tabular-nums; font-weight: 600; }
 .cell-as-of {
   display: block;

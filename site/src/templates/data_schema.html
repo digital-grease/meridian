@@ -29,6 +29,8 @@
   </p>
   <dl class="metric-glossary">
     <dt><code>week_id</code></dt><dd>ISO 8601 week identifier, e.g. <code>2026-W16</code>.</dd>
+    <dt><code>corpus_version</code> <span class="muted">(snapshot)</span></dt><dd>The corpus version these results were produced against, e.g. <code>2026.04.19-v0.2</code>. Added 2026-07-25; reads <code>unknown</code> on earlier manifests.</dd>
+    <dt><code>corpus_git_sha</code> <span class="muted">(snapshot)</span></dt><dd>Commit that last changed the public prompt file, so a result can be pinned to an exact prompt set. Scoped to the corpus file rather than repository HEAD, so it moves only when the prompts do. Manifests published before 2026-07-25 carry <code>unknown</code>: the field was present but never populated by the pipeline.</dd>
     <dt><code>prompt_id</code></dt><dd>Stable slug; see <a href="/corpus/">/corpus/</a>.</dd>
     <dt><code>model_id</code></dt><dd>Stable slug per observed model.</dd>
     <dt><code>n_samples</code></dt><dd>Number of samples the metrics on this row were computed from (integer). Excludes any that returned no usable content.</dd>

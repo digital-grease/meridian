@@ -1,3 +1,3 @@
-from meridian.corpus.corpus import Corpus, Prompt, load_corpus
+from meridian.corpus.corpus import Corpus, Prompt, corpus_git_sha, load_corpus
 
-__all__ = ["Corpus", "Prompt", "load_corpus"]
+__all__ = ["Corpus", "Prompt", "corpus_git_sha", "load_corpus"]

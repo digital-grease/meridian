@@ -32,6 +32,7 @@ from meridian.analysis.refusal import classify_refusal
 from meridian.analysis.silent_update import detect_silent_updates
 from meridian.analysis import usability
 from meridian.corpus import Corpus
+from meridian.corpus import corpus_git_sha as detect_corpus_git_sha
 from meridian.runners.base import Sample
 from meridian.storage import LocalSampleStore
 
@@ -596,7 +597,12 @@ def build_manifest(
     corpus: Corpus,
     week_id: str,
     history_weeks: int = 8,
-    corpus_git_sha: str = "unknown",
+    # None means "detect it". The previous default was the literal string
+    # "unknown", and because no caller ever passed anything, every
+    # manifest ever published carried "unknown" — the field looked wired
+    # up and was not. Defaulting to detection makes forgetting produce
+    # the right answer instead of a plausible-looking wrong one.
+    corpus_git_sha: str | None = None,
     pipeline_version: str = "0.1.0",
     display_info: dict[str, RunnerDisplayInfo] | None = None,
     bootstrap_seed: int | None = None,
@@ -712,7 +718,11 @@ def build_manifest(
         "snapshot": {
             "week_id": week_id,
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "corpus_git_sha": corpus_git_sha,
+            "corpus_git_sha": (
+                corpus_git_sha if corpus_git_sha is not None
+                else detect_corpus_git_sha()
+            ),
+            "corpus_version": corpus.corpus_version,
             "pipeline_version": pipeline_version,
         },
         "models": models,

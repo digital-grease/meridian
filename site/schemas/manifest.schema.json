@@ -448,6 +448,11 @@
           "title": "Corpus Git Sha",
           "type": "string"
         },
+        "corpus_version": {
+          "default": "unknown",
+          "title": "Corpus Version",
+          "type": "string"
+        },
         "generated_at": {
           "format": "date-time",
           "title": "Generated At",

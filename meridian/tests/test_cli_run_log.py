@@ -124,6 +124,14 @@ def test_cmd_run_appends_run_log_entry(
         def has_held_out(self):
             return False
 
+        def __getattr__(self, name):
+            # Delegate anything not overridden above (corpus_version,
+            # schema_version, ...) to the real corpus. Without this the
+            # shim silently diverges from Corpus every time a field is
+            # added, and the test fails for a reason unrelated to what
+            # it covers.
+            return getattr(self._inner, name)
+
     monkeypatch.setattr(cli_module, "load_corpus", lambda: _TrimmedCorpus(full))
 
     ns = argparse.Namespace(

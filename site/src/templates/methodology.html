@@ -223,6 +223,36 @@
       in the public repo before the data is seen.</li>
   </ul>
 
+  <h2 id="samples">Which sample responses we show</h2>
+  <p>
+    Each prompt page shows a few of the actual responses behind that
+    week&rsquo;s numbers. Choosing which responses to display is exactly the
+    kind of editorial decision that invites a cherry-picking charge, so it
+    is not a decision at all. The rule is mechanical and identical for every
+    prompt, model and week:
+  </p>
+  <ul>
+    <li>Show the <strong>shortest</strong>, the <strong>median-length</strong>
+      and the <strong>longest</strong> usable response for that model, with
+      ties broken by sample index. The spread is the point: reporting a
+      single response would hide the variance that sampling N=20 exists to
+      measure.</li>
+    <li>If the model both refused and answered that prompt, at least one of
+      each is shown, so the excerpts can never contradict the refusal rate
+      printed above them.</li>
+    <li>Responses that returned no usable content are never shown as
+      excerpts, but their count is stated. See
+      <a href="#data-gaps">known data gaps</a>.</li>
+    <li>Long responses are truncated for display at a fixed character count,
+      always labelled as truncated and always with the true length reported.</li>
+  </ul>
+  <p>
+    These are excerpts, not evidence in themselves. Every sample we collected,
+    including the ones not displayed, is published in that week&rsquo;s
+    <a href="/data/">raw snapshot</a>, and the selection above is reproducible
+    from it.
+  </p>
+
   <h2 id="reproduce">Reproducing a chart</h2>
   <ol>
     <li>Every rendered page carries a footer line with the build&rsquo;s git

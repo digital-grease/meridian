@@ -7,6 +7,8 @@ source of truth; runtime mutations are forbidden.
 from __future__ import annotations
 
 import hashlib
+import subprocess
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
@@ -77,6 +79,50 @@ _DEFAULT_HELD_OUT_PATHS: tuple[Path, ...] = (
     _CORPUS_DIR / "held_out.local.yaml",
     _CORPUS_DIR / "held_out.yaml",
 )
+
+
+@lru_cache(maxsize=4)
+def corpus_git_sha(path: Path | None = None) -> str:
+    """Commit that last changed the public corpus file, or ``"unknown"``.
+
+    Published in every manifest's snapshot so a reader can pin the exact
+    prompt set behind a number. CLAUDE.md requires any dashboard result
+    be reproducible from the public raw data, and "which corpus produced
+    this" is the first thing needed to try.
+
+    Scoped to the corpus file rather than repo HEAD deliberately: HEAD
+    moves on every unrelated code change, so citing it would imply the
+    corpus changed when it did not. This value is stable until the
+    prompts actually change.
+
+    Only the *public* corpus is hashed. The held-out files are gitignored
+    by design (see :data:`_DEFAULT_HELD_OUT_PATHS`), so they have no
+    commit to point at, and publishing one would leak their existence
+    schedule anyway.
+
+    Returns ``"unknown"`` when git is unavailable or the tree is not a
+    repository, and suffixes ``-dirty`` when the file has uncommitted
+    edits — a sha that silently ignored local modifications would be a
+    false provenance claim, which is worse than admitting ignorance.
+    """
+    target = path or _DEFAULT_PATH
+    try:
+        sha = subprocess.run(
+            ["git", "log", "-1", "--format=%H", "--", target.name],
+            cwd=target.parent, capture_output=True, text=True, timeout=10,
+        )
+        if sha.returncode != 0 or not sha.stdout.strip():
+            return "unknown"
+        rev = sha.stdout.strip()
+        dirty = subprocess.run(
+            ["git", "status", "--porcelain", "--", target.name],
+            cwd=target.parent, capture_output=True, text=True, timeout=10,
+        )
+        if dirty.returncode == 0 and dirty.stdout.strip():
+            return f"{rev}-dirty"
+        return rev
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
 
 
 def _load_prompts_file(path: Path, force_held_out: bool) -> list[Prompt]:

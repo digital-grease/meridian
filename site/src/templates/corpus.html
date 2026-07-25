@@ -24,9 +24,25 @@
     <dt>Axes</dt>
     <dd>{{ manifest.prompts | map(attribute='axis') | unique | list | length }}</dd>
 
+    <dt>Corpus version</dt>
+    <dd><code>{{ manifest.snapshot.corpus_version }}</code></dd>
+
     <dt>Latest corpus commit</dt>
-    <dd><code>{{ manifest.snapshot.corpus_git_sha[:12] }}</code></dd>
+    <dd>
+      {% set sha = manifest.snapshot.corpus_git_sha %}
+      {% if sha and sha != 'unknown' and not sha.endswith('-dirty') %}
+      <a href="https://github.com/digital-grease/meridian/commit/{{ sha }}"><code>{{ sha[:12] }}</code></a>
+      {% else %}
+      <code>{{ sha[:12] }}</code>
+      {% endif %}
+    </dd>
   </dl>
+  <p class="muted">
+    The commit is scoped to <code>meridian/corpus/prompts.yaml</code>, so it
+    changes only when the prompts themselves change, not on unrelated code
+    commits. Prompts are never edited in place: a change supersedes the old
+    prompt under a new id and a new corpus version.
+  </p>
 
   <h2>By axis</h2>
   {% set axes = manifest.prompts | map(attribute='axis') | unique | list | sort %}
