@@ -38,10 +38,18 @@ jobs:
         run: uv python install 3.12
 
       - name: Install dependencies
-        # Mirrors weekly-build.yml: --frozen uses uv.lock (already
-        # cooldown-protected at lockfile-update time); the fallback
-        # enforces the 7-day cooldown. See COOLDOWNS.md.
-        run: uv sync --frozen || uv sync --exclude-newer "7 days"
+        # --all-groups is required, not optional tidiness. uv installs
+        # only the `dev` group by default, but the suite imports moto
+        # (storage-s3-dev), sentence-transformers (analysis-heavy),
+        # ruptures, lunr and pyarrow from five other groups, and those
+        # imports are not guarded — without them pytest aborts during
+        # collection. weekly-build.yml gets away with a plain sync
+        # because it only needs runtime deps to render the site.
+        #
+        # --frozen uses uv.lock (already cooldown-protected at
+        # lockfile-update time); the fallback enforces the 7-day
+        # cooldown. See COOLDOWNS.md.
+        run: uv sync --all-groups --frozen || uv sync --all-groups --exclude-newer "7 days"
 
       - name: Run tests
         # Default addopts deselect the `slow` mark; the slow job below
