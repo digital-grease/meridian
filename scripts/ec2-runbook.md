@@ -215,3 +215,39 @@ SSM Session). If a run fails:
 4. Decide whether to re-run by hand (manual `run-weekly.sh` invocation
    with `WE_OWN_LIFECYCLE=0`) or accept the gap and document it on
    the methodology page (per the no-backfill policy).
+
+## Recovery: instance won't start (capacity)
+
+Alert subject: `[meridian] capacity unavailable — instance did not start`.
+
+`StartInstances` failed with `InsufficientInstanceCapacity`: AWS has no
+free capacity for this instance type in its AZ right now. Nothing is
+broken on our side, and there is nothing to fix in the pipeline.
+
+This is not relocatable. We cohabit specter's instance and a stopped
+instance is pinned to its subnet, so another AZ or instance type would
+mean a different box than the one the design shares. Waiting is the
+only lever.
+
+1. Confirm the cause:
+   `aws logs tail /aws/lambda/meridian-orchestrator --since 1h --region us-east-2`
+2. Check whether capacity has returned by simply retrying the fire:
+   `aws lambda invoke --function-name meridian-orchestrator --payload '{"source":"manual"}' /dev/stdout --region us-east-2`
+   A `dispatched` status means it worked. A `CapacityUnavailable` error
+   means keep waiting.
+3. Watch the clock. The publish workflow reads S3 at 13:00 UTC and the
+   run takes 30-90 minutes, so a start after roughly 11:30 UTC will not
+   publish the same day. It is still worth running: re-trigger the
+   publish afterwards with `gh workflow run weekly-pipeline.yml -f week=<ISO week>`.
+4. If capacity does not return the same morning, the week is lost. Add
+   it to `#data-gaps` in `site/src/templates/methodology.html` and close
+   the auto-filed issue pointing at that entry. Do not sample it later:
+   a sample taken Thursday is not a Monday sample, and backdating one
+   would corrupt exactly the signal this project measures.
+
+Capacity outages that recur week over week are worth escalating: two
+consecutive losses (2026-W30, 2026-W31) is already a meaningful hole in
+the longitudinal record. Options at that point are an On-Demand Capacity
+Reservation for the Monday window (bills continuously, so it conflicts
+with the infra budget target) or negotiating a different cohabitation
+host with specter.

@@ -293,7 +293,41 @@
       <code>run_log.jsonl</code>) and was caught on review the
       following week. Affects continuity of the local-baseline noise
       floor for one week; does not affect any commercial-model metric.</dd>
+
+    <dt><code>2026-W30</code> &mdash; all runners</dt>
+    <dd>No samples written, for any model. The weekly run never
+      started: the orchestrator's request to start the sampling
+      instance was rejected with
+      <code>InsufficientInstanceCapacity</code>, meaning AWS had no
+      capacity for that instance type in its availability zone that
+      morning. Affects the even-week frontier slot
+      (<code>claude-opus-4-8</code>) and the <code>llama3.2:3b</code>
+      local baseline.</dd>
+
+    <dt><code>2026-W31</code> &mdash; all runners</dt>
+    <dd>No samples written, for any model. Same cause as
+      <code>2026-W30</code>, recurring the following week. Affects the
+      odd-week frontier slot (<code>gpt-5.5</code>) and the
+      <code>llama3.2:3b</code> local baseline.</dd>
   </dl>
+
+  <p>
+    The <code>2026-W30</code> and <code>2026-W31</code> outages went
+    unnoticed for two weeks because the failure was silent: the
+    orchestrator raised before reaching any of its alerting paths, so
+    no notification was sent and the public dashboard continued to
+    rebuild and deploy normally against the last good week. Both the
+    missing alert and the too-narrow retry window have since been
+    fixed. We are recording the detection delay here, and not just the
+    missing data, because a measurement project that hides its own
+    outages is not worth much.
+  </p>
+
+  <p>
+    Neither week was re-sampled. A run today would carry today's model
+    behavior under a July label, which is precisely the substitution
+    this record exists to make visible. The two weeks stay empty.
+  </p>
 
   <p class="callout">
     If you find a flaw in this methodology, open an issue. Transparency is the
