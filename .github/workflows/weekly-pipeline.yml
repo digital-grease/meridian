@@ -143,6 +143,45 @@ jobs:
           WEEK: ${{ steps.week.outputs.week }}
         run: python3 scripts/check_run_health.py "${WEEK}"
 
+      # Route the failure to the operator's actual inbox. Filing a
+      # GitHub issue (below) is the durable record, but nothing pushed it
+      # to a human: it lands unassigned in the same notification stream
+      # as Renovate PRs. That is precisely how 2026-W30 and 2026-W31 went
+      # unnoticed for two weeks — detection fired on schedule both weeks
+      # and opened issues #24 and #26; nobody read them.
+      #
+      # Publishing to the same SNS topic the orchestrator uses puts
+      # every pipeline failure, whichever side it happened on, in one
+      # place. Best-effort: `|| true` so a missing permission or unset
+      # var can never mask the real failure or block the issue step.
+      - name: Alert operator via SNS
+        if: failure()
+        env:
+          TOPIC_ARN: ${{ vars.ALERT_TOPIC_ARN }}
+          WEEK: ${{ steps.week.outputs.week }}
+        run: |
+          set -uo pipefail
+          if [ -z "${TOPIC_ARN:-}" ]; then
+            echo "::warning::ALERT_TOPIC_ARN repo variable is unset; skipping SNS alert."
+            exit 0
+          fi
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          aws sns publish \
+            --region us-east-2 \
+            --topic-arn "$TOPIC_ARN" \
+            --subject "[meridian] weekly publish failed (${WEEK})" \
+            --message "The weekly publish job failed for ${WEEK}.
+
+          Sampling runs on the EC2 cohabit instance; this job only pulls from S3
+          and commits. A 404 on the manifest means the run never produced one --
+          check the orchestrator Lambda logs:
+
+            aws logs tail /aws/lambda/meridian-orchestrator --since 12h --region us-east-2
+
+          Recovery procedure: scripts/ec2-runbook.md
+          Run: ${RUN_URL}" \
+            || echo "::warning::SNS publish failed; the GitHub issue is still the record."
+
       - name: Open issue on failure
         if: failure()
         uses: actions/github-script@v9
@@ -171,10 +210,15 @@ jobs:
                   `Run: ${run_url}`,
                   `Re-run via the \`workflow_dispatch\` button on this workflow.`,
                 ].join("\n");
+            // Assign the repo owner so the issue generates a direct
+            // notification rather than sitting in the watch feed. Belt
+            // and braces alongside the SNS alert above: if the SNS path
+            // is misconfigured, this still reaches someone.
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `Pipeline ${health ? "run had failures" : "publish failed"}: ${iso}`,
               body,
               labels: ["pipeline", "automated", "bug"],
+              assignees: [context.repo.owner],
             });

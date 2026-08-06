@@ -120,15 +120,40 @@ resource "aws_cloudwatch_log_group" "lambda" {
   retention_in_days = 14
 }
 
-# Pin async-invoke retries to zero. The Lambda's default is 2 retries on a
-# ~60s/120s interval, which compounds problems: a failed weekly run would
-# trigger two more invocations (and two more failure emails) instead of one.
-# We want failures to alert via SNS once and stop. EventBridge Scheduler
-# invokes Lambda async; this config takes effect for that path. (Sync invokes
-# don't read this config — for those, the read-timeout-then-retry behavior
-# of the AWS CLI is the operator's responsibility, see scripts/ec2-runbook.md.)
+# Async-invoke behaviour. THIS, not the Scheduler's retry_policy, is the
+# layer that decides what happens when the function ERRORS.
+#
+# EventBridge Scheduler invokes Lambda asynchronously: Lambda returns 202
+# as soon as it accepts the event, so Scheduler records a successful
+# delivery and its retry_policy never observes a function error. (That
+# policy still covers real delivery failures — throttling, 5xx from the
+# Invoke API — so it is not useless, just not what retries a crash.)
+#
+# Confirmed empirically: on 2026-07-27 and 2026-08-03 the handler raised
+# InsufficientInstanceCapacity and CloudWatch recorded exactly ONE
+# Invocation each week, while the Scheduler policy was set to 1 retry.
+# The retry that "should" have happened never did.
+#
+# The old value here was 0, so a failed weekly run got one attempt, ever.
+# Two retries buys a few minutes against a transient blip. It explicitly
+# does NOT ride out a multi-hour capacity outage — nothing at this layer
+# can, since Lambda's async backoff is roughly 1 min then 2 min. For that
+# the SNS alert plus the manual re-fire in scripts/ec2-runbook.md is the
+# recovery path, and the honest answer is that the week may be lost.
+#
+# The on_failure destination covers the one gap the handler's own
+# alerting cannot: a failure BEFORE the handler body runs (import error,
+# missing env var, init timeout), where none of our code executes to
+# publish. It overlaps with the in-handler alerts by design — worst case
+# a few extra emails on a genuinely lost Monday, which beats silence.
 resource "aws_lambda_function_event_invoke_config" "orchestrator" {
   function_name                = aws_lambda_function.orchestrator.function_name
-  maximum_retry_attempts       = 0
-  maximum_event_age_in_seconds = 60
+  maximum_retry_attempts       = 2
+  maximum_event_age_in_seconds = 10800
+
+  destination_config {
+    on_failure {
+      destination = aws_sns_topic.alerts.arn
+    }
+  }
 }

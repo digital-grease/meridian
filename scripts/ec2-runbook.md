@@ -231,10 +231,25 @@ only lever.
 
 1. Confirm the cause:
    `aws logs tail /aws/lambda/meridian-orchestrator --since 1h --region us-east-2`
-2. Check whether capacity has returned by simply retrying the fire:
-   `aws lambda invoke --function-name meridian-orchestrator --payload '{"source":"manual"}' /dev/stdout --region us-east-2`
-   A `dispatched` status means it worked. A `CapacityUnavailable` error
-   means keep waiting.
+2. Check whether capacity has returned by retrying the fire. Use the
+   same flags as the smoke test above — `--cli-read-timeout 600` is
+   required for the reason documented there, and omitting it makes the
+   CLI time out and re-invoke, firing the function twice:
+
+   ```bash
+   aws lambda invoke \
+       --function-name meridian-orchestrator \
+       --cli-read-timeout 600 --cli-connect-timeout 10 \
+       --region us-east-2 \
+       /tmp/meridian-orch.json
+   cat /tmp/meridian-orch.json
+   ```
+
+   `{"status": "dispatched", ...}` means capacity came back and the run
+   is under way. A `CapacityUnavailable` error means keep waiting. Pass
+   no `--payload`: the handler logs the event but reads nothing from it,
+   and on AWS CLI v2 a raw JSON payload needs
+   `--cli-binary-format raw-in-base64-out` or the call fails outright.
 3. Watch the clock. The publish workflow reads S3 at 13:00 UTC and the
    run takes 30-90 minutes, so a start after roughly 11:30 UTC will not
    publish the same day. It is still worth running: re-trigger the

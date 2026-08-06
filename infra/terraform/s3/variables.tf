@@ -57,6 +57,22 @@ variable "github_repository" {
   default     = ""
 }
 
+variable "alert_topic_arn" {
+  description = <<-EOT
+    SNS topic the weekly-pipeline workflow publishes to when a publish
+    fails. Set this to the ec2-cohabit module's `alerts_topic_arn` output
+    so orchestrator-side and publish-side failures land in one operator
+    inbox — a publish failure previously produced only a GitHub issue
+    that nothing routed to a human, which is how 2026-W30 and W31 went
+    unnoticed for two weeks.
+
+    Leave empty to skip granting sns:Publish; the workflow's alert step
+    is a no-op without it and only the GitHub issue is filed.
+  EOT
+  type        = string
+  default     = ""
+}
+
 variable "transition_to_ia_days" {
   description = "Days after creation before raw/ objects transition to STANDARD_IA."
   type        = number

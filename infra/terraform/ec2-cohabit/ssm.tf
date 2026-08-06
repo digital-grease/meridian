@@ -1,11 +1,24 @@
 # Provider API keys live as SecureString parameters. Terraform creates
 # the parameter shells with throwaway placeholders; the real values are
 # inserted manually via `aws ssm put-parameter --type SecureString
-# --overwrite --name <path> --value <secret>` so plaintext never enters
-# Terraform state.
+# --overwrite --name <path> --value <secret>`.
 #
-# `lifecycle.ignore_changes = [value]` is what enforces this: the
-# manual update via aws-cli won't drift the Terraform state.
+# !! terraform.tfstate CONTAINS THESE KEYS IN CLEARTEXT. Treat the state
+# file as secret material: never attach it to an issue, sync it to
+# unencrypted storage, or relax the *.tfstate rule in .gitignore.
+#
+# This corrects an earlier comment here which claimed "plaintext never
+# enters Terraform state". It does. `lifecycle.ignore_changes = [value]`
+# suppresses the DIFF, so Terraform won't clobber the manually-set key —
+# but the AWS provider still READS the SecureString back (decrypted) on
+# every refresh and writes it into state. Verified 2026-08-05: state
+# holds 108- and 167-character values, not the 19-character placeholder.
+#
+# The durable fix is to stop managing these resources in Terraform at
+# all (create the parameter shells out-of-band and derive the ARNs from
+# the name variables), since ignore_changes already means Terraform
+# contributes nothing but the shell. Tracked as a follow-up; until then
+# the state file is sensitive and is mode 0600 on the operator's box.
 #
 # The parameters use the AWS-managed key (alias/aws/ssm) for encryption.
 # Migrating to a CMK is a v2 concern — would require kms:Decrypt grants

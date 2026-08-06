@@ -53,27 +53,24 @@ resource "aws_scheduler_schedule" "weekly" {
     input = jsonencode({ source = "scheduler" })
 
     retry_policy {
-      # Widened after 2026-W30/W31 were both lost to a single
-      # InsufficientInstanceCapacity on StartInstances: one retry four
-      # minutes later is no use against a capacity crunch, which lasts
-      # hours.
+      # SCOPE: this covers Scheduler's own DELIVERY failures only —
+      # throttling, or a 5xx from the Lambda Invoke API. It does NOT
+      # retry a function error. Scheduler invokes Lambda asynchronously
+      # and gets a 202 the instant Lambda accepts the event, so a
+      # handler that raises still looks like a successful delivery here.
       #
-      # The event-age cap is set so the last retry still leaves room for
-      # a ~30-90 min run before the publish workflow reads S3 at 13:00
-      # UTC. Schedule fires 09:00 UTC (04:00 America/Chicago), so three
-      # hours is the usable window.
+      # Verified the hard way: during the 2026-W30/W31 capacity outage
+      # this policy was set to 1 retry, the handler raised both weeks,
+      # and CloudWatch recorded exactly one Invocation each Monday. The
+      # retry never fired.
       #
-      # Colliding with specter is not the risk the old comment feared:
-      # the wrapper's pre-flight (GPU-busy and specter-process checks in
-      # run-weekly.sh) already defers cleanly if specter has the box, and
-      # the Lambda defers if the instance is already running.
+      # Function-error retries live on the async-invoke config in
+      # lambda.tf. Change them there, not here.
       #
-      # Honest limit: Scheduler backs off exponentially and may well
-      # exhaust these attempts inside the first hour, so this does NOT
-      # reliably cover a multi-hour outage. It buys short-crunch
-      # resilience. The actual recovery path for a long outage is an
-      # operator acting on the SNS alert (see scripts/ec2-runbook.md);
-      # that alert is the fix here, this is the cheap complement.
+      # These values are generous because delivery retries are cheap and
+      # idempotent at this point in the flow (nothing has started yet).
+      # The event-age cap keeps a late delivery from starting a run so
+      # close to the 13:00 UTC publish read that it cannot finish.
       maximum_retry_attempts       = 4
       maximum_event_age_in_seconds = 10800
     }

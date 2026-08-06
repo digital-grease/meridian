@@ -97,3 +97,28 @@ resource "aws_iam_role_policy_attachment" "github_writer" {
   role       = aws_iam_role.github_writer[0].name
   policy_arn = aws_iam_policy.writer.arn
 }
+
+# Let the workflow raise an operator alert when a publish fails. Scoped
+# to the single alert topic — this role has no other SNS access.
+#
+# The topic is owned by the ec2-cohabit module; pass its
+# `alerts_topic_arn` output in via var.alert_topic_arn rather than
+# duplicating the resource across modules.
+
+data "aws_iam_policy_document" "github_alert_publish" {
+  count = var.enable_github_oidc_role && var.alert_topic_arn != "" ? 1 : 0
+
+  statement {
+    sid       = "PublishPipelineAlert"
+    effect    = "Allow"
+    actions   = ["sns:Publish"]
+    resources = [var.alert_topic_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "github_alert_publish" {
+  count  = var.enable_github_oidc_role && var.alert_topic_arn != "" ? 1 : 0
+  name   = "publish-pipeline-alert"
+  role   = aws_iam_role.github_writer[0].id
+  policy = data.aws_iam_policy_document.github_alert_publish[0].json
+}

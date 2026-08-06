@@ -1,0 +1,75 @@
+name: Tests
+
+# Until 2026-08 nothing ran the test suite in CI at all — it executed
+# only when a human remembered to type the command. That is a poor place
+# to keep regression tests whose whole purpose is catching a silent
+# failure (see meridian/tests/test_lambda_orchestrator.py, which pins the
+# alerting paths that the 2026-W30/W31 outage slipped through).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Per-ref, and cancellable: a newer push supersedes an in-flight run.
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.3.2
+        with:
+          version: ">=0.9.17"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        # Mirrors weekly-build.yml: --frozen uses uv.lock (already
+        # cooldown-protected at lockfile-update time); the fallback
+        # enforces the 7-day cooldown. See COOLDOWNS.md.
+        run: uv sync --frozen || uv sync --exclude-newer "7 days"
+
+      - name: Run tests
+        # Default addopts deselect the `slow` mark; the slow job below
+        # picks those up so nothing is silently skipped forever.
+        run: uv run python -m pytest -q
+
+  pytest-slow:
+    # The slow tests (a11y, and anything else over ~2s) are deselected by
+    # pyproject's default addopts. Run them on main and on demand rather
+    # than on every PR push, so the fast gate stays fast.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.3.2
+        with:
+          version: ">=0.9.17"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --frozen || uv sync --exclude-newer "7 days"
+
+      - name: Run slow tests
+        run: uv run python -m pytest -q -m slow
