@@ -16,7 +16,7 @@ dependencies = [
   "pyyaml>=6,<7",
   "tenacity>=8,<10",
   "anthropic>=0.40,<1",
-  "openai>=1.40,<2",
+  "openai>=2.53,<3",
   # AWS — required for SSM-backed secrets resolution and S3 archival.
   # Both are gated by config / env vars at runtime, but the EC2 path
   # always needs them, so they're hard deps not optional groups.
