@@ -35,6 +35,116 @@ def _fake_sample(*, prompt_id: str, model_id: str, idx: int, text: str) -> Sampl
     )
 
 
+def _api_refusal_sample(*, prompt_id: str, model_id: str, idx: int) -> Sample:
+    """The 2026-08-10 Anthropic shape: refusal in the terminator, no body.
+
+    Usable and measured (it counts toward N and toward the refusal rate),
+    but it carries no text, so nothing text-derived can be computed from
+    it.
+    """
+    return Sample(
+        prompt_id=prompt_id,
+        model_id=model_id,
+        provider="fake",
+        request_index=idx,
+        temperature=1.0,
+        max_tokens=1024,
+        text="",
+        model_version_string=f"{model_id}-2026-08-10",
+        stop_reason="refusal",
+        finish_reason=None,
+        latency_ms=1,
+        captured_at=datetime(2026, 8, 10, tzinfo=timezone.utc),
+    )
+
+
+def test_length_quantiles_are_null_when_nothing_carried_text(tmp_path: Path):
+    """No text to measure must publish as null, never as 0.
+
+    summarize_lengths([]) returns 0.0 for median/p25/p75, and a published
+    0.0 reads as "the model answered with zero words". For a cell that
+    refused 20 times out of 20 through the terminator, that is an
+    observation nobody made: it flowed into the CSV export and got
+    averaged into the axis figures on the home-page heatmap, where a
+    fabricated zero drags a refusal-boundary median toward the floor.
+    """
+    corpus = load_corpus()
+    model_id = "fake-model-1"
+    refused = corpus.public()[0]
+    answered = corpus.public()[1]
+
+    store = LocalSampleStore(tmp_path)
+    for i in range(20):
+        store.append("2026-W32", model_id, refused.id,
+                     _api_refusal_sample(prompt_id=refused.id,
+                                         model_id=model_id, idx=i))
+        store.append("2026-W32", model_id, answered.id,
+                     _fake_sample(prompt_id=answered.id, model_id=model_id,
+                                  idx=i, text="a substantive answer"))
+
+    manifest = build_manifest(
+        store=store, corpus=corpus, week_id="2026-W32",
+        history_weeks=0, bootstrap_seed=3,
+    )
+    by_prompt = {m["prompt_id"]: m for m in manifest["metrics"]}
+
+    # The cell is published rather than discarded: 20 measured refusals.
+    blank = by_prompt[refused.id]
+    assert blank["n_samples"] == 20
+    assert blank["unusable_samples"] == 0
+    assert blank["refusal_rate"] == 1.0
+    assert blank["length"] == {"median": None, "p25": None, "p75": None, "n": 0}
+
+    # A cell that did carry text is unaffected.
+    normal = by_prompt[answered.id]
+    assert normal["length"]["n"] == 20
+    assert normal["length"]["median"] > 0
+
+
+def test_null_length_does_not_break_change_point_series(tmp_path: Path):
+    """A null median drops out of the series instead of crashing on float().
+
+    The change-point pass reads length.median off every record in the
+    pair's history. Coercing a null to 0.0 would hand the detector a
+    length collapse that never happened; passing it through raises
+    TypeError and takes down the whole manifest build.
+    """
+    corpus = load_corpus()
+    model_id = "fake-model-1"
+    prompt = corpus.public()[0]
+    weeks = [f"2026-W{n:02d}" for n in range(26, 33)]
+
+    store = LocalSampleStore(tmp_path)
+    for week_id in weeks:
+        for i in range(20):
+            if week_id == weeks[-1]:
+                store.append(week_id, model_id, prompt.id,
+                             _api_refusal_sample(prompt_id=prompt.id,
+                                                 model_id=model_id, idx=i))
+            else:
+                store.append(week_id, model_id, prompt.id,
+                             _fake_sample(prompt_id=prompt.id, model_id=model_id,
+                                          idx=i, text="a substantive answer"))
+
+    manifest = build_manifest(
+        store=store, corpus=corpus, week_id=weeks[-1],
+        history_weeks=8, bootstrap_seed=3,
+    )
+    current = next(m for m in manifest["metrics"] if m["prompt_id"] == prompt.id)
+    assert current["length"]["median"] is None
+    # Indices point into the non-null series, so they can only reference
+    # weeks that actually have a length.
+    measured = sum(
+        1 for snap in manifest["history"]
+        for m in snap["metrics"]
+        if m["prompt_id"] == prompt.id and m["length"]["median"] is not None
+    )
+    assert all(
+        0 <= idx < measured
+        for idx in current["change_points"]["length_median"]
+    )
+
+
 def _seed_store(tmp_path: Path, corpus, week_id: str, model_id: str) -> LocalSampleStore:
     store = LocalSampleStore(tmp_path)
     for prompt in corpus.public():
@@ -253,6 +363,154 @@ def test_change_points_computed_on_current_metric(tmp_path: Path):
     # Stable prompt should have no detected change points.
     stable = by_prompt[seeded[1].id]
     assert stable["change_points"]["refusal_rate"] == []
+
+
+def test_change_points_not_emitted_across_missing_weeks(tmp_path: Path):
+    """2026-W30/W31 outage regression, end to end through the manifest.
+
+    Those two weeks produced no data at all (the orchestrator's EC2
+    request was rejected with InsufficientInstanceCapacity two Mondays
+    running), so 2026-W29 and 2026-W32 are three weeks apart. The series
+    handed to the detector used to carry no week identity, which made
+    them positionally adjacent and turned any shift accumulated across
+    the outage into a single week-over-week regime change. On the
+    local-baseline control series that is not a cosmetic error: its
+    noise floor is subtracted from every commercial drift figure.
+
+    Same values, same positions, only the calendar differs between the
+    two halves of this test.
+    """
+    corpus = load_corpus()
+    model_id = "fake-model-1"
+    seeded = corpus.public()[:2]
+    flip_prompt = seeded[0].id
+
+    def _seed_weeks(base: Path, weeks: list[str]) -> LocalSampleStore:
+        store = LocalSampleStore(base)
+        for pos, week_id in enumerate(weeks):
+            for prompt in seeded:
+                flipped = prompt.id == flip_prompt and pos >= 4
+                for i in range(20):
+                    text = (
+                        "I can't help with that request."
+                        if flipped
+                        else "This is a substantive answer without refusals."
+                    )
+                    store.append(
+                        week_id, model_id, prompt.id,
+                        _fake_sample(prompt_id=prompt.id, model_id=model_id,
+                                     idx=i, text=text),
+                    )
+        return store
+
+    # Control: eight consecutive weeks, refusal flips at position 4.
+    contiguous_weeks = [f"2026-W{n:02d}" for n in range(22, 30)]
+    contiguous = build_manifest(
+        store=_seed_weeks(tmp_path / "contiguous", contiguous_weeks),
+        corpus=corpus, week_id=contiguous_weeks[-1],
+        history_weeks=8, bootstrap_seed=7,
+    )
+    control_cps = {
+        m["prompt_id"]: m["change_points"]["refusal_rate"]
+        for m in contiguous["metrics"]
+    }
+    assert control_cps[flip_prompt] == [4], control_cps
+
+    # Same eight values, but weeks 30 and 31 never happened, so the flip
+    # sits on the far side of a three-week hole and cannot be attributed
+    # to any single week.
+    gapped_weeks = [f"2026-W{n:02d}" for n in (22, 23, 24, 25, 32, 33, 34, 35)]
+    gapped = build_manifest(
+        store=_seed_weeks(tmp_path / "gapped", gapped_weeks),
+        corpus=corpus, week_id=gapped_weeks[-1],
+        history_weeks=8, bootstrap_seed=7,
+    )
+    for m in gapped["metrics"]:
+        assert m["change_points"]["refusal_rate"] == [], (
+            f"{m['prompt_id']}: change point emitted across the "
+            f"2026-W30/W31 outage: {m['change_points']}"
+        )
+
+
+def test_drift_records_carry_comparison_window(tmp_path: Path):
+    """Every drift entry states which week it was measured against.
+
+    A p-value with no window is not reproducible: the reader cannot tell
+    a normal consecutive-week comparison from one that reaches back over
+    a cadence skip or an outage.
+    """
+    corpus = load_corpus()
+    model_id = "fake-model-1"
+    seeded = corpus.public()[:2]
+    store = LocalSampleStore(tmp_path)
+    for week in ("2026-W15", "2026-W16"):
+        for prompt in seeded:
+            for i in range(15):
+                store.append(
+                    week, model_id, prompt.id,
+                    _fake_sample(prompt_id=prompt.id, model_id=model_id, idx=i,
+                                 text="This is a substantive answer."),
+                )
+
+    manifest = build_manifest(
+        store=store, corpus=corpus, week_id="2026-W16",
+        history_weeks=4, bootstrap_seed=11,
+    )
+
+    checked = 0
+    for m in manifest["metrics"]:
+        for field in ("refusal_drift", "hedge_drift", "length_drift"):
+            entry = m[field]
+            assert entry is not None, f"{m['prompt_id']}.{field}"
+            assert entry["compared_to_week"] == "2026-W15"
+            assert entry["weeks_elapsed"] == 1
+            checked += 1
+    assert checked == len(seeded) * 3
+
+    # History snapshots carry no drift entries at all, so no window either.
+    for snap in manifest["history"]:
+        for m in snap["metrics"]:
+            assert m["refusal_drift"] is None
+
+
+def test_drift_window_reports_multi_week_reach_back(tmp_path: Path):
+    """2026-W32 regression: claude-opus-4-8's comparison reached back to
+    2026-W28, four ISO weeks, because it runs on even weeks and the
+    2026-W30 run never happened. The manifest said nothing about that,
+    so a four-week comparison was indistinguishable from a weekly one.
+    """
+    corpus = load_corpus()
+    even_model = "fake-model-even"   # even ISO weeks: W28, W32
+    odd_model = "fake-model-odd"     # odd ISO weeks: W29
+    seeded = corpus.public()[:2]
+
+    store = LocalSampleStore(tmp_path)
+    for week, model_id in (
+        ("2026-W28", even_model),
+        ("2026-W29", odd_model),
+        ("2026-W32", even_model),
+    ):
+        for prompt in seeded:
+            for i in range(20):
+                store.append(
+                    week, model_id, prompt.id,
+                    _fake_sample(prompt_id=prompt.id, model_id=model_id, idx=i,
+                                 text="This is a substantive answer."),
+                )
+
+    manifest = build_manifest(
+        store=store, corpus=corpus, week_id="2026-W32",
+        history_weeks=8, bootstrap_seed=5,
+    )
+
+    assert {m["model_id"] for m in manifest["metrics"]} == {even_model}
+    for m in manifest["metrics"]:
+        entry = m["refusal_drift"]
+        assert entry is not None
+        # W29 belongs to the other model; the baseline is the last week
+        # THIS model ran, and W30/W31 are simply missing.
+        assert entry["compared_to_week"] == "2026-W28"
+        assert entry["weeks_elapsed"] == 4
 
 
 def test_silent_update_warnings_auto_populated(tmp_path: Path):

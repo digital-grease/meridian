@@ -30,5 +30,12 @@ redirects:
     to: /models/gpt-5.1/
     reason: "Model id renamed 2026-04-23 from placeholder `gpt-5-preview` to the real OpenAI slug `gpt-5.1`."
   - from: /models/gpt-5-preview/2026-W16/
-    to: /models/gpt-5.1/2026-W16/
-    reason: "Model-week drill-down for the renamed openai frontier runner."
+    to: /models/gpt-5.1/
+    reason: >-
+      Model-week drill-down for the renamed openai frontier runner.
+      Retargeted 2026-08-15 from /models/gpt-5.1/2026-W16/, which no
+      build has ever produced: published history starts at 2026-W17, so
+      the original target only existed on the pre-launch fixture site.
+      The row served a 200 onto a 404 from launch until then. Per the
+      guidelines above the row is kept rather than removed, and points
+      at the model index, which is the nearest page that exists.

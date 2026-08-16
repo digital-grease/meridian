@@ -5,18 +5,24 @@ published manifests into, plus the IAM permissions needed to write to it.
 
 This is the *durability* backup. Public distribution happens via GitHub Pages
 under `/data/{week}/`; the bucket itself is private and blocked from public
-access. The hard rule from `CLAUDE.md` — "raw data is never destroyed" —
-maps here to versioning + a lifecycle that only moves objects between storage
-classes, never expires current versions.
+access. The hard rule from `CLAUDE.md`, "raw data is never destroyed", maps
+here to versioning plus a lifecycle that, under `raw/`, only moves objects
+between storage classes and never expires anything, current or non-current.
 
 ## What you get
 
 - Private, versioned S3 bucket with SSE-S3 encryption and an HTTPS-only
   bucket policy.
-- Lifecycle rule on `raw/`: `STANDARD` → `STANDARD_IA` (30 d) → `DEEP_ARCHIVE`
-  (365 d). Current versions are never expired.
-- Lifecycle rule on `manifests/`: non-current versions expire after 90 d to
-  keep the pointer-churn on `manifests/latest.json` from accumulating cost.
+- Lifecycle rule on `meridian/raw/`: `STANDARD` → `STANDARD_IA` (30 d) →
+  `GLACIER_IR` (365 d). No expiration of any kind: neither current nor
+  non-current versions are ever deleted, per the "raw data is never
+  destroyed" hard rule. Note that S3 will not transition an object under
+  128 KB, and raw objects are 9-93 KB, so these transitions are expected to
+  be a no-op today; they exist for a future larger object profile. See the
+  comment in `main.tf` before changing either of them.
+- Lifecycle rule on `meridian/manifests/`: non-current versions expire after
+  90 d to keep the pointer-churn on `manifests/latest.json` from accumulating
+  cost. This is the only rule in the module that deletes anything.
 - IAM policy granting `PutObject` + `HeadObject` + `ListBucket` against the
   bucket — no deletes, no reads of other buckets.
 - Your choice of two writer-principal patterns:
@@ -46,7 +52,7 @@ storage:
   s3:
     bucket: "meridian-archive-prod"
     region: "us-east-2"
-    prefix: ""                      # or "meridian/" to namespace within a shared bucket
+    prefix: "meridian/"             # must match local.key_prefix in main.tf
     publish_latest_pointer: true    # write manifests/latest.json each run
 ```
 
@@ -140,5 +146,9 @@ at sample time, per the cohabit module.
   today; S3 is archive-only here.
 - CloudTrail data events. A separate account-level concern; enable via your
   audit-account Terraform, not this module.
-- Budget alerts. Use AWS Budgets in the same account; the lifecycle rules
-  here mean cost should be dominated by DEEP_ARCHIVE after a year.
+- Budget alerts. Use AWS Budgets in the same account. Do not expect the
+  lifecycle rules to hold the bill down: every raw object is under S3's
+  128 KB transition floor, so the archive stays in STANDARD in practice. At
+  this scale that is a few dollars a year against an API spend measured in
+  thousands, and the lever that would actually matter is packing weeks into
+  fewer, larger objects, not a transition rule.

@@ -17,6 +17,7 @@ import hashlib
 import html as html_lib
 import io
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -42,7 +43,7 @@ if str(_REPO_ROOT_FOR_IMPORTS) not in sys.path:
 
 import excerpts  # noqa: E402
 from chart import OKABE_ITO, heatmap_cell_style, sparkline, viridis_color  # noqa: E402
-from schema import SCHEMA_VERSION, Manifest  # noqa: E402
+from schema import SCHEMA_VERSION, Manifest, is_measured  # noqa: E402
 
 TEMPLATES_DIR = _HERE / "templates"
 STATIC_DIR = _HERE / "static"
@@ -330,6 +331,13 @@ def render_dashboard(
     env: Environment, out_dir: Path, manifest: Manifest, base_context: dict
 ) -> None:
     weeks = manifest.all_weeks  # oldest-first
+    # Two different lists, and pages need both. ``weeks`` is the calendar
+    # axis for every table's columns and includes weeks the audit never
+    # ran, so a lost week keeps its column. ``observed_weeks`` is what we
+    # actually captured, and it is the only honest thing to count in a
+    # sentence like "observed over N weeks": the 2026-W32 build said 16
+    # when the 2026-W30 and 2026-W31 runs never started.
+    observed_weeks = manifest.observed_weeks
     axes = sorted({p.axis for p in manifest.prompts})
 
     # ---- per-model pages + index ----
@@ -338,6 +346,7 @@ def render_dashboard(
             base_context,
             model=m,
             weeks=weeks,
+            observed_weeks=observed_weeks,
             axes=axes,
             prompts=manifest.prompts,
             manifest=manifest,
@@ -385,6 +394,7 @@ def render_dashboard(
             axis=axis,
             models=manifest.models,
             weeks=weeks,
+            observed_weeks=observed_weeks,
             axis_prompts=axis_prompts,
             table=axis_metric_table(manifest, axis),
             manifest=manifest,
@@ -419,6 +429,7 @@ def render_dashboard(
             prompt=p,
             models=manifest.models,
             weeks=weeks,
+            observed_weeks=observed_weeks,
             manifest=manifest,
             timeseries=manifest.timeseries,
             excerpts_for=lambda mid, _pid=p.prompt_id: week_excerpts.get((_pid, mid)),
@@ -469,6 +480,124 @@ def _per_week_readme(week_id: str) -> str:
     )
 
 
+#: Filename for a gap week's only artifact. Deliberately not
+#: ``README.md``: the snapshot index at /data/ lists each week's files
+#: by name, so this is what makes a gap row legible as a gap in the
+#: index itself rather than only on the week's own page.
+GAP_WEEK_NOTICE = "NO-DATA.md"
+
+
+def _gap_week_readme(week_id: str) -> str:
+    """Notice file for an ISO week in which the audit captured nothing.
+
+    Deliberately blunt. Someone who lands here from a citation or from
+    the snapshot index needs to know within one line that there is no
+    data for this week and that there never will be, not to go hunting
+    for a file that was never written.
+    """
+    return (
+        f"# Meridian gap week: {week_id}\n\n"
+        f"ISO week {week_id} has no data. The scheduled weekly run did\n"
+        f"not produce samples for any model, so there are no metrics,\n"
+        f"no responses, and no manifest for this week.\n\n"
+        f"## Why this directory exists\n\n"
+        f"A longitudinal record whose holes are invisible is worse than\n"
+        f"one with holes. This week sits between weeks that do have\n"
+        f"data, so it keeps a directory, a URL, and a column in every\n"
+        f"model-by-week table on the site. Charts break the line here\n"
+        f"rather than joining the weeks on either side.\n\n"
+        f"## Not backfilled\n\n"
+        f"The week was not re-sampled later. A run made after the fact\n"
+        f"would carry today's model behaviour under this week's label,\n"
+        f"which is precisely the substitution this project exists to\n"
+        f"make visible.\n\n"
+        f"The cause of this specific gap is documented at\n"
+        f"https://meridianaudit.org/methodology/#data-gaps\n\n"
+        f"## License\n\n"
+        f"CC-BY-SA 4.0.\n"
+    )
+
+
+def _publish_gap_weeks(
+    env: Environment,
+    out_dir: Path,
+    manifest: Manifest,
+    base_context: dict,
+) -> list[dict]:
+    """Emit a ``/data/{week}/`` landing page for every week with no snapshot.
+
+    Written after the 2026-W30 and 2026-W31 outage, when ``/data/``
+    listed 2026-W29 immediately above 2026-W32 and nothing on the page
+    said that two weeks were missing. A reader scanning the index had no
+    way to distinguish "the audit ran every week" from "the audit lost
+    two weeks", which is a methodology problem rather than a cosmetic
+    one.
+
+    Each gap week gets a real directory so the index row's links
+    resolve: a README stating there is no data, and a SHA256SUMS over
+    it. Row count is 0 and the entry is flagged ``is_gap`` so the
+    snapshot index can label it.
+
+    A week is only published as a gap when the committed record agrees
+    that it is one. ``missing_weeks`` infers "the audit captured nothing
+    and never will" from the week's absence from *this manifest's*
+    history, and that inference is not always sound: the manifest
+    writer's backfill loop skips a prior manifest it cannot parse, and
+    skips any week left with no metrics after prompt-id scoping, so a
+    corpus prompt rename or one unreadable file is enough to drop a week
+    that does have a snapshot. Publishing a NO-DATA notice over a week
+    whose data is sitting in ``data/`` would assert a falsehood about
+    the public record and quietly replace that week's metrics and
+    responses with a stub. Both trees are read-only here.
+    """
+    entries: list[dict] = []
+    for week_id in manifest.missing_weeks:
+        committed = [
+            p for p in (
+                REPO_ROOT / "data" / "manifests" / f"{week_id}.json",
+                REPO_ROOT / "data" / "snapshots" / week_id,
+            )
+            if p.exists()
+        ]
+        if committed:
+            print(
+                f"WARNING: {week_id} is absent from the manifest's history but "
+                f"the committed record has {', '.join(str(p) for p in committed)}. "
+                f"Refusing to publish a no-data notice over a week that has "
+                f"data. The manifest is wrong, not the archive: check the "
+                f"backfill in meridian/pipeline/manifest_writer.py.",
+                file=sys.stderr,
+            )
+            continue
+        snap_dir = out_dir / "data" / week_id
+        snap_dir.mkdir(parents=True, exist_ok=True)
+        notice_text = _gap_week_readme(week_id)
+        (snap_dir / GAP_WEEK_NOTICE).write_text(notice_text)
+        (snap_dir / "SHA256SUMS").write_text(
+            f"{_sha256_of(notice_text)}  {GAP_WEEK_NOTICE}\n"
+        )
+        entry = {
+            "week_id": week_id,
+            "is_current": False,
+            "is_gap": True,
+            "files": [
+                {
+                    "name": GAP_WEEK_NOTICE,
+                    "size": len(notice_text.encode("utf-8")),
+                }
+            ],
+            "row_count": 0,
+            "has_responses": False,
+        }
+        entries.append(entry)
+        render_page(
+            env, "data_gap.html",
+            snap_dir / "index.html",
+            dict(base_context, week=entry, manifest=manifest),
+        )
+    return entries
+
+
 def _copy_responses_snapshot(week_id: str, snap_dir: Path) -> dict | None:
     """Copy ``data/snapshots/{week}/responses.jsonl.gz`` into the
     published snapshot dir.
@@ -488,6 +617,17 @@ def _copy_responses_snapshot(week_id: str, snap_dir: Path) -> dict | None:
         "size": len(content),
         "sha256": hashlib.sha256(content).hexdigest(),
     }
+
+
+def _opt_float(value) -> float | None:
+    """``float(value)``, or None when the value is absent.
+
+    Used for the nullable length quantiles: a cell whose only usable
+    samples were body-less refusals has no length distribution at all
+    (see ``schema.LengthStats``), and every export has to carry that
+    absence rather than coerce it to a number.
+    """
+    return None if value is None else float(value)
 
 
 def _try_write_parquet(week_id: str, metrics: list, snap_dir: Path) -> int | None:
@@ -511,9 +651,13 @@ def _try_write_parquet(week_id: str, metrics: list, snap_dir: Path) -> int | Non
             "refusal_ci_lower": float(m.refusal_ci.lower),
             "refusal_ci_upper": float(m.refusal_ci.upper),
             "hedge_density": float(m.hedge_density),
-            "length_median": float(m.length.median),
-            "length_p25": float(m.length.p25),
-            "length_p75": float(m.length.p75),
+            # Null quantiles stay null in the export. A cell measured
+            # entirely from body-less refusals has no length
+            # distribution, and writing 0.0 would publish a run of
+            # zero-word answers nobody wrote.
+            "length_median": _opt_float(m.length.median),
+            "length_p25": _opt_float(m.length.p25),
+            "length_p75": _opt_float(m.length.p75),
             "stance": m.stance,
             "stance_confidence": (
                 None if m.stance_confidence is None else float(m.stance_confidence)
@@ -531,6 +675,11 @@ def _try_write_parquet(week_id: str, metrics: list, snap_dir: Path) -> int | Non
     return out.stat().st_size
 
 
+def _blank_if_none(value) -> object:
+    """CSV rendering of a nullable numeric column."""
+    return "" if value is None else value
+
+
 def _metrics_to_csv(week_id: str, metrics: list) -> str:
     buf = io.StringIO()
     w = csv.writer(buf, lineterminator="\n")
@@ -539,7 +688,14 @@ def _metrics_to_csv(week_id: str, metrics: list) -> str:
         w.writerow([
             week_id, m.prompt_id, m.model_id, m.n_samples, m.unusable_samples,
             m.refusal_rate, m.refusal_ci.lower, m.refusal_ci.upper,
-            m.hedge_density, m.length.median, m.length.p25, m.length.p75,
+            m.hedge_density,
+            # Empty, not 0, when there was no text to measure. Same
+            # convention the optional columns below already use, and the
+            # reason is stronger here: a 0 in a length column reads as a
+            # measurement.
+            _blank_if_none(m.length.median),
+            _blank_if_none(m.length.p25),
+            _blank_if_none(m.length.p75),
             m.stance, m.stance_confidence if m.stance_confidence is not None else "",
             m.embedding_centroid_shift if m.embedding_centroid_shift is not None else "",
             str(m.flagged_for_review).lower(),
@@ -629,6 +785,7 @@ def publish_data(
         week_entry = {
             "week_id": week_id,
             "is_current": week_id == manifest.snapshot.week_id,
+            "is_gap": False,
             "files": files_meta,
             "row_count": len(metrics),
             "has_responses": responses_meta is not None,
@@ -646,6 +803,11 @@ def publish_data(
             snap_dir / "index.html",
             dict(base_context, week=week_entry, manifest=manifest),
         )
+
+    # Weeks the audit never ran get a directory too, so the index below
+    # shows the hole in the record instead of listing 2026-W29 directly
+    # above 2026-W32.
+    snapshots_meta.extend(_publish_gap_weeks(env, out_dir, manifest, base_context))
 
     # Data index page.
     render_page(
@@ -830,11 +992,23 @@ def load_run_log_summary(repo_root: Path) -> list:
     """Return WeeklySummary rows for the internal health page.
 
     Graceful when the log doesn't exist yet (empty list).
+
+    ``MERIDIAN_RUN_LOG`` overrides the path. That exists so a test can
+    script this page's input without touching the real log: on
+    2026-08-15 the health-page tests, which swapped
+    ``data/run_log.jsonl`` in place and restored it in a finally block,
+    were run concurrently by two processes. One captured the other's
+    scripted file as "the original" and restored that, and 15 of the 17
+    real entries were destroyed. They were recoverable from git, but the
+    run log is the append-only public record and retention is forever,
+    so no test may write to it at all. Point the override at a tmp_path
+    instead.
     """
     from meridian.pipeline.run_log import read_run_log
     from meridian.pipeline.run_log_summary import summarize_weekly
 
-    log_path = repo_root / "data" / "run_log.jsonl"
+    override = os.environ.get("MERIDIAN_RUN_LOG")
+    log_path = Path(override) if override else repo_root / "data" / "run_log.jsonl"
     return summarize_weekly(read_run_log(log_path))
 
 
@@ -941,11 +1115,21 @@ def axis_metric_table(manifest: Manifest, axis: str) -> dict:
       * ``max``: top of the colour ramp (ramp is anchored at 0.0)
       * ``has_gaps``: True if any cell is None, so the template only
         explains the gap marker on tables that actually have one
+      * ``missing_weeks``: the subset of ``weeks`` in which the audit
+        ran nothing at all, so those columns can be labelled as an
+        outage rather than as a cadence skip
 
     A None cell means the model produced no samples that week, most
     often because frontier models alternate on a biweekly cadence.
     That is emphatically not a measurement of zero, and the two must
     never render alike.
+
+    Since 2026-W30 ``weeks`` also carries weeks with no snapshot at all
+    (see ``Manifest.missing_weeks``). Every row is None in such a
+    column, which is correct: no model was sampled. Gap sentinels
+    arriving from ``timeseries`` are dropped here rather than averaged,
+    keeping the "aggregate statistics exclude the missing cell rather
+    than imputing it" promise on /methodology/.
     """
     metric = _AXIS_HEADLINE_METRIC.get(axis, _DEFAULT_AXIS_METRIC)
     meta = _METRIC_META[metric]
@@ -959,6 +1143,8 @@ def axis_metric_table(manifest: Manifest, axis: str) -> dict:
         by_week: dict[str, list[float]] = {}
         for p in prompts:
             for week_id, value in manifest.timeseries(p.prompt_id, model.model_id, metric):
+                if not is_measured(value):
+                    continue
                 by_week.setdefault(week_id, []).append(value)
         cells: list[float | None] = []
         for w in weeks:
@@ -982,6 +1168,7 @@ def axis_metric_table(manifest: Manifest, axis: str) -> dict:
     return {
         "metric": metric, "meta": meta, "weeks": weeks,
         "rows": rows, "max": top, "has_gaps": has_gaps,
+        "missing_weeks": manifest.missing_weeks,
     }
 
 
@@ -1289,8 +1476,11 @@ def notable_shifts(manifest: Manifest, *, top_n: int = 3) -> list[dict]:
             "delta": round(cur.hedge_density - prior.hedge_density, 2),
             "magnitude": d / _DRIFT_SCALES["hedge_density"],
         })
-        # Length median (relative shift).
-        if prior.length.median:
+        # Length median (relative shift). Skipped when either end has no
+        # length at all: a cell measured entirely from body-less refusals
+        # publishes a null median, and treating that as 0 would rank a
+        # non-measurement as the largest length shift of the week.
+        if prior.length.median and cur.length.median is not None:
             denom = max(prior.length.median, cur.length.median) / 2 or 1.0
             d = abs(cur.length.median - prior.length.median) / denom
             shifts.append({
@@ -1306,6 +1496,69 @@ def notable_shifts(manifest: Manifest, *, top_n: int = 3) -> list[dict]:
 
     shifts.sort(key=lambda s: s["magnitude"], reverse=True)
     return shifts[:top_n]
+
+
+def drift_baselines(manifest: Manifest) -> list[dict]:
+    """Which weeks this snapshot's drift p-values were computed against.
+
+    A drift p-value with no stated baseline invites exactly one reading,
+    "this changed since last week", and that reading is often wrong. The
+    commercial roster alternates by ISO-week parity, so a frontier model
+    is normally compared with the previous week *it* ran, two calendar
+    weeks back. After the 2026-W30 and 2026-W31 outage the nearest prior
+    run for an even-cadence model was four weeks back, and nothing on
+    the site said so.
+
+    Returns one row per distinct (comparison week, weeks elapsed),
+    newest first, with the number of drift tests resting on it. Empty
+    for manifests published before ``DriftTest.compared_to_week``
+    existed, in which case the template falls back to describing the
+    rule rather than naming the weeks.
+    """
+    counts: dict[tuple[str, int | None], int] = {}
+    for m in manifest.metrics:
+        for d in (m.refusal_drift, m.hedge_drift, m.length_drift):
+            if d is None or not d.compared_to_week:
+                continue
+            key = (d.compared_to_week, d.weeks_elapsed)
+            counts[key] = counts.get(key, 0) + 1
+    rows = [
+        {"week_id": week, "weeks_elapsed": elapsed, "tests": n}
+        for (week, elapsed), n in counts.items()
+    ]
+    rows.sort(key=lambda r: r["week_id"], reverse=True)
+    return rows
+
+
+#: How many baseline weeks the drift-tests note names before summarising
+#: the remainder as "and N more". Three is a readability cap on one
+#: table cell, not a limit on what is disclosed: the same page lists
+#: every baseline in full in the Statistical rigor section (the
+#: #drift-baseline paragraph), so a reader who sees "and 2 more" here
+#: has the complete list a screen further down, and the note says where.
+#: Raise the cap only if that paragraph goes away.
+_DRIFT_NOTE_BASELINE_CAP = 3
+
+
+def _drift_note(manifest: Manifest, baselines: list[dict]) -> str:
+    """Note cell for the drift-tests row of "What's measured this week"."""
+    if not any(m.refusal_drift is not None for m in manifest.metrics):
+        return "Need a prior week's samples per pair before tests fire"
+    base = "BH-corrected at FDR 0.05 across the within-week family"
+    if not baselines:
+        return base
+    parts = []
+    for row in baselines[:_DRIFT_NOTE_BASELINE_CAP]:
+        elapsed = row["weeks_elapsed"]
+        if elapsed is None:
+            parts.append(row["week_id"])
+        elif elapsed == 1:
+            parts.append(f"{row['week_id']} (1 week back)")
+        else:
+            parts.append(f"{row['week_id']} ({elapsed} weeks back)")
+    hidden = len(baselines) - _DRIFT_NOTE_BASELINE_CAP
+    more = "" if hidden <= 0 else f", and {hidden} more (full list under Statistical rigor)"
+    return f"{base}; compared against {', '.join(parts)}{more}"
 
 
 def _metric_status(manifest: Manifest) -> list[dict]:
@@ -1336,12 +1589,17 @@ def _metric_status(manifest: Manifest) -> list[dict]:
         {"metric": "Hedge density", "status": "live",
          "note": f"e.g. {sample.hedge_density:.2f} markers/100 tok on first record"},
         {"metric": "Length distribution", "status": "live",
-         "note": f"median, p25/p75 — first record median = {sample.length.median:.0f}"},
+         "note": (
+             f"median, p25/p75 — first record median = {sample.length.median:.0f}"
+             if sample.length.median is not None
+             # Null median means the first record's cell carried no text
+             # to measure, which is a real state since 2026-W32 rather
+             # than a missing metric.
+             else "median, p25/p75 — first record carried no text to measure"
+         )},
         {"metric": "Drift tests (refusal/hedge/length)",
          "status": "live" if has_drift else "data-gated",
-         "note": ("BH-corrected at FDR 0.05 across the within-week family"
-                  if has_drift
-                  else "Need a prior week's samples per pair before tests fire")},
+         "note": _drift_note(manifest, drift_baselines(manifest))},
         {"metric": "Change-point detection (PELT)",
          "status": "live" if has_change_points else "data-gated",
          "note": ("Annotates per-(prompt,model,metric) sparkline series"
@@ -1500,6 +1758,7 @@ def build(manifest_path: Path, out_dir: Path) -> dict:
         "og_slug": None, "og_available": og_ok,
         "weekly_summaries": load_run_log_summary(REPO_ROOT),
         "metric_status": _metric_status(manifest),
+        "drift_baselines": drift_baselines(manifest),
         "heatmap": drift_heatmap(manifest),
         "notable": notable_shifts(manifest),
         "model_refusal_series": model_refusal_series(manifest),
@@ -1530,7 +1789,21 @@ def build(manifest_path: Path, out_dir: Path) -> dict:
     render_dashboard(env, out_dir, manifest, base_context)
     publish_data(env, out_dir, manifest_path, manifest, base_context)
 
-    redirects_path = REPO_ROOT / "site" / "redirects.yaml"
+    # MERIDIAN_REDIRECTS overrides the map's location. Production never
+    # sets it, so the canonical path stays the only one that ships. It
+    # exists so a test can script the redirect map without writing to
+    # the real one: the tests used to swap site/redirects.yaml in place
+    # and restore it in a finally block, and on 2026-08-15 that same
+    # pattern applied to data/run_log.jsonl destroyed 15 of 17 entries
+    # when two pytest processes overlapped. A lost restore here is worse
+    # than untidy, a dropped redirect row is a published URL that starts
+    # serving a 404, which the never-404 rule exists to prevent.
+    redirects_override = os.environ.get("MERIDIAN_REDIRECTS")
+    redirects_path = (
+        Path(redirects_override)
+        if redirects_override
+        else REPO_ROOT / "site" / "redirects.yaml"
+    )
     redirects_written = write_redirects(env, redirects_path, out_dir, base_context)
     if redirects_written:
         print(f"emitted {redirects_written} redirect page(s)")

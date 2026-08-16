@@ -39,17 +39,77 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # When chained off workflow_run, skip the build if the pipeline
-    # failed — no point rendering a partial or stale manifest from a
-    # broken run. Other triggers (push, cron, dispatch) always proceed.
+    # Which publish failures block a deploy, and which must not.
+    #
+    # MUST block: missing or corrupt artifacts. There is nothing to
+    # render, or rendering it would put a broken page on a public,
+    # citation-quality record. That case is caught by the "Verify
+    # published artifacts" guard step below, which inspects what actually
+    # landed on main rather than trusting an upstream status.
+    #
+    # MUST NOT block: a data-quality finding on artifacts that committed
+    # cleanly. The pipeline's `health` job going red means a model refused
+    # more, returned dead samples, or a past week is missing. Every one of
+    # those is a measurement this project exists to publish, and none of
+    # them makes the week unrenderable.
+    #
+    # This gate read `workflow_run.conclusion == 'success'` until
+    # 2026-08-15, which conflated the two: 2026-W32 committed cleanly as
+    # 6d74411, the health check exited 1 on a refusal-mechanism change,
+    # the workflow concluded `failure`, and the deploy was skipped.
+    # meridianaudit.org served 2026-W29 for three weeks.
+    #
+    # Tradeoff, chosen deliberately: a `workflow_run` payload carries the
+    # other workflow's overall conclusion and nothing else, no job
+    # outputs, so `publish.outputs.artifacts_committed` is not readable
+    # from here. The alternative was to have the publish job dispatch this
+    # workflow explicitly, which reads the signal exactly but moves the
+    # coupling into a step that itself can fail, and leaves the cron and
+    # push triggers on a different code path from the weekly one. Instead
+    # this runs on anything that was not cancelled and verifies the
+    # artifacts directly. Cost: after a genuinely failed publish the site
+    # rebuilds from the previous week and redeploys identical content, one
+    # wasted build. Benefit: the deploy path no longer depends on anyone
+    # correctly classifying an upstream failure.
     if: |
       github.event_name != 'workflow_run' ||
-      github.event.workflow_run.conclusion == 'success'
+      github.event.workflow_run.conclusion != 'cancelled'
     steps:
       - name: Checkout source
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - name: Verify published artifacts are present and parseable
+        # The half of the upstream gate that genuinely must block a
+        # deploy, moved out of the `if:` condition and onto the artifacts
+        # themselves. Trusting a status meant a clean week could be
+        # blocked by an unrelated finding; checking the file means a
+        # broken week is blocked no matter which status it arrived with.
+        #
+        # Pick the latest manifest by filename. Manifests are
+        # `manifest-YYYY-WNN.json` with zero-padded week numbers, so
+        # lexical sort matches chronological order within a year. Across
+        # year boundaries (e.g. 2026-W52 -> 2027-W01) the same invariant
+        # holds because the year prefix sorts first.
+        id: manifest
+        run: |
+          set -euo pipefail
+          # `|| true` because `pipefail` plus `set -e` would otherwise
+          # abort on ls's exit status when the glob matches nothing, and
+          # the operator would get a bare "Process exited with code 2"
+          # instead of the sentence below.
+          MANIFEST=$(ls -1 site/fixtures/manifest-*.json 2>/dev/null | sort | tail -1 || true)
+          if [ -z "$MANIFEST" ]; then
+            echo "::error::No manifest files found under site/fixtures/; there is nothing to deploy."
+            exit 1
+          fi
+          if ! python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$MANIFEST"; then
+            echo "::error::${MANIFEST} is not parseable JSON. Refusing to deploy a corrupt build."
+            exit 1
+          fi
+          echo "Deploying from: $MANIFEST"
+          echo "path=${MANIFEST}" >> "$GITHUB_OUTPUT"
 
       - name: Fetch previously published urls.txt (for link-rot diff)
         # deploy-pages@v4 publishes directly from a workflow artifact and
@@ -83,30 +143,29 @@ jobs:
         run: uv sync --frozen || uv sync --exclude-newer "7 days"
 
       - name: Build site
-        # Pick the latest manifest by filename. Manifests are
-        # `manifest-YYYY-WNN.json` with zero-padded week numbers, so
-        # lexical sort matches chronological order within a year.
-        # Across year boundaries (e.g. 2026-W52 → 2027-W01) the same
-        # invariant holds because the year prefix sorts first.
+        # Manifest selection and validation happened in the guard step
+        # above, so this builds exactly what was verified rather than
+        # re-deriving it and risking the two disagreeing.
+        env:
+          MANIFEST: ${{ steps.manifest.outputs.path }}
         run: |
           set -euo pipefail
-          MANIFEST=$(ls -1 site/fixtures/manifest-*.json 2>/dev/null | sort | tail -1)
-          if [ -z "$MANIFEST" ]; then
-            echo "::error::No manifest files found under site/fixtures/."
-            exit 1
-          fi
           echo "Building from: $MANIFEST"
           uv run python site/src/build.py --manifest "$MANIFEST" --out site/dist
 
       - name: Link-rot guard
+        # Called unconditionally, on purpose. This used to be wrapped in
+        # `if [ -f .previous-site/urls.txt ]`, which duplicated a decision
+        # the script already makes and got it wrong: the script's
+        # redirect-target check is deliberately placed *before* its own
+        # first-build early return, precisely so a missing previous build
+        # does not skip it, and the wrapper skipped it in exactly that
+        # case. The script prints "treating as first build (OK)" and
+        # returns 0 when .previous-site/urls.txt is absent.
         run: |
-          if [ -f .previous-site/urls.txt ]; then
-            uv run python scripts/check_linkrot.py \
-              --current site/dist \
-              --previous .previous-site
-          else
-            echo "No previous urls.txt fetched; skipping link-rot guard (first deploy)"
-          fi
+          uv run python scripts/check_linkrot.py \
+            --current site/dist \
+            --previous .previous-site
 
       - name: Site size guard (fail above 800 MB)
         run: |
@@ -203,3 +262,81 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
+
+  # This workflow had no alerting of any kind until 2026-08-15, and the
+  # outcome it most needed to report was the one it reported least: when
+  # the `build` job's `if:` gate evaluated false the job was *skipped*,
+  # which is not a failure, so GitHub sent nothing and no step inside
+  # `build` could have run to say otherwise. The site quietly kept serving
+  # a stale week. This is a separate job precisely so it still runs when
+  # `build` is skipped, and it treats `skipped` as an alertable outcome.
+  #
+  # Cancelled runs are excluded: `concurrency: pages` cancels nothing
+  # automatically, so a cancellation is a human deciding to stop, and a
+  # page about it is noise.
+  #
+  # That has to be said twice, because there are two cancellations in play
+  # and this job originally excluded only one of them. `needs.*.result`
+  # covers a cancellation of *this* workflow's build or deploy. An upstream
+  # cancellation is a different event: the publish workflow is cancelled,
+  # `build`'s own `if:` gate evaluates false, `needs.build.result` comes
+  # back `skipped` rather than `cancelled`, and the alert fires with "site
+  # build did not deploy (skipped/skipped)" for a run somebody stopped on
+  # purpose. The `workflow_run.conclusion` clause below excludes that too.
+  # It is written with an explicit `github.event_name` guard so the cron,
+  # push and dispatch triggers, where `github.event.workflow_run` is null,
+  # are not relying on how a null compares to a string.
+  alert:
+    needs: [build, deploy]
+    if: >-
+      always() &&
+      (github.event_name != 'workflow_run' ||
+       github.event.workflow_run.conclusion != 'cancelled') &&
+      (needs.build.result == 'failure' || needs.build.result == 'skipped' ||
+       needs.deploy.result == 'failure' || needs.deploy.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: us-east-2
+
+      # Same SNS topic the orchestrator and the publish workflow use, so
+      # every reason the public dashboard might be stale lands in one
+      # inbox. Best-effort with `|| true`, matching weekly-pipeline.yml:
+      # an alerting problem must never be able to mask, or be mistaken
+      # for, the deploy problem it is reporting.
+      - name: Alert operator via SNS
+        if: always()
+        env:
+          TOPIC_ARN: ${{ vars.ALERT_TOPIC_ARN }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          TRIGGER: ${{ github.event_name }}
+        run: |
+          set -uo pipefail
+          if [ -z "${TOPIC_ARN:-}" ]; then
+            echo "::warning::ALERT_TOPIC_ARN repo variable is unset; skipping SNS alert."
+            exit 0
+          fi
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          aws sns publish \
+            --region us-east-2 \
+            --topic-arn "$TOPIC_ARN" \
+            --subject "[meridian] site build did not deploy (${BUILD_RESULT}/${DEPLOY_RESULT})" \
+            --message "The weekly site build did not reach GitHub Pages.
+
+          build: ${BUILD_RESULT}
+          deploy: ${DEPLOY_RESULT}
+          triggered by: ${TRIGGER}
+
+          meridianaudit.org is still serving whatever was last deployed, so the
+          public record is stale until this is resolved. A 'skipped' build means
+          the job's condition was false, not that it failed; a 'failure' means the
+          guard, the link-rot check, the size cap or the accessibility audit
+          rejected the build.
+
+          Run: ${RUN_URL}" \
+            || echo "::warning::SNS publish failed; the workflow run page is the record."

@@ -237,7 +237,12 @@ def correct_week(
         rec["change_points"] = {
             "refusal_rate": [], "hedge_density": [], "length_median": [],
         }
-    _populate_change_points(manifest["metrics"], manifest["history"])
+    # week_id is required: the detector needs the newest point's week
+    # identity to tell a real week-over-week transition from a shift
+    # that accumulated across weeks the model never ran.
+    _populate_change_points(
+        manifest["metrics"], manifest["history"], manifest["snapshot"]["week_id"]
+    )
     # The review page reads this list, not the per-record flag. Leaving
     # it stale would flag the corrected cells in the data and still show
     # a reviewer an empty worklist, which is the failure that let this

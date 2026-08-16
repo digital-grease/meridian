@@ -11,14 +11,22 @@
 #      time (handled by `meridian.secrets.resolve_ssm_secrets`).
 #   3. Compute the previous ISO week (because at Mon 04:00 CDT we've
 #      just rolled into the new week) and run the pipeline against it.
-#   4. Publish a structured outcome to SNS regardless of success/failure.
-#   5. If WE_OWN_LIFECYCLE=1, stop the EC2 instance after we're done.
+#   4. Publish a structured outcome to SNS regardless of success/failure,
+#      judged by scripts/check_run_health.py rather than by exit code
+#      alone (a run can exit 0 with unusable samples in it).
+#   5. If WE_OWN_LIFECYCLE=1, stop the EC2 instance after we're done,
+#      on EVERY exit path, and alert if the stop fails.
 #
 # Exit codes:
 #   0  clean run (or deferred without contention being a real problem)
 #   1  pipeline run failed
 #   2  pre-flight contention detected — deferred
 #   3  config or environment issue
+#
+# Past the pre-flight the pipeline's own exit code is passed through, so a
+# 2 from there means a fatal config/auth/storage error or a --max-cost
+# ceiling stop, not contention. Read the SNS subject, not the code; nothing
+# consumes this exit status (SSM dispatch is fire-and-forget).
 #
 # Logs are tee'd to /data/meridian/logs/run-weekly.log for forensic
 # recovery if the SSM session output is lost.
@@ -74,6 +82,14 @@ INSTANCE_ID=$(curl -sS \
 
 publish() {
   # SNS alerts are best-effort. CloudWatch / journald is the truth.
+  #
+  # KEEP EVERY SUBJECT PRINTABLE ASCII. SNS documents Subject that way and
+  # rejects anything else, and the publish below swallows a failure into a
+  # log line nobody reads, so a subject containing an em-dash is an alert
+  # that silently never arrives. The alerts most likely to carry decorative
+  # punctuation are the ATTENTION ones about a g5.2xlarge that is still
+  # running at roughly $1/hour, which is the exact alert least affordable
+  # to lose. Commas and colons only.
   local subject="$1" body="$2"
   if [ -z "$SNS_TOPIC_ARN" ] || [ "$SNS_TOPIC_ARN" = "REPLACE-WITH-SNS-TOPIC-ARN" ]; then
     log "(no SNS_TOPIC_ARN set; skipping publish: $subject)"
@@ -86,16 +102,27 @@ publish() {
 }
 
 self_stop_if_needed() {
+  # A g5.2xlarge left running costs roughly $1/hour against a project
+  # API budget of about $45/month, so a stop that fails silently is one
+  # of the more expensive failure modes in the system. Both branches
+  # below used to go through `log`, which is visible only to whoever
+  # reads the SSM output or the on-instance log file, i.e. nobody, until
+  # the bill arrives. They alert now.
   if [ "$WE_OWN_LIFECYCLE" = "1" ]; then
     if [ -z "$INSTANCE_ID" ]; then
       log "WE_OWN_LIFECYCLE=1 but couldn't resolve INSTANCE_ID via IMDSv2; not stopping."
+      publish "ATTENTION: instance still running, could not self-stop" \
+        "WE_OWN_LIFECYCLE=1 but the instance id could not be resolved via IMDSv2, so no ec2 stop-instances was attempted. The instance is still running and billing (~\$1/hr for a g5.2xlarge). Stop it by hand: aws ec2 stop-instances --instance-ids <id>."
       return
     fi
     log "stopping instance $INSTANCE_ID (we own lifecycle)"
-    aws --region "$AWS_REGION" ec2 stop-instances --instance-ids "$INSTANCE_ID" >/dev/null \
-      || log "stop-instances failed; instance will continue running until manual intervention"
+    if ! aws --region "$AWS_REGION" ec2 stop-instances --instance-ids "$INSTANCE_ID" >/dev/null; then
+      log "stop-instances failed; instance will continue running until manual intervention"
+      publish "ATTENTION: instance still running, stop-instances failed" \
+        "ec2 stop-instances failed for $INSTANCE_ID in $AWS_REGION. The instance keeps running and billing (~\$1/hr for a g5.2xlarge) until someone intervenes. Stop it by hand: aws --region $AWS_REGION ec2 stop-instances --instance-ids $INSTANCE_ID"
+    fi
   else
-    log "leaving instance running — we did not start it (WE_OWN_LIFECYCLE=$WE_OWN_LIFECYCLE)"
+    log "leaving instance running; we did not start it (WE_OWN_LIFECYCLE=$WE_OWN_LIFECYCLE)"
   fi
 }
 
@@ -104,18 +131,39 @@ log "pre-flight: checking GPU memory"
 GPU_USED=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null \
   | awk '{print $1}' | head -1 || echo 0)
 log "GPU memory used: ${GPU_USED} MB (threshold ${GPU_MEMORY_THRESHOLD_MB})"
-if [ "$GPU_USED" -gt "$GPU_MEMORY_THRESHOLD_MB" ]; then
-  publish "deferred — GPU busy at start" "GPU memory in use: ${GPU_USED} MB. Specter or another workload is on the instance. Skipping this week per the no-backfill policy."
-  # Don't self-stop; if specter is using the GPU, we shouldn't kill the
-  # instance out from under it.
+# Deferring is not a reason to leave a g5.2xlarge running. The rule is
+# who started it, not why we are quitting: WE_OWN_LIFECYCLE=1 means the
+# orchestrator Lambda cold-started this box minutes ago specifically for
+# us, so nothing else can be depending on it and we pay ~$1/hr for every
+# hour we walk away. WE_OWN_LIFECYCLE=0 means the instance was already up
+# when the Lambda tried to start it, i.e. specter is using it, and
+# stopping it would kill somebody else's work. Both defer paths below
+# previously exited without stopping in either case.
+#
+# That reasoning rests on one premise, and the premise is the part worth
+# recording: nothing autostarts a GPU workload on specter at boot, so a
+# box we cold-started and then deferred on is genuinely idle and not a
+# machine somebody else's job is about to land on. Owner-confirmed
+# 2026-08-15. If that ever stops being true, this is the line to revisit
+# first, because the defer path would then be racing a workload that
+# started between the Lambda's StartInstances and our pre-flight check.
+defer_and_exit() {
+  local subject="$1" body="$2"
+  publish "$subject" "$body"
+  self_stop_if_needed
   exit 2
+}
+
+if [ "$GPU_USED" -gt "$GPU_MEMORY_THRESHOLD_MB" ]; then
+  defer_and_exit "deferred, GPU busy at start" \
+    "GPU memory in use: ${GPU_USED} MB. Specter or another workload is on the instance. Skipping this week per the no-backfill policy. WE_OWN_LIFECYCLE=$WE_OWN_LIFECYCLE (1 means this instance is being stopped again now)."
 fi
 
 log "pre-flight: scanning for specter processes"
 if pgrep -af 'specter' >/dev/null 2>&1; then
   PROC_DETAIL=$(pgrep -af 'specter' | head -5)
-  publish "deferred — specter process detected" "pgrep matched:\n${PROC_DETAIL}\nSkipping this week per the no-backfill policy."
-  exit 2
+  defer_and_exit "deferred, specter process detected" \
+    "pgrep matched:\n${PROC_DETAIL}\nSkipping this week per the no-backfill policy. WE_OWN_LIFECYCLE=$WE_OWN_LIFECYCLE (1 means this instance is being stopped again now)."
 fi
 log "pre-flight: clear"
 
@@ -132,13 +180,19 @@ for _ in $(seq 1 90); do
   sleep 2
 done
 if ! curl -fsS --max-time 2 http://localhost:11434/api/tags >/dev/null 2>&1; then
-  publish "FAILED — ollama not reachable" "ollama did not respond on http://localhost:11434/api/tags within 180s. Check 'systemctl status ollama' on the instance."
+  publish "FAILED: ollama not reachable" "ollama did not respond on http://localhost:11434/api/tags within 180s. Check 'systemctl status ollama' on the instance. The instance is stopped again if we started it; logs survive on the EBS volume at $LOG_FILE."
+  # Same reasoning as defer_and_exit: an environment fault is no reason
+  # to keep paying for a GPU box we cold-started. The log file lives on
+  # the persistent EBS volume, so stopping does not cost the operator
+  # anything they need for the post-mortem.
+  self_stop_if_needed
   exit 3
 fi
 
 # ----------------------- 2. Repo + deps --------------------------------
 if [ ! -d "$REPO_DIR/.git" ]; then
-  publish "FAILED — repo not present" "Expected meridian repo at $REPO_DIR but no .git directory found. Run the on-instance bootstrap and clone the repo before triggering."
+  publish "FAILED: repo not present" "Expected meridian repo at $REPO_DIR but no .git directory found. Run the on-instance bootstrap and clone the repo before triggering."
+  self_stop_if_needed
   exit 3
 fi
 
@@ -198,7 +252,14 @@ log "running pipeline for ISO week $WEEK"
 # MERIDIAN_SECRETS_SSM=1 was set in /etc/meridian/config.env.
 PIPELINE_START_EPOCH=$(date -u +%s)
 set +e
-uv run python -m meridian.pipeline.cli run --week "$WEEK" --yes
+# --max-cost is a hard ceiling in USD for this invocation. The corpus is
+# fixed and a normal week lands well under it, so the only way to reach
+# it is a config or corpus change that multiplied the call count, which
+# is exactly when an unattended weekly job should stop rather than spend.
+# 40 sits above the observed weekly spend and below the ~$45/month total
+# API budget in CLAUDE.md.
+MAX_COST_USD="${MAX_COST_USD:-40}"
+uv run python -m meridian.pipeline.cli run --week "$WEEK" --yes --max-cost "$MAX_COST_USD"
 RUN_RC=$?
 set -e
 PIPELINE_END_EPOCH=$(date -u +%s)
@@ -207,9 +268,45 @@ ELAPSED=$((PIPELINE_END_EPOCH - PIPELINE_START_EPOCH))
 # ----------------------- 4. Report -------------------------------------
 RUN_LOG_TAIL=$(tail -1 "$REPO_DIR/data/run_log.jsonl" 2>/dev/null || echo "(no run_log entry)")
 
-if [ "$RUN_RC" -eq 0 ]; then
+# The exit code is not the whole story. A run can exit 0 having stored
+# samples that carry no usable content: on 2026-08-10, 20 of the week's
+# samples came back empty and this script emailed "weekly run succeeded"
+# anyway, because it branched on $? alone. check_run_health.py already
+# knows how to read that out of the run-log entry (it is what the publish
+# workflow runs in CI), so run the same judge here instead of a second,
+# divergent copy of the rules.
+#
+# ITS EXIT CODES ARE A THREE-WAY CONTRACT, not pass/fail:
+#   0  clean
+#   3  warn  (the run is usable but something needs a human look)
+#   1  fail  (the week is not comparable, or there is no run-log entry)
+# Until 2026-08 it returned 0 for both clean and warn, so the branch
+# below that exists to catch a warning could not fire at all: the only
+# way to reach it was a hard failure. Do not collapse this back to
+# `-ne 0`, and if the judge ever gains a fourth code, add it here rather
+# than letting it fall through to the failure branch by accident.
+HEALTH_RC=0
+HEALTH_DETAIL="(health check not run)"
+if [ -f "$REPO_DIR/scripts/check_run_health.py" ]; then
+  set +e
+  HEALTH_DETAIL=$(uv run python "$REPO_DIR/scripts/check_run_health.py" "$WEEK" \
+    --run-log "$REPO_DIR/data/run_log.jsonl" 2>&1)
+  HEALTH_RC=$?
+  set -e
+  log "run health check rc=$HEALTH_RC: $HEALTH_DETAIL"
+fi
+
+if [ "$RUN_RC" -eq 0 ] && [ "$HEALTH_RC" -eq 3 ]; then
+  publish "weekly run completed with warnings ($WEEK)" \
+    "The pipeline exited 0 and the run is usable, but the health check raised a warning. Affected cells may be under-sampled, so read the detail before treating this week as comparable.\n\nHealth check:\n${HEALTH_DETAIL}\n\nWall-clock: ${ELAPSED}s\nWE_OWN_LIFECYCLE=$WE_OWN_LIFECYCLE\n\nRun-log entry:\n${RUN_LOG_TAIL}"
+  log "pipeline succeeded in ${ELAPSED}s but health check warned (rc=3)"
+elif [ "$RUN_RC" -eq 0 ] && [ "$HEALTH_RC" -ne 0 ]; then
+  publish "weekly run NOT HEALTHY ($WEEK, health rc=$HEALTH_RC)" \
+    "The pipeline exited 0 but the health check judged the week unusable. This is the 2026-08-10 shape: a run that reports success while its samples carry nothing measurable. Do not treat this week as comparable until someone has read the detail.\n\nHealth check:\n${HEALTH_DETAIL}\n\nWall-clock: ${ELAPSED}s\nWE_OWN_LIFECYCLE=$WE_OWN_LIFECYCLE\n\nRun-log entry:\n${RUN_LOG_TAIL}"
+  log "pipeline succeeded in ${ELAPSED}s but health check FAILED the week (rc=$HEALTH_RC)"
+elif [ "$RUN_RC" -eq 0 ]; then
   publish "weekly run succeeded ($WEEK)" \
-    "Wall-clock: ${ELAPSED}s\nWE_OWN_LIFECYCLE=$WE_OWN_LIFECYCLE\n\nRun-log entry:\n${RUN_LOG_TAIL}"
+    "Wall-clock: ${ELAPSED}s\nWE_OWN_LIFECYCLE=$WE_OWN_LIFECYCLE\n\nHealth check:\n${HEALTH_DETAIL}\n\nRun-log entry:\n${RUN_LOG_TAIL}"
   log "pipeline succeeded in ${ELAPSED}s"
 else
   publish "weekly run FAILED ($WEEK, rc=$RUN_RC)" \

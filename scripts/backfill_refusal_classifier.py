@@ -167,7 +167,12 @@ def correct_week(manifest: dict, corrected: list[dict]) -> list[tuple]:
     # longer exists.
     for rec in manifest["metrics"]:
         rec["change_points"]["refusal_rate"] = []
-    _populate_change_points(manifest["metrics"], manifest["history"])
+    # week_id is required: the detector needs the newest point's week
+    # identity to tell a real week-over-week transition from a shift
+    # that accumulated across weeks the model never ran.
+    _populate_change_points(
+        manifest["metrics"], manifest["history"], manifest["snapshot"]["week_id"]
+    )
     return changes
 
 

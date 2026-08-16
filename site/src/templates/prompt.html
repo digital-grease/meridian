@@ -61,11 +61,25 @@
     {"key": "length_median",  "label": "Median length",  "fmt": "{:.0f}"}
   ] %}
 
+  {# Weeks the audit never ran at all. A column of those must not read
+     like a cadence skip: one is a hole in the record, the other is the
+     biweekly frontier roster working as designed. Resolved once here
+     rather than per cell. #}
+  {% set missing_weeks = manifest.missing_weeks %}
+
   {% for spec in metric_specs %}
   <section class="metric-section" aria-labelledby="pm-{{ spec.key }}">
     <h2 id="pm-{{ spec.key }}">{{ spec.label }}</h2>
     <table class="metric-table">
-      <caption>{{ spec.label }} per model per week.</caption>
+      <caption>
+        {{ spec.label }} per model per week.
+        {% if missing_weeks %}
+        {{ missing_weeks | join(', ') }} had no run at all, so
+        {{ 'those columns are' if missing_weeks | length != 1 else 'that column is' }}
+        shaded and marked &ldquo;no run&rdquo;; a plain &mdash; means the model
+        was simply not sampled that week.
+        {% endif %}
+      </caption>
       <thead>
         <tr>
           <th scope="col">Model</th>
@@ -81,7 +95,13 @@
         <tr>
           <th scope="row"><a href="/models/{{ m.model_id }}/">{{ m.display_name }}</a></th>
           {% for w in weeks %}
-          <td>{% if w in by_week %}<code>{{ spec.fmt.format(by_week[w]) }}</code>{% else %}—{% endif %}</td>
+          {% if w in missing_weeks %}
+          <td class="heatmap-empty"><span class="visually-hidden">no run that week</span><span aria-hidden="true">&mdash;</span></td>
+          {% elif w in by_week %}
+          <td><code>{{ spec.fmt.format(by_week[w]) }}</code></td>
+          {% else %}
+          <td><span class="visually-hidden">not sampled this week</span><span aria-hidden="true">&mdash;</span></td>
+          {% endif %}
           {% endfor %}
           <td>{{ values | sparkline(label=m.display_name, value_format=spec.fmt, change_point_indices=manifest.change_points_for(prompt.prompt_id, m.model_id, spec.key)) }}</td>
         </tr>
@@ -175,7 +195,10 @@
       mechanical, not editorial: we show the <strong>shortest</strong>, the
       <strong>median-length</strong> and the <strong>longest</strong> usable
       response for each model, breaking ties by sample index. Where a model
-      both refused and answered, at least one of each is included. Every
+      both refused and answered, at least one of each is included. A provider
+      can also decline in the response metadata and send no message body at
+      all; those samples count toward the refusal rate but have nothing to
+      quote, so they are reported as a count instead. Every
       sample, not just these, is in
       <a href="/data/{{ manifest.snapshot.week_id }}/">the week&rsquo;s raw data</a>.
       <a href="/methodology/#samples">How these are chosen</a>.
@@ -189,7 +212,21 @@
         {{ ex.usable }} usable sample{{ 's' if ex.usable != 1 }} this week{% if ex.unusable %},
         plus {{ ex.unusable }} that returned no usable content and are excluded
         from the metrics{% endif %}.
+        {% if ex.bodyless_refusals %}
+        {{ ex.bodyless_refusals }} of the usable sample{{ 's' if ex.usable != 1 }}
+        {{ 'were' if ex.bodyless_refusals != 1 else 'was' }} a refusal the provider
+        returned with no message body, so there is no response text to show for
+        {{ 'them' if ex.bodyless_refusals != 1 else 'it' }}. They still count toward
+        the refusal rate above.
+        {% endif %}
       </p>
+      {% if not ex.excerpts %}
+      <p class="muted sample-empty">
+        No response text was returned for this model on this prompt: every
+        usable sample was a refusal the provider declared in the response
+        metadata rather than in a message body.
+      </p>
+      {% endif %}
       {% for e in ex.excerpts %}
       <details class="sample">
         <summary>

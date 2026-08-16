@@ -30,8 +30,16 @@
     <h2 id="m-{{ spec.key }}">{{ spec.label }}</h2>
     <table class="metric-table">
       <caption>
+        {# observed_weeks, not weeks: the sparkline plots what was
+           measured, and `weeks` includes weeks the audit never ran. #}
         Weekly {{ spec.label | lower }} per prompt. Sparkline spans
-        {{ weeks | length }} weeks, oldest at the left.
+        {{ observed_weeks | length }} observed week{{ 's' if observed_weeks | length != 1 else '' }},
+        oldest at the left.
+        {% if manifest.missing_weeks %}
+        {{ manifest.missing_weeks | join(', ') }} had no run at all and
+        {{ 'are' if manifest.missing_weeks | length != 1 else 'is' }} drawn as
+        a break in the line rather than plotted.
+        {% endif %}
       </caption>
       <thead>
         <tr>

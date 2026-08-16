@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% set path = "/data/" ~ week.week_id ~ "/" %}
+
+{% block title %}No data {{ week.week_id }} — Meridian{% endblock %}
+{% block description %}ISO week {{ week.week_id }} has no Meridian data. The scheduled weekly run produced no samples for any model, and the week was not backfilled.{% endblock %}
+
+{% block main %}
+{% set crumbs = [
+  {"href": "/", "text": "Home"},
+  {"href": "/data/", "text": "Data"},
+  {"text": week.week_id}
+] %}
+{% include "_breadcrumbs.html" %}
+
+<article class="page">
+  <h1>No data: <code>{{ week.week_id }}</code></h1>
+  <p class="lede">
+    ISO week {{ week.week_id }} has no snapshot. The scheduled run
+    produced no samples for any model, so there are no metrics, no raw
+    responses, and no manifest for this week.
+  </p>
+
+  <section class="notice notice-warn" aria-labelledby="gap-why">
+    <h2 id="gap-why">Why this page exists</h2>
+    <p>
+      This week sits between weeks that do have data. A longitudinal
+      record whose holes are invisible is worse than one with holes, so
+      the week keeps its own URL and its own column in every
+      model&nbsp;×&nbsp;week table on this site. Time-series charts
+      break the line here rather than joining the weeks on either side,
+      and aggregate statistics exclude the week rather than imputing it.
+    </p>
+    <p>
+      What caused this particular gap, and how long it took us to
+      notice, is written up under
+      <a href="/methodology/#data-gaps">known data gaps</a>.
+    </p>
+  </section>
+
+  <h2>Not backfilled</h2>
+  <p>
+    The week was not re-sampled afterwards and will not be. A run made
+    later would carry today&rsquo;s model behaviour under this
+    week&rsquo;s label, which is precisely the substitution this record
+    exists to make visible. The week stays empty.
+  </p>
+
+  <h2>Files</h2>
+  <table class="metric-table">
+    <caption>Everything published under <code>/data/{{ week.week_id }}/</code>.</caption>
+    <thead>
+      <tr>
+        <th scope="col">File</th>
+        <th scope="col">Size</th>
+        <th scope="col">Contents</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in week.files %}
+      <tr>
+        <th scope="row"><a href="/data/{{ week.week_id }}/{{ f.name }}"><code>{{ f.name }}</code></a></th>
+        <td><code>{{ f.size }}&nbsp;B</code></td>
+        <td>Plain-text statement that this week has no data, and why.</td>
+      </tr>
+      {% endfor %}
+      <tr>
+        <th scope="row"><a href="/data/{{ week.week_id }}/SHA256SUMS"><code>SHA256SUMS</code></a></th>
+        <td class="muted">&mdash;</td>
+        <td>SHA-256 digest for the file above. Verify with <code>sha256sum -c SHA256SUMS</code>.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    Weeks that do have data are listed at <a href="/data/">/data/</a>,
+    with column definitions in the
+    <a href="/data/schema/">schema documentation</a>.
+  </p>
+
+  <h2>Citing this gap</h2>
+  <p>
+    This URL is permanent. If your analysis needs to state that
+    {{ week.week_id }} is absent from the record rather than merely
+    absent from your copy of it, cite this page.
+  </p>
+  <pre><code>@misc{meridian_{{ week.week_id | replace("-", "_") }},
+  title        = {{ '{{' }}Meridian gap week {{ week.week_id }}: no data captured{{ '}}' }},
+  author       = {Meridian},
+  year         = {{ '{' }}{{ week.week_id[:4] }}{{ '}' }},
+  howpublished = {\url{https://meridianaudit.org/data/{{ week.week_id }}/}},
+  note         = {CC BY-SA 4.0; accessed YYYY-MM-DD}
+}</code></pre>
+</article>
+{% endblock %}

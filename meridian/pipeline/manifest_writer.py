@@ -19,6 +19,7 @@ from pathlib import Path
 
 import random
 
+from meridian.analysis.change_point import weeks_between
 from meridian.analysis.confidence import bootstrap_ci
 from meridian.analysis.drift_tests import (
     hedge_p_value,
@@ -28,7 +29,7 @@ from meridian.analysis.drift_tests import (
 from meridian.analysis.hedge import hedge_density
 from meridian.analysis.length import summarize_lengths
 from meridian.analysis.multiple_testing import bh_correct
-from meridian.analysis.refusal import classify_refusal
+from meridian.analysis.refusal import classify_sample
 from meridian.analysis.silent_update import detect_silent_updates
 from meridian.analysis import usability
 from meridian.corpus import Corpus
@@ -94,6 +95,8 @@ def _metric_record_dict(
     prior_samples: list[Sample] | None = None,
     insufficient_data_n: int = MIN_SAMPLES_FOR_PUBLICATION,
     unusable_count: int = 0,
+    week_id: str | None = None,
+    prior_week: str | None = None,
 ) -> dict:
     """Compute a single MetricRecord's dict shape from raw samples.
 
@@ -101,12 +104,34 @@ def _metric_record_dict(
     :mod:`meridian.analysis.usability`); ``unusable_count`` is how many
     were dropped, carried onto the record so the published data states
     its own sample loss rather than quietly reporting a smaller ``n``.
+
+    ``week_id`` and ``prior_week`` identify the two ends of the drift
+    comparison and are recorded on every emitted ``*_drift`` entry (see
+    :func:`_drift_window`). Drift tests only run when both are known,
+    because a p-value published without the window it was measured over
+    is not reproducible.
     """
-    refusals = [1.0 if classify_refusal(s.text).is_refusal else 0.0 for s in samples]
+    # Refusals are scored from the whole sample, not from its text.
+    # Between 2026-07-13 and 2026-08-10 Anthropic changed how
+    # claude-opus-4-8 declines: 2026-W28 returned prose refusals with
+    # stop_reason='end_turn', 2026-W32 returned stop_reason='refusal'
+    # with an empty body. Reading only ``s.text`` scores the second form
+    # as a non-refusal, so a cell that refused 20 times out of 20 would
+    # publish refusal_rate=0.00. classify_sample reads the provider's own
+    # declaration first, which keeps a change of refusal MECHANISM from
+    # looking like a change of refusal RATE.
+    refusals = [1.0 if classify_sample(s).is_refusal else 0.0 for s in samples]
     refusal_rate = sum(refusals) / len(refusals) if refusals else 0.0
     ci = bootstrap_ci(refusals, seed=bootstrap_seed)
-    lengths = summarize_lengths([s.text for s in samples])
-    combined_text = "\n\n".join(s.text for s in samples)
+    # Text analyzers see only the samples that carry text. The two
+    # denominators differ on purpose and both are published: the refusal
+    # rate counts every usable sample, while length and hedge density
+    # count the ones there was something to measure. Feeding empty
+    # refusal bodies to the length summary would claim a run of
+    # zero-word answers that nobody wrote.
+    measurable = usability.text_bearing(samples)
+    lengths = summarize_lengths([s.text for s in measurable])
+    combined_text = "\n\n".join(s.text for s in measurable)
     hedge = hedge_density(combined_text)
 
     reasons: list[str] = []
@@ -123,8 +148,9 @@ def _metric_record_dict(
     flagged = bool(reasons)
     flag_reason = "; ".join(reasons) if reasons else None
 
+    window = _drift_window(week_id, prior_week) if prior_samples else None
     drift_p_values: dict[str, float | None] = {m: None for m in _DRIFT_METRICS}
-    if prior_samples:
+    if prior_samples and window is not None:
         # Deterministic when bootstrap_seed is set; fresh RNG per metric so
         # results do not depend on call order.
         def _rng(salt: int) -> random.Random:
@@ -146,18 +172,26 @@ def _metric_record_dict(
             "upper": round(min(1.0, ci.upper), 3),
         },
         "hedge_density": round(hedge, 2),
+        # Null quantiles when nothing was measurable. summarize_lengths([])
+        # returns 0.0 for median/p25/p75, and a published 0.0 reads as
+        # "the model answered with zero words". For an all-api-refusal
+        # cell that is a fabricated observation: the samples exist, the
+        # refusal rate is 1.00, and there is simply no length. Only
+        # ``n`` used to carry the distinction, and no consumer read it,
+        # so the zeros reached the CSV export and the averaged axis
+        # figures on the site.
         "length": {
-            "median": round(lengths.median, 1),
-            "p25": round(lengths.p25, 1),
-            "p75": round(lengths.p75, 1),
+            "median": round(lengths.median, 1) if lengths.n else None,
+            "p25": round(lengths.p25, 1) if lengths.n else None,
+            "p75": round(lengths.p75, 1) if lengths.n else None,
             "n": lengths.n,
         },
         "stance": stance_stance,
         "stance_confidence": stance_confidence,
         "embedding_centroid_shift": centroid_shift,
-        "refusal_drift": _raw_drift_entry(drift_p_values["refusal"]),
-        "hedge_drift": _raw_drift_entry(drift_p_values["hedge"]),
-        "length_drift": _raw_drift_entry(drift_p_values["length"]),
+        "refusal_drift": _raw_drift_entry(drift_p_values["refusal"], window),
+        "hedge_drift": _raw_drift_entry(drift_p_values["hedge"], window),
+        "length_drift": _raw_drift_entry(drift_p_values["length"], window),
         "change_points": {
             "refusal_rate": [],
             "hedge_density": [],
@@ -168,33 +202,90 @@ def _metric_record_dict(
     }
 
 
-def _raw_drift_entry(p_value: float | None) -> dict | None:
+def _drift_window(
+    week_id: str | None, prior_week: str | None
+) -> tuple[str, int] | None:
+    """Resolve the ``(compared_to_week, weeks_elapsed)`` pair for a drift test.
+
+    Drift here is "since this model last ran", not a fixed 7-day delta:
+    :func:`_prior_week_for_model` walks back to the nearest earlier week
+    the model was actually sampled in, and the roster alternates by
+    ISO-week parity. For 2026-W32 that made claude-opus-4-8's comparison
+    a four-week window back to 2026-W28, because 2026-W30 and 2026-W31
+    were lost to an EC2 capacity outage. Until 2026-08 the emitted
+    record carried only the p-values, so nothing in the published
+    manifest said which weeks had been compared and a reader could not
+    reproduce the number. These two fields are that statement.
+
+    Returns None when either end is unknown or is not a parseable ISO
+    week id, in which case the caller emits no drift entry at all. An
+    unlabelled drift claim is worse than an absent one, and malformed
+    week ids mean something upstream is broken, so the failure is logged
+    rather than papered over with a guessed window.
+    """
+    if week_id is None or prior_week is None:
+        return None
+    try:
+        elapsed = weeks_between(prior_week, week_id)
+    except ValueError:
+        _log.error(
+            "cannot compute drift window between %r and %r; emitting no drift "
+            "entry for this record rather than an unlabelled comparison",
+            prior_week, week_id, exc_info=True,
+        )
+        return None
+    if elapsed < 1:  # pragma: no cover - _prior_week_for_model guarantees w < week_id
+        _log.error(
+            "drift baseline %r is not earlier than %r (elapsed=%d); emitting no "
+            "drift entry for this record",
+            prior_week, week_id, elapsed,
+        )
+        return None
+    return prior_week, elapsed
+
+
+def _raw_drift_entry(
+    p_value: float | None, window: tuple[str, int] | None
+) -> dict | None:
     """Emit a DriftTest-shaped dict with placeholder BH fields, or None.
 
     The BH pass in :func:`_apply_bh_correction` fills in
     ``adjusted_p_value`` and ``significant_after_bh`` once the full
-    within-week family is assembled.
+    within-week family is assembled. ``window`` is the
+    ``(compared_to_week, weeks_elapsed)`` pair from
+    :func:`_drift_window`; when an entry exists, both fields are always
+    present and ``weeks_elapsed`` is always at least 1.
     """
-    if p_value is None:
+    if p_value is None or window is None:
         return None
+    compared_to_week, weeks_elapsed = window
     return {
         "p_value": round(p_value, 6),
         "adjusted_p_value": 1.0,
         "significant_after_bh": False,
+        "compared_to_week": compared_to_week,
+        "weeks_elapsed": weeks_elapsed,
     }
 
 
-def _metric_value(record: dict, dotted_key: str) -> float:
-    """Resolve a ``MetricRecord``-ish dict value by dotted key, e.g. ``length.median``."""
+def _metric_value(record: dict, dotted_key: str) -> float | None:
+    """Resolve a ``MetricRecord``-ish dict value by dotted key, e.g. ``length.median``.
+
+    None when the record carries no value for that metric. Since
+    2026-W32 ``length.median`` is null on a cell whose usable samples all
+    came back as body-less provider refusals, and coercing that to 0.0
+    would hand the change-point detector a length collapse that never
+    happened.
+    """
     node: object = record
     for part in dotted_key.split("."):
         assert isinstance(node, dict)
         node = node[part]
-    return float(node)  # type: ignore[arg-type]
+    return None if node is None else float(node)  # type: ignore[arg-type]
 
 
 def _populate_change_points(
-    current_metrics: list[dict], history: list[dict]
+    current_metrics: list[dict], history: list[dict], week_id: str
 ) -> None:
     """Fill ``change_points`` on each current metric record in place.
 
@@ -204,6 +295,15 @@ def _populate_change_points(
     fallback to empty indices when the optional ``changepoint`` dep
     group is not installed, so the pipeline never fails the build over
     an optional analysis.
+
+    The current week is labelled with its real ``week_id``, not a
+    sentinel. The detector needs every point's week identity to tell a
+    genuine week-over-week transition from a shift that accumulated
+    across weeks the model never ran: 2026-W29 and 2026-W32 are three
+    weeks apart, not adjacent, because the 2026-W30 and 2026-W31 runs
+    were lost to an EC2 capacity outage. A sentinel label on the newest
+    point would defeat exactly the continuity check that matters most,
+    since the newest interval is the one that spans the outage.
     """
     try:
         from meridian.analysis.change_point import detect_change_points
@@ -229,19 +329,30 @@ def _populate_change_points(
     for rec in current_metrics:
         series_by_key.setdefault(
             (rec["prompt_id"], rec["model_id"]), []
-        ).append(("<current>", rec))
+        ).append((week_id, rec))
 
     for rec in current_metrics:
         key = (rec["prompt_id"], rec["model_id"])
         records = series_by_key.get(key, [])
         for site_name, record_key in _CHANGE_POINT_METRICS:
+            # Weeks with no value for this metric drop out of the series
+            # entirely rather than being imputed. The site's
+            # Manifest.timeseries drops the same points, so the indices
+            # emitted here keep pointing at the weeks the sparkline
+            # actually plots.
             series = [
-                (week, _metric_value(r, record_key))
+                (week, value)
                 for week, r in records
+                if (value := _metric_value(r, record_key)) is not None
             ]
             try:
                 cps = detect_change_points(series)
             except Exception:
+                _log.warning(
+                    "change-point detection failed for %s/%s on %s; leaving "
+                    "change_points empty for this metric",
+                    rec["prompt_id"], rec["model_id"], site_name, exc_info=True,
+                )
                 cps = []
             rec["change_points"][site_name] = [cp.index for cp in cps]
 
@@ -298,9 +409,14 @@ def _flag_largest_deltas(
         for metric, scale in _REVIEW_SCALES.items():
             delta = abs(rec.get(metric, 0.0) - prior.get(metric, 0.0))
             scored.append((delta / scale, metric, rec))
-        cur_len = (rec.get("length") or {}).get("median") or 0.0
-        prior_len = (prior.get("length") or {}).get("median") or 0.0
-        if prior_len:
+        # A null median means the week had no text to measure, not a
+        # length of zero. Comparing it as 0.0 would rank an
+        # all-api-refusal cell as the largest length collapse of the
+        # week; the refusal-rate delta on the same cell already carries
+        # the real signal, and it is the honest one.
+        cur_len = (rec.get("length") or {}).get("median")
+        prior_len = (prior.get("length") or {}).get("median")
+        if prior_len and cur_len is not None:
             denom = max(prior_len, cur_len) / 2 or 1.0
             scored.append((abs(cur_len - prior_len) / denom, "length_median", rec))
 
@@ -420,7 +536,10 @@ def _metrics_for_week(
     two-sample p-values against the last week *this model* ran (see
     :func:`_prior_week_for_model` — not the calendar-previous week, which
     the alternating cadence usually leaves empty for a given commercial
-    model). BH correction is *not* applied here — see
+    model). Because that window is variable, every emitted drift entry
+    records which week it was measured against
+    (``compared_to_week``) and how many ISO weeks wide the comparison
+    was (``weeks_elapsed``). BH correction is *not* applied here — see
     :func:`_apply_bh_correction`, which must run over the whole
     returned list.
 
@@ -478,15 +597,20 @@ def _metrics_for_week(
                     store.read(prior_week, model_id, prompt.id)
                 )
             cshift: float | None = None
-            if embedding_model is not None and prior_samples:
+            # Only text-bearing samples are embeddable. A provider-declared
+            # refusal carries an empty body, and embedding a run of empty
+            # strings would move the centroid on the strength of nothing.
+            embeddable = usability.text_bearing(samples)
+            prior_embeddable = usability.text_bearing(prior_samples)
+            if embedding_model is not None and embeddable and prior_embeddable:
                 if embedding_ok is None:
                     embedding_ok = _probe_embedding_model(embedding_model)
                 if embedding_ok:
                     try:
                         from meridian.analysis.embedding import centroid_shift
                         cshift = centroid_shift(
-                            [s.text for s in samples],
-                            [s.text for s in prior_samples],
+                            [s.text for s in embeddable],
+                            [s.text for s in prior_embeddable],
                             embedding_model,
                         )
                     except Exception:
@@ -508,6 +632,8 @@ def _metrics_for_week(
                     prior_samples=prior_samples if include_drift_tests else None,
                     insufficient_data_n=insufficient_data_n,
                     unusable_count=len(unusable),
+                    week_id=week_id,
+                    prior_week=prior_week if include_drift_tests else None,
                 )
             )
     return metrics
@@ -695,7 +821,7 @@ def build_manifest(
     # current MetricRecord carries precomputed indices into its
     # oldest-first time series. The site reads these directly rather
     # than invoking the analysis library at render time.
-    _populate_change_points(current_metrics, history)
+    _populate_change_points(current_metrics, history, week_id)
     # Runs last: it reads the assembled history and only sets advisory
     # flags, so it must not influence any statistic computed above.
     _flag_largest_deltas(current_metrics, history)

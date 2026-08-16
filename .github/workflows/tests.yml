@@ -77,7 +77,18 @@ jobs:
         run: uv python install 3.12
 
       - name: Install dependencies
-        run: uv sync --frozen || uv sync --exclude-newer "7 days"
+        # --all-groups is required here for the same reason as in the fast
+        # job above, and this job is the one that proves it: it was missing
+        # the flag, so from 2026-08-06 every slow run aborted during
+        # collection on `ModuleNotFoundError: No module named 'moto'`.
+        # test_accessibility.py and test_storage_s3.py had therefore not
+        # executed at all, while the job's red status read as a routine
+        # environment problem rather than as "the slow suite is gone".
+        #
+        # --frozen uses uv.lock (already cooldown-protected at
+        # lockfile-update time); the fallback enforces the 7-day
+        # cooldown. See COOLDOWNS.md.
+        run: uv sync --all-groups --frozen || uv sync --all-groups --exclude-newer "7 days"
 
       - name: Run slow tests
         run: uv run python -m pytest -q -m slow

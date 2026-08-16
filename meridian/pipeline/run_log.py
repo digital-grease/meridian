@@ -48,6 +48,18 @@ class RunLogEntry:
     # 2026-07-24 stay parseable (retention is forever; the reader must
     # never break on an old line).
     unusable_samples: dict[str, dict[str, int]] = field(default_factory=dict)
+    # Provider-declared refusals, "provider/model" -> prompt_id -> count.
+    # Distinct from both fields above: these requests succeeded AND
+    # returned a measurement, so they are neither an error nor a hole,
+    # and they must never move a fail threshold. They are logged because
+    # a provider switching refusal mechanism corpus-wide is a
+    # model-version-instability event that otherwise leaves no trace
+    # anywhere in the pipeline (2026-W32, claude-opus-4-8 on
+    # ref-pipe-bomb-construct, 20/20). Keyed by prompt so a reader can
+    # tell one saturated cell from a thin spread across the corpus.
+    # Defaulted so entries written before 2026-08-15 stay parseable:
+    # retention is forever and the reader must never break on an old line.
+    api_refusal_samples: dict[str, dict[str, int]] = field(default_factory=dict)
 
 
 def _config_hash(config: PipelineConfig) -> str:
@@ -88,6 +100,9 @@ def append_run_log(
         per_runner_samples=dict(outcome.per_runner_samples),
         unusable_samples={
             k: dict(v) for k, v in outcome.unusable_samples.items() if v
+        },
+        api_refusal_samples={
+            k: dict(v) for k, v in outcome.api_refusal_samples.items() if v
         },
         estimated_cost_usd=round(estimated_cost_usd, 4),
         actual_cost_usd=round(actual_cost_usd, 4),

@@ -74,19 +74,19 @@ variable "alert_topic_arn" {
 }
 
 variable "transition_to_ia_days" {
-  description = "Days after creation before raw/ objects transition to STANDARD_IA."
+  description = "Days after creation before meridian/raw/ objects transition to STANDARD_IA. S3 will not transition an object under 128 KB and today's raw objects are 9-93 KB, so this is expected to be a no-op until the object profile changes; see the lifecycle comment in main.tf."
   type        = number
   default     = 30
 }
 
 variable "transition_to_deep_archive_days" {
-  description = "Days after creation before raw/ objects transition to DEEP_ARCHIVE. The hard rule is \"raw data is never destroyed\", so this lifecycle only moves classes — it never expires current versions."
+  description = "Days after creation before meridian/raw/ objects make their second transition, now to GLACIER_IR rather than the DEEP_ARCHIVE this variable is named after. The name is kept because renaming it forces every operator's tfvars to change. GLACIER_IR because published results must stay reproducible from the raw data without a 12-to-48-hour restore. Same 128 KB floor caveat as transition_to_ia_days."
   type        = number
   default     = 365
 }
 
 variable "expire_noncurrent_versions_days" {
-  description = "Days after a version becomes non-current before it is deleted. Guards against cost creep from accidental overwrites; current versions are never affected."
+  description = "Days after a version becomes non-current before it is deleted. Applies to meridian/manifests/ ONLY, where the churn is the latest.json pointer. It is deliberately not applied to meridian/raw/: a non-current raw object is prior raw data, and the hard rule is that raw data is never destroyed."
   type        = number
   default     = 90
 }

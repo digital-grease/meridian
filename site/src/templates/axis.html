@@ -15,9 +15,12 @@
 <article class="page">
   <h1>{{ axis | replace('-', ' ') | capitalize }}</h1>
   <p class="lede">
+    {# observed_weeks, not weeks: `weeks` carries the calendar axis of the
+       table below, which includes weeks the audit never ran. Counting
+       those here would claim observations that do not exist. #}
     {{ axis_prompts | length }} prompt{{ 's' if axis_prompts | length != 1 else '' }}
     observed across {{ models | length }} model{{ 's' if models | length != 1 else '' }}
-    over {{ weeks | length }} week{{ 's' if weeks | length != 1 else '' }}.
+    over {{ observed_weeks | length }} week{{ 's' if observed_weeks | length != 1 else '' }}.
   </p>
 
   <h2>{{ table.meta.label }} — model × week</h2>
@@ -33,6 +36,15 @@
       sampled that week and is not a measurement of zero. Frontier models
       alternate on a biweekly cadence, so roughly half of their cells are
       unsampled by design.
+      {% if table.missing_weeks %}
+      {{ table.missing_weeks | join(', ') }}
+      {{ 'are' if table.missing_weeks | length != 1 else 'is' }} a different
+      case: the audit did not run at all, so
+      {{ 'those columns are' if table.missing_weeks | length != 1 else 'that column is' }}
+      empty for every model. A lost week is a hole in the record rather than
+      a cadence skip, and it keeps its column instead of being closed up.
+      <a href="/methodology/#data-gaps">Why these weeks are missing</a>.
+      {% endif %}
       {% endif %}
       This axis leads with {{ table.meta.label | lower }} because that is
       the measure that moves on it.
@@ -50,7 +62,10 @@
         <th scope="row"><a href="/models/{{ row.model.model_id }}/">{{ row.model.display_name }}</a></th>
         {% for cell in row.cells %}
         {% if cell is none %}
-        <td class="heatmap-cell heatmap-empty" aria-label="not sampled this week">&middot;</td>
+        {# Two different absences share the same empty cell, so the label
+           has to carry the difference: a cadence skip means this model
+           was not sampled, a missing week means nothing was. #}
+        <td class="heatmap-cell heatmap-empty" aria-label="{% if table.weeks[loop.index0] in table.missing_weeks %}no run that week{% else %}not sampled this week{% endif %}">&middot;</td>
         {% else %}
         <td class="heatmap-cell" style="{{ heatmap_cell_style(cell, 0.0, table.max) }}">
           <span class="visually-hidden">{{ table.meta.label | lower }} </span>{{ table.meta.fmt % cell }}

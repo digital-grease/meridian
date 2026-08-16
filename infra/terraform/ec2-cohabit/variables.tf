@@ -142,9 +142,30 @@ variable "schedule_timezone" {
 # ------------------------------------------------------------------------
 
 variable "ssm_command_timeout_seconds" {
-  description = "Hard cap on how long the Lambda waits for the in-instance SSM RunCommand to finish before giving up and alerting."
+  description = <<-EOT
+    SSM SendCommand DELIVERY deadline: how long SSM keeps trying to hand
+    the command to the instance's agent before marking it
+    DeliveryTimedOut. It does NOT bound how long the wrapper may run.
+    Dispatch is fire-and-forget (Lambda's 15-minute ceiling cannot sit
+    through a 30-90 minute pipeline run), so nothing on this side has a
+    run budget to raise; that budget lives in scripts/run-weekly.sh.
+
+    The description used to claim this capped the run, and the Lambda
+    read the variable nowhere while hardcoding 600, so an operator
+    raising it to buy the pipeline more time got a clean apply and no
+    behaviour change whatsoever. The Lambda now reads it. The default
+    dropped from 5400 to 600 to match what the code has actually been
+    doing since the module was written, so wiring it up is a no-op.
+  EOT
   type        = number
-  default     = 5400 # 90 minutes
+  default     = 600 # 10 minutes to reach the agent; the run itself is unbounded here
+
+  validation {
+    # SSM accepts 30 s to 30 days. Anything under a minute risks a
+    # DeliveryTimedOut on an instance that is still finishing its boot.
+    condition     = var.ssm_command_timeout_seconds >= 60 && var.ssm_command_timeout_seconds <= 2592000
+    error_message = "ssm_command_timeout_seconds must be between 60 and 2592000 (SSM's own range is 30-2592000)."
+  }
 }
 
 variable "wrapper_script_path" {

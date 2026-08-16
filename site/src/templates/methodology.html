@@ -222,6 +222,41 @@
     <li><strong>Pre-registered</strong> hypotheses for major analyses, timestamped
       in the public repo before the data is seen.</li>
   </ul>
+  <p id="drift-baseline">
+    <strong>What a drift p-value is compared against.</strong>
+    Every drift test compares this week&rsquo;s samples for one
+    <code>(prompt &times; model)</code> pair against the most recent
+    earlier week <em>that pair actually ran</em>. That is frequently not
+    the previous calendar week. Frontier models alternate by ISO-week
+    parity, which puts the baseline two weeks back, and a week the audit
+    lost entirely pushes it further still. Each drift result in the data
+    export therefore carries the week it was compared with
+    (<code>compared_to_week</code>) and how many calendar weeks that
+    spans (<code>weeks_elapsed</code>). A p-value read as
+    week-over-week when it covers a four-week interval overstates how
+    abruptly something moved.
+  </p>
+  {% if drift_baselines %}
+  <p class="muted">
+    In snapshot <code>{{ manifest.snapshot.week_id }}</code>, drift
+    tests rest on
+    {% for b in drift_baselines %}
+    <code>{{ b.week_id }}</code>{% if b.weeks_elapsed %}
+    ({{ b.weeks_elapsed }} week{{ 's' if b.weeks_elapsed != 1 else '' }}
+    earlier, {{ b.tests }} test{{ 's' if b.tests != 1 else '' }}){% else %}
+    ({{ b.tests }} test{{ 's' if b.tests != 1 else '' }}){% endif %}{% if not loop.last %};
+    {% endif %}
+    {% endfor %}.
+  </p>
+  {% else %}
+  <p class="muted">
+    Snapshot <code>{{ manifest.snapshot.week_id }}</code> does not name
+    the baseline for each drift result: either it has no drift tests
+    yet, or it was published before <code>compared_to_week</code>
+    existed. The rule above still describes how any drift result on this
+    site was computed.
+  </p>
+  {% endif %}
 
   <h2 id="samples">Which sample responses we show</h2>
   <p>
@@ -280,11 +315,25 @@
   <h3 id="data-gaps">Known data gaps</h3>
   <p>
     Weeks where a scheduled runner produced no samples are listed here
-    rather than silently interpolated. Time-series charts render these
-    as a break in the line; aggregate statistics exclude the missing
-    cell rather than imputing it. Backfilling after the fact is not
-    done &mdash; a sample taken later is not a sample taken that week,
-    and the local-baseline noise floor depends on real-time capture.
+    rather than silently interpolated. Backfilling after the fact is not
+    done: a sample taken later is not a sample taken that week, and the
+    local-baseline noise floor depends on real-time capture.
+  </p>
+  <p>
+    A week in which <em>nothing</em> ran is shown, not closed up. It
+    keeps its own column in every model&nbsp;&times;&nbsp;week table, so
+    the horizontal axis stays true to the calendar; sparklines draw the
+    measurements on either side as separate line segments instead of
+    joining them; the snapshot index at <a href="/data/">/data/</a>
+    lists it with zero rows and links to a page saying so. Aggregate
+    statistics exclude the missing cell rather than imputing it.
+  </p>
+  <p class="muted">
+    A week in which some models ran and others did not is a different
+    thing and is not drawn as a break: the commercial roster alternates
+    by ISO-week parity, so roughly half of each frontier model&rsquo;s
+    cells are unsampled by design. Those weeks have data, just not for
+    that model.
   </p>
   <dl class="metric-glossary">
     <dt><code>2026-W17</code> &mdash; <code>llama3.2:3b</code></dt>

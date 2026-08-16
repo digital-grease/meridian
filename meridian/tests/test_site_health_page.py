@@ -1,16 +1,22 @@
 """Internal pipeline-health page tests.
 
-The page reads data/run_log.jsonl via load_run_log_summary. Two
-scenarios cover the empty-log branch (default state) and the
-populated branch (two scripted entries produce two rows).
+The page reads a run log via load_run_log_summary. Two scenarios cover
+the empty-log branch (default state) and the populated branch (two
+scripted entries produce two rows).
 
-Uses the try/finally seed-and-restore pattern that test_redirects.py
-established, so the test is safe when a real run log already exists
-on disk.
+These tests used to swap the real ``data/run_log.jsonl`` in place and
+restore it in a finally block. On 2026-08-15 two pytest processes ran
+concurrently, the second captured the first's scripted file as "the
+original", and restoring it destroyed 15 of the 17 real entries. They
+came back from git, but the run log is the append-only public record
+and retention is forever, so the pattern is gone: the scripted log now
+lives in tmp_path and reaches the build through MERIDIAN_RUN_LOG. No
+test writes to data/ at all.
 """
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -21,7 +27,12 @@ from meridian.pipeline.run_log import RunLogEntry
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
-def _run_build(tmp_path: Path) -> Path:
+def _run_build(tmp_path: Path, run_log: Path) -> Path:
+    """Build the site with ``run_log`` standing in for the real log.
+
+    ``run_log`` may point at a path that does not exist; that is how the
+    empty-state case is expressed, and read_run_log returns [] for it.
+    """
     dist = tmp_path / "dist"
     manifest = REPO_ROOT / "site" / "fixtures" / "synthetic-fixture.json"
     result = subprocess.run(
@@ -32,6 +43,7 @@ def _run_build(tmp_path: Path) -> Path:
             "--out", str(dist),
         ],
         capture_output=True, text=True, cwd=REPO_ROOT,
+        env={**os.environ, "MERIDIAN_RUN_LOG": str(run_log)},
     )
     assert result.returncode == 0, (
         f"build failed: {result.stderr}\n{result.stdout}"
@@ -39,31 +51,10 @@ def _run_build(tmp_path: Path) -> Path:
     return dist
 
 
-def _swap_run_log(entries: list[RunLogEntry] | None) -> bytes | None:
-    """Swap data/run_log.jsonl with a scripted version and return a
-    token (original bytes, or None if the file did not exist) that the
-    caller passes to _restore_run_log in a finally block."""
-    log_path = REPO_ROOT / "data" / "run_log.jsonl"
-    original: bytes | None
-    original = log_path.read_bytes() if log_path.exists() else None
-
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    if entries is None:
-        if log_path.exists():
-            log_path.unlink()
-    else:
-        lines = [json.dumps(asdict(e), sort_keys=True) for e in entries]
-        log_path.write_text("\n".join(lines) + ("\n" if lines else ""))
-    return original
-
-
-def _restore_run_log(token: bytes | None) -> None:
-    log_path = REPO_ROOT / "data" / "run_log.jsonl"
-    if token is None:
-        if log_path.exists():
-            log_path.unlink()
-    else:
-        log_path.write_bytes(token)
+def _write_run_log(path: Path, entries: list[RunLogEntry]) -> Path:
+    lines = [json.dumps(asdict(e), sort_keys=True) for e in entries]
+    path.write_text("\n".join(lines) + ("\n" if lines else ""))
+    return path
 
 
 def _entry(
@@ -95,11 +86,8 @@ def _entry(
 
 
 def test_health_page_empty_state(tmp_path: Path):
-    token = _swap_run_log(None)
-    try:
-        dist = _run_build(tmp_path)
-    finally:
-        _restore_run_log(token)
+    # A path that does not exist is the empty-log case.
+    dist = _run_build(tmp_path, tmp_path / "absent-run-log.jsonl")
 
     html = (dist / "internal" / "health" / "index.html").read_text()
     assert 'name="robots"' in html and "noindex" in html
@@ -121,11 +109,8 @@ def test_health_page_with_two_weeks(tmp_path: Path):
             complete=10, failed=0, actual=1.25,
         ),
     ]
-    token = _swap_run_log(entries)
-    try:
-        dist = _run_build(tmp_path)
-    finally:
-        _restore_run_log(token)
+    run_log = _write_run_log(tmp_path / "run_log.jsonl", entries)
+    dist = _run_build(tmp_path, run_log)
 
     html = (dist / "internal" / "health" / "index.html").read_text()
     # Both weeks appear; newest first.

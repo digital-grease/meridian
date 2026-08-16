@@ -78,6 +78,19 @@ data "aws_iam_policy_document" "lambda_inline" {
     actions   = ["sns:Publish"]
     resources = [aws_sns_topic.alerts.arn]
   }
+
+  # The orchestrator files a run-log record when a Monday dies before the
+  # pipeline ever starts (see _record_failed_run in lambda/orchestrator.py).
+  # 2026-W30 and 2026-W31 left no line in the append-only run log at all,
+  # so the outage is not reproducible from the data. Write-only, and only
+  # under the run_log/failures/ prefix: this Lambda has no business
+  # touching raw samples or manifests.
+  statement {
+    sid       = "FailureRunLogWrite"
+    effect    = "Allow"
+    actions   = ["s3:PutObject"]
+    resources = ["${local.bucket_arn}/${var.archive_bucket_prefix}run_log/failures/*"]
+  }
 }
 
 resource "aws_iam_role_policy" "lambda_inline" {
@@ -105,19 +118,34 @@ resource "aws_lambda_function" "orchestrator" {
 
   environment {
     variables = {
-      INSTANCE_ID                 = local.instance_id
-      WRAPPER_SCRIPT_PATH         = var.wrapper_script_path
-      SNS_TOPIC_ARN               = aws_sns_topic.alerts.arn
+      INSTANCE_ID         = local.instance_id
+      WRAPPER_SCRIPT_PATH = var.wrapper_script_path
+      SNS_TOPIC_ARN       = aws_sns_topic.alerts.arn
+      # Read by _send_wrapper as the SSM DELIVERY deadline. Until 2026-08
+      # the function never read this at all and hardcoded 600.
       SSM_COMMAND_TIMEOUT_SECONDS = tostring(var.ssm_command_timeout_seconds)
+      # Destination for the failure run-log record written when a Monday
+      # dies before the pipeline starts. Leave the bucket empty to turn
+      # the S3 write off; the record is still logged to CloudWatch.
+      ARCHIVE_BUCKET        = var.archive_bucket_name
+      ARCHIVE_BUCKET_PREFIX = var.archive_bucket_prefix
     }
   }
 }
 
-# Retain Lambda execution logs for two weeks. CloudWatch defaults to
-# never-expire which compounds cost over time.
+# Retain Lambda execution logs for 90 days.
+#
+# This was 14 days, which was shorter than the time it took to notice the
+# outage it needed to explain. The 2026-07-27 log stream still lists in
+# the console but returns zero events: the first outage week's forensic
+# record had already aged out 18 days after the event, before anyone went
+# looking, and only the 2026-08-03 stream survived to be read. Detection
+# latency for a weekly job is measured in weeks, so retention has to be
+# too. The whole log group is roughly 6 KB, so the cost argument for 14
+# days never applied here.
 resource "aws_cloudwatch_log_group" "lambda" {
   name              = "/aws/lambda/${aws_lambda_function.orchestrator.function_name}"
-  retention_in_days = 14
+  retention_in_days = 90
 }
 
 # Async-invoke behaviour. THIS, not the Scheduler's retry_policy, is the

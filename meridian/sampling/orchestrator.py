@@ -22,7 +22,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 
-from meridian.analysis.usability import unusable_reason
+from meridian.analysis import usability
 from meridian.corpus import Corpus, Prompt
 from meridian.runners import Runner, RunnerError
 from meridian.runners.base import IntegrityError, Sample
@@ -85,10 +85,34 @@ class RunOutcome:
     #: looks. Kept separate from ``errors``, which mean "the request
     #: failed"; these requests succeeded and returned nothing.
     unusable_samples: dict[str, dict[str, int]] = field(default_factory=dict)
+    #: Provider-declared refusals (``stop_reason="refusal"`` with an
+    #: empty body), keyed ``"provider/model_id"`` -> prompt_id -> count.
+    #:
+    #: Deliberately NOT folded into ``unusable_samples``. These samples
+    #: are measured outcomes: they count toward the cell's N and toward
+    #: the published refusal rate, and an empty ``unusable_samples`` must
+    #: keep meaning "the run produced no holes" so the existing fail
+    #: thresholds in ``scripts/check_run_health.py`` are untouched.
+    #:
+    #: It is still notable. Between 2026-W28 and 2026-W32 Anthropic moved
+    #: ``claude-opus-4-8``'s refusal on ``ref-pipe-bomb-construct`` out of
+    #: the completion body and into the terminator. Once an API refusal
+    #: became a usable sample, that switch produced no warning, no error
+    #: and no run-log entry anywhere in the pipeline, which inverts
+    #: CLAUDE.md's "model version instability ... flag loudly when
+    #: detected". Keyed by prompt because a mechanism switch is a
+    #: per-cell event: "20 on ref-pipe-bomb-construct" and "1 each across
+    #: 20 prompts" mean completely different things, and the runner-level
+    #: total cannot tell them apart.
+    api_refusal_samples: dict[str, dict[str, int]] = field(default_factory=dict)
 
     @property
     def total_unusable(self) -> int:
         return sum(sum(v.values()) for v in self.unusable_samples.values())
+
+    @property
+    def total_api_refusals(self) -> int:
+        return sum(sum(v.values()) for v in self.api_refusal_samples.values())
 
 
 class Orchestrator:
@@ -215,7 +239,7 @@ class Orchestrator:
                                 )
                                 outcome.total_samples_written += 1
                                 outcome.per_runner_samples[runner_key] += 1
-                                self._note_usability(
+                                self._note_outcome(
                                     outcome, runner_key, prompt.id, s
                                 )
 
@@ -249,7 +273,7 @@ class Orchestrator:
                                 )
                                 outcome.total_samples_written += 1
                                 outcome.per_runner_samples[runner_key] += 1
-                                self._note_usability(
+                                self._note_outcome(
                                     outcome, runner_key, prompt.id, s
                                 )
 
@@ -297,35 +321,77 @@ class Orchestrator:
                     runner_key, sum(holes.values()),
                     ", ".join(f"{k}={v}" for k, v in sorted(holes.items())),
                 )
+            declined = outcome.api_refusal_samples.get(runner_key, {})
+            if declined:
+                _log.warning(
+                    "[%s] %d sample(s) were provider-declared refusals, by "
+                    "prompt: %s. These are measurements, not holes: they "
+                    "count toward N and toward the published refusal rate, "
+                    "and they carry no text, so they are excluded from "
+                    "length, hedge, embedding and stance. Compare the prior "
+                    "week for the same cell before reading this as drift. A "
+                    "cell that returned prose refusals last time and "
+                    "terminator refusals now has changed refusal MECHANISM, "
+                    "not refusal RATE, which is what claude-opus-4-8 did on "
+                    "ref-pipe-bomb-construct between 2026-W28 and 2026-W32.",
+                    runner_key, sum(declined.values()),
+                    ", ".join(f"{k}={v}" for k, v in sorted(declined.items())),
+                )
 
         await asyncio.gather(*[run_one_runner(r) for r in self.runners])
         return outcome
 
     @staticmethod
-    def _note_usability(
+    def _note_outcome(
         outcome: RunOutcome,
         runner_key: str,
         prompt_id: str,
         sample: Sample,
     ) -> None:
-        """Tally a stored sample that carries no measurement.
+        """Tally a stored sample whose outcome is not an ordinary answer.
 
         The sample is already persisted by the time this runs, and stays
-        persisted — retention is append-only and a non-answer is itself
-        evidence. This only records that the metrics must not count it.
+        persisted: retention is append-only and a non-answer is itself
+        evidence. This only records how the metric layer will read it.
+
+        Two destinations, kept apart on purpose.
+        ``outcome.unusable_samples`` holds holes, samples that carry no
+        measurement at all, and drives the fail thresholds in
+        ``scripts/check_run_health.py``.
+        ``outcome.api_refusal_samples`` holds provider-declared refusals,
+        which are measurements and must not move those thresholds.
+
+        Before 2026-W32 an API refusal landed in the first bucket and the
+        run failed loudly. Once it became a usable sample it landed in
+        neither, so a provider changing refusal mechanism across the
+        whole corpus would have run green and silent. Routing it to its
+        own bucket is what keeps it visible without calling it a defect.
         """
-        reason = unusable_reason(sample)
-        if reason is None:
-            return
-        by_reason = outcome.unusable_samples.setdefault(runner_key, {})
-        by_reason[reason] = by_reason.get(reason, 0) + 1
-        _log.warning(
-            "unusable sample: %s / %s (index %d): %s "
-            "(finish_reason=%r, output_tokens=%s, max_tokens=%d)",
-            runner_key, prompt_id, sample.request_index, reason,
-            sample.finish_reason or sample.stop_reason,
-            sample.output_tokens, sample.max_tokens,
-        )
+        for code, count in usability.count_outcomes([sample]).items():
+            if code == usability.API_REFUSAL:
+                by_prompt = outcome.api_refusal_samples.setdefault(
+                    runner_key, {}
+                )
+                by_prompt[prompt_id] = by_prompt.get(prompt_id, 0) + count
+                _log.info(
+                    "api refusal: %s / %s (index %d): provider declared the "
+                    "refusal in its terminator (finish_reason=%r, "
+                    "stop_reason=%r, output_tokens=%s); counted as a refusal, "
+                    "excluded from every text-derived metric",
+                    runner_key, prompt_id, sample.request_index,
+                    sample.finish_reason, sample.stop_reason,
+                    sample.output_tokens,
+                )
+                continue
+            by_reason = outcome.unusable_samples.setdefault(runner_key, {})
+            by_reason[code] = by_reason.get(code, 0) + count
+            _log.warning(
+                "unusable sample: %s / %s (index %d): %s "
+                "(finish_reason=%r, output_tokens=%s, max_tokens=%d)",
+                runner_key, prompt_id, sample.request_index, code,
+                sample.finish_reason or sample.stop_reason,
+                sample.output_tokens, sample.max_tokens,
+            )
 
     @staticmethod
     def _log_progress(

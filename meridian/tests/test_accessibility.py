@@ -49,7 +49,14 @@ STATIC_PAGE_PATHS = [
     "/funding/",
 ]
 # Per-item template types to spot-check via dynamic pick.
-DYNAMIC_PAGE_PREFIXES = ("/axes/", "/models/", "/prompts/")
+#
+# "/data/" picks a per-week snapshot page (data_week.html, or
+# data_gap.html when the manifest's first week is one the audit lost).
+# Both were unreachable from this list until 2026-08-15: STATIC_PAGE_PATHS
+# covers only the /data/ index, so no /data/{week}/ page type was ever
+# axe-gated, and those are the pages a journalist following a citation
+# lands on.
+DYNAMIC_PAGE_PREFIXES = ("/axes/", "/models/", "/prompts/", "/data/")
 
 
 def _free_port() -> int:

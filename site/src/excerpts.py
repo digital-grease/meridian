@@ -33,6 +33,26 @@ refusals would misrepresent the number sitting directly above it.
 Unusable samples (:mod:`meridian.analysis.usability`) are never shown as
 excerpts — they have no content to show — but their count is reported so
 the page never implies a cell was fully answered when it was not.
+
+Usable is not the same as quotable
+----------------------------------
+As of 2026-W32 a provider-declared refusal (Anthropic's
+``stop_reason="refusal"`` with an empty body) is a usable sample: it
+counts toward N and toward the published refusal rate. It still has no
+text. Selecting on usability alone therefore admitted body-less records
+into the candidate list, where the length sort put them *first* and the
+text-only classifier scored them as answers, so a cell that refused 20
+times out of 20 would have rendered three blank cards labelled
+"classified answer" directly beneath a published refusal rate of 1.00.
+
+Selection filters on :func:`meridian.analysis.usability.carries_text`
+for that reason, and refusal labelling goes through
+:func:`meridian.analysis.refusal.classify_sample`, which reads the
+provider's own declaration rather than the wording of a body that is not
+there. A cell whose refusals all arrived that way still gets a card on
+the page; it states the count and says there is no message body to
+quote, because silently dropping the cell would hide the strongest
+refusal signal the corpus can produce.
 """
 from __future__ import annotations
 
@@ -69,23 +89,71 @@ class CellExcerpts:
     excerpts: list[Excerpt]
     usable: int
     unusable: int
+    #: Usable samples whose refusal arrived in the provider's terminator
+    #: with no message body at all. They are counted rather than quoted:
+    #: there is nothing to quote, and rendering them as empty response
+    #: cards is the regression this field exists to make impossible.
+    bodyless_refusals: int = 0
 
 
-def _classify_refusal(text: str) -> bool:
+def _as_sample(rec: dict):
+    """Parse one raw snapshot record, or None if it will not parse.
+
+    A record we cannot even parse is not something to excerpt, and it is
+    not something to reason about either, so every predicate below
+    treats None as "no".
+    """
+    from meridian.runners.base import Sample
+    try:
+        return Sample.model_validate(rec)
+    except Exception:
+        return None
+
+
+def _is_refusal(rec: dict) -> bool:
     """Reuse the pipeline's classifier so the page and the published
-    refusal_rate can never disagree about what a refusal is."""
-    from meridian.analysis.refusal import classify_refusal
-    return classify_refusal(text).is_refusal
+    refusal_rate can never disagree about what a refusal is.
+
+    ``classify_sample``, not ``classify_refusal``: since 2026-W32 a
+    provider can declare the refusal in its terminator and send no prose,
+    and the text-only classifier scores that as "did not refuse". The
+    page would then label a refusal an answer while the refusal rate
+    above it read 1.00.
+    """
+    from meridian.analysis.refusal import classify_refusal, classify_sample
+    sample = _as_sample(rec)
+    if sample is None:
+        return classify_refusal(rec.get("text") or "").is_refusal
+    return classify_sample(sample).is_refusal
 
 
 def _is_usable(rec: dict) -> bool:
-    from meridian.analysis.usability import unusable_reason
-    from meridian.runners.base import Sample
-    try:
-        return unusable_reason(Sample.model_validate(rec)) is None
-    except Exception:
-        # A record we cannot even parse is not something to excerpt.
-        return False
+    """True when the record counts toward the cell's N."""
+    from meridian.analysis.usability import is_usable
+    sample = _as_sample(rec)
+    return sample is not None and is_usable(sample)
+
+
+def _carries_text(rec: dict) -> bool:
+    """True when the record has a response body to show.
+
+    Deliberately narrower than :func:`_is_usable`: a provider-declared
+    refusal is usable but body-less. See the module docstring.
+    """
+    from meridian.analysis.usability import carries_text
+    sample = _as_sample(rec)
+    return sample is not None and carries_text(sample)
+
+
+def _is_bodyless_refusal(rec: dict) -> bool:
+    """True for a provider-declared refusal that carried no message body."""
+    from meridian.analysis.usability import carries_text, is_api_refusal
+    sample = _as_sample(rec)
+    return (
+        sample is not None
+        and is_api_refusal(sample)
+        and not carries_text(sample)
+    )
 
 
 def _truncate(text: str) -> tuple[str, bool]:
@@ -98,13 +166,19 @@ def _truncate(text: str) -> tuple[str, bool]:
 
 
 def select(records: list[dict]) -> list[Excerpt]:
-    """Apply the documented selection rule to one cell's raw records."""
-    usable = [r for r in records if _is_usable(r)]
-    if not usable:
+    """Apply the documented selection rule to one cell's raw records.
+
+    Candidates are the usable records that actually carry text. Filtering
+    on usability alone let body-less provider refusals in, where the
+    length sort ranked them shortest and put a blank card in the first
+    slot on the page.
+    """
+    candidates = [r for r in records if _is_usable(r) and _carries_text(r)]
+    if not candidates:
         return []
 
-    scored = sorted(usable, key=lambda r: (len((r.get("text") or "").strip()),
-                                           r.get("request_index", 0)))
+    scored = sorted(candidates, key=lambda r: (len((r.get("text") or "").strip()),
+                                               r.get("request_index", 0)))
     picks: dict[int, str] = {}  # request_index -> role
 
     def _mark(rec: dict, role: str) -> None:
@@ -118,17 +192,17 @@ def select(records: list[dict]) -> list[Excerpt]:
         _mark(scored[len(scored) // 2], "median")
         _mark(scored[-1], "longest")
 
-    by_index = {r.get("request_index", 0): r for r in usable}
+    by_index = {r.get("request_index", 0): r for r in candidates}
 
     # Refusal-mix guarantee: never let the excerpts imply a uniformity
     # the refusal rate contradicts.
-    refusals = [r for r in usable if _classify_refusal(r.get("text") or "")]
-    answers = [r for r in usable if not _classify_refusal(r.get("text") or "")]
+    refusals = [r for r in candidates if _is_refusal(r)]
+    answers = [r for r in candidates if not _is_refusal(r)]
     if refusals and answers:
         shown = [by_index[i] for i in picks]
-        if not any(_classify_refusal(r.get("text") or "") for r in shown):
+        if not any(_is_refusal(r) for r in shown):
             _mark(refusals[0], "refusal")
-        if all(_classify_refusal(r.get("text") or "") for r in shown):
+        if all(_is_refusal(r) for r in shown):
             _mark(answers[0], "answer")
 
     out: list[Excerpt] = []
@@ -142,7 +216,7 @@ def select(records: list[dict]) -> list[Excerpt]:
             text=text,
             length=len(raw),
             truncated=truncated,
-            is_refusal=_classify_refusal(raw),
+            is_refusal=_is_refusal(rec),
             role=role,
         ))
     return out
@@ -187,11 +261,21 @@ def load_for_week(
     out: dict[tuple[str, str], CellExcerpts] = {}
     for (pid, mid), records in buckets.items():
         usable = [r for r in records if _is_usable(r)]
-        excerpts = select(records)
-        if not excerpts:
+        bodyless = sum(1 for r in usable if _is_bodyless_refusal(r))
+        cell = select(records)
+        # A cell with no text to quote still gets an entry when the
+        # silence is itself a measurement: 20 body-less refusals out of
+        # 20 is the strongest signal the refusal-boundary axis produces,
+        # and dropping the cell here would leave the page showing a
+        # refusal rate of 1.00 with nothing under it to explain the
+        # absence of any response. A cell whose samples were all
+        # unusable is still skipped: that one is a hole, and the
+        # "Not measurable this week" notice already covers it.
+        if not cell and not bodyless:
             continue
         out[(pid, mid)] = CellExcerpts(
-            prompt_id=pid, model_id=mid, excerpts=excerpts,
+            prompt_id=pid, model_id=mid, excerpts=cell,
             usable=len(usable), unusable=len(records) - len(usable),
+            bodyless_refusals=bodyless,
         )
     return out

@@ -7,8 +7,27 @@ context that explains why that config looks the way it does.
 
 All numbers from `meridian.sampling.pricing.estimate_cost` at the
 default sampling plan (`n_default_temp=20`, `n_zero_temp=5`,
-`avg_input_chars=80`, `avg_output_tokens=500`). Provider pricing as of
-2026-06. Actual usage is typically within ±30% of estimate.
+`avg_input_chars=80`) and at the completion caps in
+`meridian/config.yaml` (shared 1024, gpt-5.5 pinned to 8192). Provider
+pricing as of 2026-06.
+
+Two things changed in 2026-08 and every figure below is on the new
+basis. There is no longer a flat `avg_output_tokens=500`: expected
+billed output is derived from each runner's completion cap, because
+reasoning tokens bill against that cap and gpt-5.5's was raised from
+1024 to 8192 to fix the truncated-completion bug. And the estimator now
+reads the temperature plan, so it stops pricing the zero-temp batch for
+models that reject `temperature=0` and never receive it (both paid
+models in the current roster). Read
+`meridian/sampling/pricing.py`'s module docstring for the model and its
+calibration receipts before quoting any number here.
+
+The estimate is deliberately conservative and runs above observed
+actuals, because it gates `run --max-cost` and erring low is the failure
+that costs money. It is not a spend forecast: the Opus week below
+estimates $8.35 against the $7.08 that 2026-W28 actually billed, and the
+gap widens with the cap. Set a ceiling against the estimate, not against
+what you expect the invoice to say.
 
 ---
 
@@ -19,8 +38,15 @@ default sampling plan (`n_default_temp=20`, `n_zero_temp=5`,
 - Claude Opus 4.8 — **even ISO weeks only** (newest Opus until Fable unlocks)
 - GPT-5.5 — **odd ISO weeks only**
 
-**Weekly cost: $0 (Ollama) + $9.45 (Opus) OR $11.32 (GPT-5.5), alternating.**
-**Monthly average: ~$45 ($540/yr.)**
+**Weekly cost: $0 (Ollama) + $8.35 (Opus) OR $22.91 (GPT-5.5), alternating.**
+**Monthly average: ~$68 ($813/yr.)**
+
+The GPT-5.5 week is now the expensive one, which reverses the old
+ordering. That is the 8192 completion cap: gpt-5.5 bills reasoning
+tokens against it, so the same 600 calls carry roughly 1,270 expected
+billed output tokens each against Opus's 552 at the shared 1024. The old
+figures here ($9.45 / $11.32, ~$45/mo) predate both the cap change and
+the cap-aware estimator and should not be quoted.
 
 This gives us frontier-model coverage on both OpenAI and Anthropic
 without paying for both every week. Ollama produces a continuous
@@ -35,20 +61,31 @@ months-scale story, not a weeks-scale one.
 
 | Prompts | Per week | **Per month** | Per year |
 |---:|---:|---:|---:|
-| 30 | $31.97 | **$139** | $1,662 |
-| 50 | $53.29 | **$231** | $2,771 |
-| 75 | $79.93 | **$346** | $4,156 |
-| 100 | $106.57 | **$462** | $5,542 |
-| 150 | $159.86 | **$693** | $8,313 |
-| 200 | $213.14 | **$924** | $11,083 |
-| 300 | $319.72 | **$1,385** | $16,625 |
+| 30 | $42.69 | **$185** | $2,220 |
+| 50 | $71.14 | **$308** | $3,699 |
+| 75 | $106.70 | **$462** | $5,548 |
+| 100 | $142.26 | **$616** | $7,398 |
+| 150 | $213.41 | **$925** | $11,097 |
+| 200 | $284.54 | **$1,233** | $14,796 |
+| 300 | $426.81 | **$1,850** | $22,194 |
 
+Roster priced here: Opus 4.8, Sonnet 4.6, Haiku 4.5, GPT-5.5, GPT-4o,
+GPT-4.1-mini, at the config's caps (gpt-5.5 at 8192, the rest at 1024).
 Scaling is linear in prompts × samples × tokens × price. Opus + GPT-5.5
-consume ~65% of the bill at every scale.
+consume ~73% of the bill at every scale, up from ~65% before the gpt-5.5
+cap change; GPT-5.5 alone is 54%.
 
 ---
 
 ## Combined-lever options at 100 prompts (frontier-model corpus target)
+
+> Not yet re-derived on the 2026-08 basis. Every figure in this section
+> and in the tier ladder below still carries the pre-2026-08 flat-500
+> arithmetic at the shared 1024 cap, so it reads low by roughly a third
+> wherever GPT-5.5 appears. The relative ordering of the options is
+> unaffected, which is what the section is for. Re-derive before quoting
+> an absolute number anywhere public:
+> `uv run python -m meridian.pipeline.cli estimate`.
 
 | Config | Per month |
 |---|---:|
@@ -77,7 +114,9 @@ The penultimate option is the recommended target when the corpus grows.
 
 ### Level 0 — Current: alternation
 - 30 prompts, Ollama every week, Opus + GPT-5.5 alternating.
-- **~$45/mo / $540/yr.**
+- **~$68/mo / $813/yr.** (On the 2026-08 basis. The levels below are
+  still on the old one, see the note above; their *deltas* from Level 0
+  remain roughly right, their totals do not.)
 - Hits: both OpenAI and Anthropic frontier, Ollama baseline, at a volunteer-sustainable cost.
 - Misses: no mid-tier (Sonnet, Haiku, GPT-4o, 4.1-mini), no Gemini, biweekly granularity on frontier.
 

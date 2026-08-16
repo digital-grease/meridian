@@ -14,10 +14,29 @@ Run via::
     uv run python -m meridian.pipeline.cli estimate
     uv run python -m meridian.pipeline.cli build-manifest --week 2026-W16
 
+Cost ceiling
+------------
+``run --max-cost USD`` is a hard limit that ``--yes`` does not waive.
+``--yes`` exists so ``scripts/run-weekly.sh`` can run unattended, which
+also means nobody is watching the estimate it prints. The ceiling is
+enforced twice: once before sampling against the pre-flight estimate,
+and again during the run against money actually spent, because the
+estimate is the part that has historically been wrong (it ignored
+``max_tokens`` entirely until 2026-08). Either stop exits 2 with the
+run-log entry and every captured sample intact.
+
+The two gates read the same ``--max-cost`` number but not the same
+quantity: the pre-flight one compares against an estimate that is
+deliberately conservative (see :mod:`meridian.sampling.pricing`), while
+the in-run one compares against money actually billed. The pre-flight
+gate is therefore the tighter of the two. A third condition also stops
+the run outright: a ceiling given while an enabled runner has no price
+on file, since neither gate can see that runner's spend.
+
 Exit codes:
   0  success / everything completed cleanly
   1  partial failure (some pairs failed; manifest still written)
-  2  fatal error (config, auth, storage)
+  2  fatal error (config, auth, storage), or a --max-cost ceiling stop
 """
 from __future__ import annotations
 
@@ -45,9 +64,9 @@ from meridian.pipeline.run_log import append_run_log, read_run_log
 from meridian.pipeline.snapshot import emit_responses_snapshot, snapshot_path
 from meridian.pipeline.stance_collect import collect_stance_results
 from meridian.pipeline.stance_runner import build_stance_classifier
-from meridian.sampling.cost import compute_actual_cost
+from meridian.sampling.cost import BudgetLedger, compute_actual_cost, guard_runners
 from meridian.sampling.orchestrator import Orchestrator, SamplingPlan
-from meridian.sampling.pricing import estimate_cost
+from meridian.sampling.pricing import TemperaturePlan, estimate_cost
 from meridian.sampling.weeks import iso_week_for
 from meridian.storage import LocalSampleStore
 from meridian.storage.s3 import maybe_build_uploader
@@ -81,6 +100,23 @@ def _output_paths(week_id: str) -> list[Path]:
 
 def _internal_manifest_path(week_id: str) -> Path:
     return REPO_ROOT / "data" / "internal" / f"manifest-with-heldout-{week_id}.json"
+
+
+def _temperature_plan(spec) -> TemperaturePlan:
+    """Lift the four temperature/batch-size fields the estimator needs.
+
+    Accepts either a :class:`~meridian.sampling.orchestrator.SamplingPlan`
+    or a :class:`~meridian.config.SamplingSpec`; they spell these fields
+    the same way. Without it the estimate prices the zero-temp batch for
+    models that reject temperature=0 and the orchestrator never sends,
+    which on the current roster is a 25% over-count.
+    """
+    return TemperaturePlan(
+        n_default_temp=spec.n_default_temp,
+        default_temperature=spec.default_temperature,
+        n_zero_temp=spec.n_zero_temp,
+        zero_temperature=spec.zero_temperature,
+    )
 
 
 def _build_context(
@@ -121,14 +157,75 @@ async def _cmd_run(args: argparse.Namespace) -> int:
         concurrency_per_provider=config.sampling.concurrency_per_provider,
     )
 
+    # Priced on corpus.all(), not corpus.public(): the orchestrator
+    # samples every prompt including the held-out set, and the estimate
+    # has to price the work that will actually be done. Those are the
+    # same 30 prompts today, but the moment CLAUDE.md's 30% held-out
+    # split lands, pricing the public subset would under-count the run
+    # by the held-out fraction and let a --max-cost ceiling pass a run
+    # it should have blocked, which is the direction that costs money.
     est = estimate_cost(
-        runners, n_prompts=len(corpus.public()), samples_per_pair=plan.samples_per_pair
+        runners,
+        n_prompts=len(corpus.all()),
+        samples_per_pair=plan.samples_per_pair,
+        default_max_tokens=plan.max_tokens,
+        temperature_plan=_temperature_plan(plan),
     )
     print(est.pretty())
+
+    # Read defensively: callers that build the Namespace by hand (the
+    # run-log integration tests do) predate this flag, and a missing
+    # attribute must mean "no ceiling", never a crash mid-pipeline.
+    max_cost = getattr(args, "max_cost", None)
+
+    # A ceiling that cannot see one of the runners is not a ceiling. An
+    # unpriced model books $0.00 in the estimate and charges $0.00 in
+    # the in-run ledger, so BOTH gates go quiet for it while it bills
+    # real money. Refuse rather than warn: --yes means nobody is reading
+    # the warning, and the fix is one line in pricing.PRICING.
+    if max_cost is not None and est.unpriced:
+        print(
+            "ABORT: --max-cost was given but "
+            + ", ".join(est.unpriced)
+            + " has no entry in meridian.sampling.pricing.PRICING. A ceiling "
+            "cannot bound spend it cannot compute, so neither the pre-flight "
+            "estimate nor the in-run ledger would see this runner at all. "
+            "Add its published input/output rate to PRICING (dated, as the "
+            "others are), or drop --max-cost to run explicitly unbounded. "
+            "Nothing was sampled and nothing was written.",
+            file=sys.stderr,
+        )
+        return 2
+
+    # Pre-flight ceiling. Checked BEFORE the --dry-run return so that
+    # `run --dry-run --max-cost N` is a usable pre-flight validator, and
+    # before the --yes branch because --yes must not waive it: an
+    # unattended run is exactly the one nobody is watching.
+    if max_cost is not None and est.total > max_cost:
+        print(
+            f"ABORT: estimated ${est.total:.2f} exceeds the --max-cost "
+            f"ceiling of ${max_cost:.2f}. Nothing was sampled and nothing "
+            f"was written. Raise --max-cost if this is expected, or lower "
+            f"a runner's max_tokens in config.yaml if it is not.",
+            file=sys.stderr,
+        )
+        for k, note in sorted(est.assumptions.items()):
+            print(f"  {k}: ${est.by_runner.get(k, 0.0):.2f}  [{note}]", file=sys.stderr)
+        return 2
+
     if args.dry_run:
         return 0
     if not args.yes and est.total > 0.0:
         print("(use --yes to proceed without confirmation)")
+
+    # In-run ceiling. The pre-flight estimate is a heuristic and was
+    # blind to max_tokens until 2026-08, so the same number is enforced
+    # a second time against money actually spent. Wrapping is skipped
+    # entirely when no ceiling was given, leaving the unguarded path
+    # byte-for-byte what it was.
+    ledger: BudgetLedger | None = None
+    if max_cost is not None:
+        runners, ledger = guard_runners(runners, ceiling_usd=max_cost)
 
     started_at = datetime.now(timezone.utc)
     orch = Orchestrator(runners, store, corpus, plan)
@@ -145,10 +242,29 @@ async def _cmd_run(args: argparse.Namespace) -> int:
         print(f"  [{err.error_type}] {err.provider}/{err.model_id}/{err.prompt_id}: {err.message}",
               file=sys.stderr)
 
+    run_note: str | None = None
+    if ledger is not None:
+        print(ledger.pretty())
+        if ledger.tripped:
+            run_note = (
+                f"--max-cost ceiling of ${ledger.ceiling_usd:.2f} reached after "
+                f"${ledger.tripped_at_usd:.2f}; remaining pairs were refused "
+                f"without calling any provider"
+            )
+            print(
+                f"BUDGET CEILING HIT: stopped issuing requests after "
+                f"${ledger.tripped_at_usd:.2f} of a ${ledger.ceiling_usd:.2f} "
+                f"ceiling. {outcome.pairs_failed} pair(s) were refused. Every "
+                f"sample captured before the stop is stored and is written to "
+                f"the manifest as usual.",
+                file=sys.stderr,
+            )
+
     # Record this run in the append-only log BEFORE manifest writes and
     # S3 archival. The log's purpose is operational truth about what the
     # orchestrator did; downstream artifacts are a separate concern and
-    # should not gate the audit trail.
+    # should not gate the audit trail. A budget stop is doubly a reason
+    # to write it first: the entry is the receipt for the money spent.
     _append_run_log_entry(
         config=config,
         store=store,
@@ -157,6 +273,7 @@ async def _cmd_run(args: argparse.Namespace) -> int:
         finished_at=finished_at,
         outcome=outcome,
         estimated_cost_usd=est.total,
+        note=run_note,
     )
 
     display_info = _display_info_for(config)
@@ -198,6 +315,12 @@ async def _cmd_run(args: argparse.Namespace) -> int:
         responses_path=responses_gz,
     )
 
+    # A budget stop reports as 2 rather than 1: it is a hard limit the
+    # operator set, not the flaky-pair partial failure that 1 means, and
+    # run-weekly.sh forwards the code straight into the SNS subject.
+    # Every artifact above was still written first.
+    if ledger is not None and ledger.tripped:
+        return 2
     return 1 if outcome.pairs_failed > 0 else 0
 
 
@@ -254,13 +377,15 @@ def _append_run_log_entry(
     finished_at: datetime,
     outcome,
     estimated_cost_usd: float,
+    note: str | None = None,
 ) -> None:
     """Write one RunLogEntry to data/run_log.jsonl for this invocation.
 
     Actual cost is summed across every sample stored under ``week_id``
     — including pairs from prior runs in the same week if resume was
     used — matching the runbook's "cost spent on this week's data"
-    interpretation.
+    interpretation. That is deliberately a different number from the
+    ``--max-cost`` ledger, which counts only what this process spent.
     """
     all_samples = []
     for model_id in store.models_for_week(week_id):
@@ -278,6 +403,7 @@ def _append_run_log_entry(
         outcome=outcome,
         estimated_cost_usd=estimated_cost_usd,
         actual_cost_usd=cost_report.total_usd,
+        note=note,
     )
     print(
         f"run log: estimated ${estimated_cost_usd:.2f} / "
@@ -323,19 +449,49 @@ def _maybe_archive_to_s3(
 class _RunnerSpecShim:
     """Duck-typed stand-in for a Runner that the cost estimator can price.
 
-    The estimator only reads ``provider`` and ``model_id``. Using shims
-    avoids constructing real SDK clients (and needing API keys) for what
-    is purely an arithmetic operation over the pricing table.
+    The estimator reads ``provider``, ``model_id``, and the completion
+    cap. Using shims avoids constructing real SDK clients (and needing
+    API keys) for what is purely an arithmetic operation over the
+    pricing table.
+
+    ``max_tokens_override`` is spelled the way :class:`Runner` spells it,
+    not the way :class:`~meridian.config.RunnerSpec` does, so the
+    estimator sees one contract whichever kind of object it is handed.
     """
-    def __init__(self, provider: str, model_id: str) -> None:
+    def __init__(
+        self, provider: str, model_id: str, max_tokens: int | None = None
+    ) -> None:
         self.provider = provider
         self.model_id = model_id
+        self.max_tokens_override = max_tokens
+
+    def supports_temperature(self, temperature: float) -> bool:
+        """Same answer the real runner would give, without building one.
+
+        The estimator drops a batch the orchestrator will skip, so a shim
+        that answered "yes" to everything would price 25% more calls than
+        the roster actually makes. The per-provider rules are the runner
+        modules' to own, so this delegates to their pure helpers rather
+        than keeping a third copy of the prefix lists. Imported inside
+        the method because those modules pull in provider SDKs, and the
+        estimate subcommand is meant to be pure arithmetic; the import
+        is cheap and the SDKs are hard dependencies anyway.
+        """
+        from meridian.runners.anthropic import _anthropic_supports_temperature
+        from meridian.runners.openai import _openai_supports_temperature
+
+        provider = self.provider.lower()
+        if provider == "anthropic":
+            return _anthropic_supports_temperature(self.model_id, temperature)
+        if provider == "openai":
+            return _openai_supports_temperature(self.model_id, temperature)
+        return True
 
 
 def _enabled_specs_for_week(config: PipelineConfig, week_id: str) -> list[_RunnerSpecShim]:
     from meridian.config import should_run_in_week
     return [
-        _RunnerSpecShim(s.provider, s.model_id)
+        _RunnerSpecShim(s.provider, s.model_id, s.max_tokens)
         for s in config.runners
         if s.enabled and should_run_in_week(s.cadence, week_id)
     ]
@@ -348,14 +504,26 @@ def _cmd_estimate(args: argparse.Namespace) -> int:
         return 2
     corpus = load_corpus()
     plan_samples = config.sampling.n_default_temp + config.sampling.n_zero_temp
+    # Public-only on purpose, unlike `run`, which prices corpus.all().
+    # This subcommand is the source of the published tables in
+    # meridian/BUDGET.md and of the public per-tier figures on /funding/,
+    # and those quote the cost of the corpus that is visible in the repo.
+    # It gates nothing, so under-counting here costs credibility rather
+    # than money. Say so in BUDGET.md if the two numbers ever diverge.
     n_prompts = len(corpus.public())
+    temperature_plan = _temperature_plan(config.sampling)
 
     this_week = _resolve_week(args.week)
     week_specs = _enabled_specs_for_week(config, this_week)
-    week_est = estimate_cost(week_specs, n_prompts=n_prompts, samples_per_pair=plan_samples)
+    week_est = estimate_cost(
+        week_specs, n_prompts=n_prompts, samples_per_pair=plan_samples,
+        default_max_tokens=config.sampling.max_tokens,
+        temperature_plan=temperature_plan,
+    )
     print(f"This week ({this_week}):")
     for k, v in sorted(week_est.by_runner.items()):
-        print(f"  {k}: ${v:.2f}")
+        note = week_est.assumptions.get(k)
+        print(f"  {k}: ${v:.2f}" + (f"  [{note}]" if note else ""))
     print(f"  total: ${week_est.total:.2f}\n")
 
     # Four-week rolling average picks up alternation correctly.
@@ -367,7 +535,11 @@ def _cmd_estimate(args: argparse.Namespace) -> int:
     for i in range(4):
         wk = iso_week_for(today + timedelta(weeks=i))
         wk_specs = _enabled_specs_for_week(config, wk)
-        wk_est = estimate_cost(wk_specs, n_prompts=n_prompts, samples_per_pair=plan_samples)
+        wk_est = estimate_cost(
+            wk_specs, n_prompts=n_prompts, samples_per_pair=plan_samples,
+            default_max_tokens=config.sampling.max_tokens,
+            temperature_plan=temperature_plan,
+        )
         rolling_total += wk_est.total
     weekly_avg = rolling_total / 4
     monthly_avg = weekly_avg * 52 / 12
@@ -731,6 +903,18 @@ def main(argv: list[str] | None = None) -> int:
                        help="Skip cost confirmation (use in CI)")
     p_run.add_argument("--dry-run", action="store_true",
                        help="Print estimate only; do not sample")
+    p_run.add_argument("--max-cost", type=float, default=None, metavar="USD",
+                       help="Hard spend ceiling for this run, in dollars. "
+                            "Aborts before sampling if the pre-flight "
+                            "estimate exceeds it, and stops issuing "
+                            "requests mid-run if actual spend reaches it. "
+                            "NOT waived by --yes. Exits 2 either way. Also "
+                            "refuses to start if any enabled runner has no "
+                            "price on file, because a ceiling cannot bound "
+                            "spend it cannot compute. The pre-flight number "
+                            "is a deliberately conservative estimate and "
+                            "runs above observed actuals, so this is not a "
+                            "prediction of real spend.")
 
     p_est = sub.add_parser("estimate", help="Show pre-flight cost estimate")
     p_est.add_argument("--week", default=None,

@@ -46,16 +46,35 @@ on:
 permissions:
   contents: write   # commit manifest+snapshot+run_log
   id-token: write   # for AWS OIDC role assumption
-  issues: write     # to open a failure issue if S3 sync fails
+  issues: write     # to open a failure issue from the alert job
 
 concurrency:
   group: pipeline-publish
   cancel-in-progress: false
 
 jobs:
+  # Three jobs, deliberately. `publish` decides whether the week's raw
+  # artifacts reached main; `health` decides whether the week's *contents*
+  # are clean; `alert` pages a human when either went wrong.
+  #
+  # They were one job until 2026-08-15, and the coupling cost a
+  # publication. 2026-W32 sampled 60/60 pairs and committed cleanly as
+  # 6d74411, then check_run_health.py exited 1 on a data-quality
+  # observation, which turned the whole workflow red, which made
+  # weekly-build.yml's `workflow_run.conclusion == 'success'` gate skip the
+  # site deploy. meridianaudit.org served 2026-W29 for three weeks. A
+  # finding about what a model said must not be able to stop the site from
+  # saying it.
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      week: ${{ steps.week.outputs.week }}
+      # True once the S3 sync AND the commit step have both succeeded,
+      # i.e. this week's artifacts are on main and are safe to render.
+      # This is the signal the site build follows, not the workflow's
+      # overall conclusion.
+      artifacts_committed: ${{ steps.commit.outputs.artifacts_committed }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -114,6 +133,7 @@ jobs:
             echo "(no run_log in S3 yet; keeping repo copy)"
 
       - name: Commit fresh artifacts
+        id: commit
         if: success()
         env:
           WEEK: ${{ steps.week.outputs.week }}
@@ -128,49 +148,145 @@ jobs:
             "site/fixtures/manifest-${WEEK}.json" || true
           if git diff --cached --quiet; then
             echo "no artifact changes to commit (S3 may not have updated yet)"
-          else
+          fi
+          if ! git diff --cached --quiet; then
             git commit -m "chore(pipeline): publish ${WEEK} from S3"
             git push
           fi
+          # Reaching this line means the manifest download succeeded (the
+          # sync step aborts on a 404) and the working tree matches S3,
+          # whether or not that produced a new commit. An empty diff is the
+          # re-run case: the identical artifacts are already on main, so
+          # the week is just as publishable as a fresh commit and the site
+          # build should still be allowed to proceed.
+          echo "artifacts_committed=true" >> "$GITHUB_OUTPUT"
 
-      # Fail the job loudly if the run itself recorded failures, even
-      # though the artifacts published cleanly. Runs AFTER the commit so
-      # the raw record is preserved (append-only retention is a hard
-      # rule); a non-zero exit here still fires the issue step below.
-      - name: Verify run health
-        if: success()
-        env:
-          WEEK: ${{ steps.week.outputs.week }}
-        run: python3 scripts/check_run_health.py "${WEEK}"
+  # Data-quality verdict on a week whose artifacts are already on main.
+  #
+  # Separate job on purpose. It must be able to go red, fire the SNS alert
+  # and open the issue, and still leave the site deploy alone: the raw
+  # record is preserved either way (append-only retention is a hard rule)
+  # and a week that committed cleanly is a week the public dashboard
+  # should be showing, findings and all. Note that an Anthropic refusal
+  # arriving as `stop_reason=refusal` with empty text, which is what
+  # 2026-W32 tripped over, is a measurement, not a defect.
+  health:
+    needs: publish
+    if: needs.publish.outputs.artifacts_committed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      health_detail: ${{ steps.check.outputs.health_detail }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # main, not the workflow's checkout sha: the publish job pushed
+          # the run_log this check reads a few seconds ago.
+          ref: main
+          fetch-depth: 1
 
-      # Route the failure to the operator's actual inbox. Filing a
-      # GitHub issue (below) is the durable record, but nothing pushed it
-      # to a human: it lands unassigned in the same notification stream
-      # as Renovate PRs. That is precisely how 2026-W30 and 2026-W31 went
-      # unnoticed for two weeks — detection fired on schedule both weeks
-      # and opened issues #24 and #26; nobody read them.
+      # check_run_health.py exports its finding as the `health_detail`
+      # step output as well as $HEALTH_DETAIL. The step output is what
+      # crosses into the alert job below, since a job's environment does
+      # not. Actions applies the output file after the step finishes
+      # whether it passed or failed, so a red check still names itself.
       #
-      # Publishing to the same SNS topic the orchestrator uses puts
-      # every pipeline failure, whichever side it happened on, in one
-      # place. Best-effort: `|| true` so a missing permission or unset
-      # var can never mask the real failure or block the issue step.
+      # Exit codes are 0 clean / 3 warning / 1 finding. 3 is mapped back to
+      # a green step here: a tolerated loss, a handful of dead samples or a
+      # cadence gap that is already history, is reported through the
+      # annotation, the step summary and health_detail, and must not turn
+      # this job red. A red health job fires the alert below, and it is
+      # what kept 2026-W32 off meridianaudit.org for three weeks. The
+      # warning still has its own code because scripts/run-weekly.sh, which
+      # runs the same judge on the EC2 box, needs to tell it from clean.
+      - name: Verify run health
+        id: check
+        env:
+          WEEK: ${{ needs.publish.outputs.week }}
+        run: |
+          set +e
+          python3 scripts/check_run_health.py "${WEEK}"
+          rc=$?
+          set -e
+          if [ "$rc" -eq 3 ]; then
+            echo "health check reported warnings (exit 3); not failing the job."
+            exit 0
+          fi
+          exit "$rc"
+
+  # One place where a human gets told, whichever half broke.
+  #
+  # Filing a GitHub issue is the durable record, but nothing pushed it to
+  # a person: it lands unassigned in the same notification stream as
+  # Renovate PRs. That is precisely how 2026-W30 and 2026-W31 went
+  # unnoticed for two weeks. Detection fired on schedule both weeks and
+  # opened issues #24 and #26; nobody read them. Publishing to the same
+  # SNS topic the orchestrator uses puts every pipeline failure, whichever
+  # side it happened on, in one inbox.
+  alert:
+    needs: [publish, health]
+    if: always() && (needs.publish.result == 'failure' || needs.health.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Only the SNS step needs these. `if: always()` on both steps below
+      # is what makes that true rather than merely intended: without it,
+      # steps default to `if: success()`, so an expired or retrimmed trust
+      # policy, a wrong region, or an STS blip here would skip *both*
+      # notification paths and a failed weekly run would page nobody. That
+      # is the 2026-W30/W31 silence this whole job exists to end, and it
+      # would have been a regression on the previous file, where the two
+      # steps lived in the publish job under `if: failure()` and therefore
+      # ran no matter what the credentials step did.
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: us-east-2
+
+      # Best-effort: `|| true` on the publish so a missing permission or
+      # unset variable cannot mask the real failure. Note what that guard
+      # does *not* cover, which is why this step carries `if: always()`:
+      # it only catches a non-zero `aws sns publish`, not a failure of the
+      # credentials step in front of it.
+      #
+      # The body used to be static, and always said "the weekly publish
+      # job failed" and pointed at the orchestrator Lambda logs for an S3
+      # 404. On 2026-08-10 that was wrong on every count: the publish had
+      # succeeded, the commit landed one second earlier, and the actual
+      # finding was already sitting in HEALTH_DETAIL, unused.
+      #
+      # Route on which JOB failed, not on whether HEALTH_DETAIL is set.
+      # Those are different questions: the health job can fail for an
+      # infrastructure reason (a checkout failure, a malformed run_log
+      # line, any traceback) and never write health_detail at all, and
+      # branching on the detail sends the operator the "nothing was
+      # committed, check the Lambda for an S3 404" runbook for a week that
+      # published perfectly. HEALTH_DETAIL fills in the finding text; the
+      # job results decide which alert this is.
       - name: Alert operator via SNS
-        if: failure()
+        if: always()
         env:
           TOPIC_ARN: ${{ vars.ALERT_TOPIC_ARN }}
-          WEEK: ${{ steps.week.outputs.week }}
+          WEEK: ${{ needs.publish.outputs.week }}
+          HEALTH_DETAIL: ${{ needs.health.outputs.health_detail }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+          HEALTH_RESULT: ${{ needs.health.result }}
         run: |
           set -uo pipefail
+          WEEK="${WEEK:-unknown week}"
           if [ -z "${TOPIC_ARN:-}" ]; then
             echo "::warning::ALERT_TOPIC_ARN repo variable is unset; skipping SNS alert."
             exit 0
           fi
           RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          aws sns publish \
-            --region us-east-2 \
-            --topic-arn "$TOPIC_ARN" \
-            --subject "[meridian] weekly publish failed (${WEEK})" \
-            --message "The weekly publish job failed for ${WEEK}.
+          FINDING="${HEALTH_DETAIL:-}"
+          if [ -z "$FINDING" ]; then
+            FINDING="the health job failed without reporting a finding; see the job log."
+          fi
+          if [ "${PUBLISH_RESULT}" = "failure" ]; then
+            SUBJECT="[meridian] weekly publish failed (${WEEK})"
+            MESSAGE="The weekly publish job failed for ${WEEK}, so nothing was committed.
 
           Sampling runs on the EC2 cohabit instance; this job only pulls from S3
           and commits. A 404 on the manifest means the run never produced one --
@@ -179,37 +295,105 @@ jobs:
             aws logs tail /aws/lambda/meridian-orchestrator --since 12h --region us-east-2
 
           Recovery procedure: scripts/ec2-runbook.md
-          Run: ${RUN_URL}" \
+          Run: ${RUN_URL}"
+          elif [ "${HEALTH_RESULT}" = "failure" ]; then
+            SUBJECT="[meridian] weekly run had failures (${WEEK})"
+            MESSAGE="The weekly run for ${WEEK} published its artifacts and then failed its
+          health check:
+
+            ${FINDING}
+
+          The manifest, snapshot and run_log for ${WEEK} are committed to main
+          (append-only retention), and the site deploy is NOT blocked by this, so
+          the dashboard is already serving the week. What needs a decision is the
+          data: inspect the run_log entry, fix the cause, and decide per the
+          no-backfill policy whether to re-run or document the gap.
+
+          Run: ${RUN_URL}"
+          else
+            SUBJECT="[meridian] weekly pipeline alerted (${WEEK})"
+            MESSAGE="The weekly pipeline's alert job fired for ${WEEK} but neither half
+          reports a plain failure, so the reason is not one this alert knows how to
+          summarise. Read the run.
+
+          publish: ${PUBLISH_RESULT}
+          health: ${HEALTH_RESULT}
+          finding: ${HEALTH_DETAIL:-(none reported)}
+
+          Run: ${RUN_URL}"
+          fi
+          aws sns publish \
+            --region us-east-2 \
+            --topic-arn "$TOPIC_ARN" \
+            --subject "$SUBJECT" \
+            --message "$MESSAGE" \
             || echo "::warning::SNS publish failed; the GitHub issue is still the record."
 
+      # Needs no AWS credentials at all, so `if: always()` also keeps it
+      # off the credentials step's success. This is the durable record and
+      # it must survive every way the SNS path can break.
       - name: Open issue on failure
-        if: failure()
+        if: always()
         uses: actions/github-script@v9
+        env:
+          WEEK: ${{ needs.publish.outputs.week }}
+          HEALTH_DETAIL: ${{ needs.health.outputs.health_detail }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+          HEALTH_RESULT: ${{ needs.health.result }}
         with:
           script: |
             const iso = new Date().toISOString().slice(0, 10);
             const run_url = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const health = process.env.HEALTH_DETAIL;
-            const body = health
-              ? [
-                  `The weekly run published its artifacts but recorded failures:`,
-                  ``,
-                  `    ${health}`,
-                  ``,
-                  `The raw manifest/snapshot/run_log for ${{ steps.week.outputs.week }} were`,
-                  `committed (append-only retention), but the run is not clean. Inspect the`,
-                  `run_log entry and the orchestrator Lambda CloudWatch logs, fix the cause,`,
-                  `and decide per the no-backfill policy whether to re-run or document the gap.`,
-                  ``,
-                  `Run: ${run_url}`,
-                ].join("\n")
-              : [
-                  `The weekly publish step failed. Sampling lives on the EC2 cohabit instance now;`,
-                  `if the artifact wasn't in S3, check the orchestrator Lambda CloudWatch logs.`,
-                  ``,
-                  `Run: ${run_url}`,
-                  `Re-run via the \`workflow_dispatch\` button on this workflow.`,
-                ].join("\n");
+            const week = process.env.WEEK || "the target week";
+            const publishFailed = process.env.PUBLISH_RESULT === "failure";
+            const healthFailed = process.env.HEALTH_RESULT === "failure";
+            // Same discriminator as the SNS step: which job failed, not
+            // whether a finding happens to be present. A health job that
+            // died before writing its output still failed the health job.
+            const finding =
+              (process.env.HEALTH_DETAIL || "").trim() ||
+              "the health job failed without reporting a finding; see the job log.";
+            let title, body;
+            if (publishFailed) {
+              title = `Pipeline publish failed: ${iso}`;
+              body = [
+                `The weekly publish step failed for ${week}, so no artifacts were committed`,
+                `and the site still shows the previous week. Sampling lives on the EC2`,
+                `cohabit instance now; if the artifact wasn't in S3, check the orchestrator`,
+                `Lambda CloudWatch logs.`,
+                ``,
+                `Run: ${run_url}`,
+                `Re-run via the \`workflow_dispatch\` button on this workflow.`,
+              ].join("\n");
+            } else if (healthFailed) {
+              title = `Pipeline run had failures: ${iso}`;
+              body = [
+                `The weekly run published its artifacts but recorded failures:`,
+                ``,
+                `    ${finding}`,
+                ``,
+                `The raw manifest/snapshot/run_log for ${week} were committed`,
+                `(append-only retention) and the site deploy went ahead, so this is a`,
+                `finding about the data rather than a publication outage. Inspect the`,
+                `run_log entry and the orchestrator Lambda CloudWatch logs, fix the cause,`,
+                `and decide per the no-backfill policy whether to re-run or document the gap.`,
+                ``,
+                `Run: ${run_url}`,
+              ].join("\n");
+            } else {
+              title = `Pipeline alerted: ${iso}`;
+              body = [
+                `The weekly pipeline's alert job fired for ${week} but neither half reports`,
+                `a plain failure, so the reason is not one this alert knows how to`,
+                `summarise. Read the run.`,
+                ``,
+                `    publish: ${process.env.PUBLISH_RESULT}`,
+                `    health:  ${process.env.HEALTH_RESULT}`,
+                `    finding: ${(process.env.HEALTH_DETAIL || "").trim() || "(none reported)"}`,
+                ``,
+                `Run: ${run_url}`,
+              ].join("\n");
+            }
             // Assign the repo owner so the issue generates a direct
             // notification rather than sitting in the watch feed. Belt
             // and braces alongside the SNS alert above: if the SNS path
@@ -217,7 +401,7 @@ jobs:
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `Pipeline ${health ? "run had failures" : "publish failed"}: ${iso}`,
+              title,
               body,
               labels: ["pipeline", "automated", "bug"],
               assignees: [context.repo.owner],

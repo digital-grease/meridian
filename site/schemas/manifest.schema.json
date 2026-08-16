@@ -62,6 +62,18 @@
           "title": "Adjusted P Value",
           "type": "number"
         },
+        "compared_to_week": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Compared To Week"
+        },
         "p_value": {
           "maximum": 1.0,
           "minimum": 0.0,
@@ -71,6 +83,19 @@
         "significant_after_bh": {
           "title": "Significant After Bh",
           "type": "boolean"
+        },
+        "weeks_elapsed": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Weeks Elapsed"
         }
       },
       "required": [
