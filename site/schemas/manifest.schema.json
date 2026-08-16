@@ -137,11 +137,20 @@
     },
     "LengthStats": {
       "additionalProperties": false,
+      "description": "Response-length distribution over the samples that carried text.\n\nThe three quantiles are nullable, and null is the only honest value\nwhen ``n == 0``. That case arrived with the 2026-W32 Anthropic\nchange: a cell can be fully sampled and fully measured (20 usable\nsamples, refusal rate 1.00) while carrying no text at all, because\nevery refusal came back in ``stop_reason`` with an empty body. The\nlength summary of an empty list used to be ``0.0`` for all three\nquantiles, which reads as \"the model answered with zero words\" and\nis the fabricated-zero failure ``meridian.analysis.usability``\nexists to prevent. Only ``n`` was ever pinned at 0, and nothing\ndownstream looked at it, so the zeros flowed into the CSV export and\ninto the averaged axis figures on the home-page heatmap.\n\nNullable rather than absent so that ``n`` still states how many\nresponses the distribution was computed from, and defaulted so every\nmanifest published before 2026-08 stays valid.",
       "properties": {
         "median": {
-          "minimum": 0.0,
-          "title": "Median",
-          "type": "number"
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Median"
         },
         "n": {
           "minimum": 0,
@@ -149,20 +158,33 @@
           "type": "integer"
         },
         "p25": {
-          "minimum": 0.0,
-          "title": "P25",
-          "type": "number"
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "P25"
         },
         "p75": {
-          "minimum": 0.0,
-          "title": "P75",
-          "type": "number"
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "P75"
         }
       },
       "required": [
-        "median",
-        "p25",
-        "p75",
         "n"
       ],
       "title": "LengthStats",
@@ -205,9 +227,17 @@
           "type": "boolean"
         },
         "hedge_density": {
-          "minimum": 0.0,
-          "title": "Hedge Density",
-          "type": "number"
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hedge Density"
         },
         "hedge_drift": {
           "anyOf": [
@@ -305,7 +335,6 @@
         "n_samples",
         "refusal_rate",
         "refusal_ci",
-        "hedge_density",
         "length"
       ],
       "title": "MetricRecord",

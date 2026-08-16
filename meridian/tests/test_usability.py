@@ -396,7 +396,10 @@ def test_api_refusal_cell_publishes_a_full_refusal_rate(tmp_path: Path):
         # No text was returned, so no text was measured. n=0 states that
         # honestly; n=20 with median 0 would claim 20 zero-word answers.
         assert rec["length"]["n"] == 0, _CONTRACT_HINT
-        assert rec["hedge_density"] == 0.0, _CONTRACT_HINT
+        # Null, not 0.0. hedge_density("") returns 0.0 as a
+        # divide-by-zero sentinel, and publishing it asserts "hedged in
+        # none of its answers" about a cell that produced no answers.
+        assert rec["hedge_density"] is None, _CONTRACT_HINT
 
 
 def test_mixed_prose_and_api_refusals_share_one_denominator(tmp_path: Path):

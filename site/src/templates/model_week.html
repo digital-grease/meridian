@@ -40,8 +40,25 @@
         <td><a href="/axes/{{ p.axis }}/">{{ p.axis | replace('-', ' ') }}</a></td>
         <td><code>{{ "%.2f" % m.refusal_rate }}</code></td>
         <td class="muted"><code>[{{ "%.2f" % m.refusal_ci.lower }}, {{ "%.2f" % m.refusal_ci.upper }}]</code></td>
-        <td><code>{{ "%.2f" % m.hedge_density }}</code></td>
-        <td><code>{{ "%.0f" % m.length.median }}</code></td>
+        {#- A record can be measured and still carry no text: a provider
+            refusal arrives as stop_reason='refusal' with an empty body,
+            so refusal_rate is real while every text-derived metric is
+            genuinely absent. Those render as "no text", never as 0,
+            which would assert the model answered with zero words. -#}
+        <td>
+          {%- if m.hedge_density is none -%}
+            <span class="visually-hidden">no response text to measure</span><span aria-hidden="true">&mdash;</span>
+          {%- else -%}
+            <code>{{ "%.2f" % m.hedge_density }}</code>
+          {%- endif -%}
+        </td>
+        <td>
+          {%- if m.length.median is none -%}
+            <span class="visually-hidden">no response text to measure</span><span aria-hidden="true">&mdash;</span>
+          {%- else -%}
+            <code>{{ "%.0f" % m.length.median }}</code>
+          {%- endif -%}
+        </td>
       </tr>
       {% endfor %}
     </tbody>

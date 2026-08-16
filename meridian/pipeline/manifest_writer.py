@@ -132,7 +132,12 @@ def _metric_record_dict(
     measurable = usability.text_bearing(samples)
     lengths = summarize_lengths([s.text for s in measurable])
     combined_text = "\n\n".join(s.text for s in measurable)
-    hedge = hedge_density(combined_text)
+    # None, not 0.0, when there was no text. hedge_density("") returns
+    # 0.0 as a divide-by-zero sentinel, and publishing that asserts "this
+    # model hedged in none of its answers" about a cell that produced no
+    # answers. Same fabricated-zero failure the null length quantiles
+    # below exist to prevent; hedge was missed when they were fixed.
+    hedge = hedge_density(combined_text) if measurable else None
 
     reasons: list[str] = []
     if len(samples) < insufficient_data_n:
@@ -171,7 +176,7 @@ def _metric_record_dict(
             "lower": round(max(0.0, ci.lower), 3),
             "upper": round(min(1.0, ci.upper), 3),
         },
-        "hedge_density": round(hedge, 2),
+        "hedge_density": round(hedge, 2) if hedge is not None else None,
         # Null quantiles when nothing was measurable. summarize_lengths([])
         # returns 0.0 for median/p25/p75, and a published 0.0 reads as
         # "the model answered with zero words". For an all-api-refusal
@@ -407,8 +412,15 @@ def _flag_largest_deltas(
         if prior is None:
             continue
         for metric, scale in _REVIEW_SCALES.items():
-            delta = abs(rec.get(metric, 0.0) - prior.get(metric, 0.0))
-            scored.append((delta / scale, metric, rec))
+            cur_v = rec.get(metric)
+            prior_v = prior.get(metric)
+            # A null on either end means that week had no text to
+            # measure, not a measured zero. Same reasoning as the length
+            # branch below, and skipping is what keeps a non-measurement
+            # out of the human review worklist.
+            if cur_v is None or prior_v is None:
+                continue
+            scored.append((abs(cur_v - prior_v) / scale, metric, rec))
         # A null median means the week had no text to measure, not a
         # length of zero. Comparing it as 0.0 would rank an
         # all-api-refusal cell as the largest length collapse of the

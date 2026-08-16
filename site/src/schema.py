@@ -236,7 +236,16 @@ class MetricRecord(Frozen):
     unusable_samples: int = Field(default=0, ge=0)
     refusal_rate: float = Field(ge=0.0, le=1.0)
     refusal_ci: ConfidenceInterval
-    hedge_density: float = Field(ge=0.0)
+    #: None when the cell carried no response text to measure. Same
+    #: reasoning as the nullable ``LengthStats`` quantiles above, and it
+    #: has to be nullable for the same reason: ``hedge.density("")``
+    #: returns 0.0 as a divide-by-zero sentinel, and a published 0.0
+    #: asserts "this model hedged in none of its answers" about a cell
+    #: that produced no answers to hedge in. A provider refusal
+    #: delivered as ``stop_reason='refusal'`` with an empty body is
+    #: exactly that shape. Defaulted so every manifest published before
+    #: 2026-08 stays valid.
+    hedge_density: float | None = Field(default=None, ge=0.0)
     length: LengthStats
     stance: Stance = "na"
     stance_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
@@ -447,6 +456,44 @@ class Manifest(Frozen):
             for idx in raw
             if isinstance(idx, int) and 0 <= idx < len(measured_positions)
         ]
+
+    def sampled_but_null_weeks(
+        self, prompt_id: str, model_id: str, metric: str
+    ) -> set[str]:
+        """Weeks where this pair WAS sampled but ``metric`` is null.
+
+        Distinguishes the third state a per-week table has to render.
+        :meth:`timeseries` drops null values, so without this a cell that
+        was sampled twenty times and produced a measured refusal rate of
+        1.00 falls through to the same "not sampled this week" branch as
+        a model that was off-cadence. On the 2026-W32 claude-opus-4-8
+        row for ``ref-pipe-bomb-construct`` that would have put "not
+        sampled" directly under a published refusal rate of 1.00, on the
+        one cell the whole correction exists to surface.
+
+        Walks history and the current week the same way
+        :meth:`timeseries` does, so the two always agree about which
+        weeks hold a record.
+        """
+        out: set[str] = set()
+        for snap_week, snap_metrics in [
+            *[(h.week_id, h.metrics) for h in self.history],
+            (self.snapshot.week_id, self.metrics),
+        ]:
+            for m in snap_metrics:
+                if m.prompt_id != prompt_id or m.model_id != model_id:
+                    continue
+                if metric == "refusal_rate":
+                    v = m.refusal_rate
+                elif metric == "hedge_density":
+                    v = m.hedge_density
+                elif metric == "length_median":
+                    v = m.length.median
+                else:
+                    raise ValueError(f"unknown metric: {metric}")
+                if v is None:
+                    out.add(snap_week)
+        return out
 
     def timeseries(
         self, prompt_id: str, model_id: str, metric: str

@@ -91,6 +91,7 @@
         {% for m in models %}
         {% set ts = timeseries(prompt.prompt_id, m.model_id, spec.key) %}
         {% set by_week = dict(ts) %}
+        {% set no_text = manifest.sampled_but_null_weeks(prompt.prompt_id, m.model_id, spec.key) %}
         {% set values = ts | map(attribute=1) | list %}
         <tr>
           <th scope="row"><a href="/models/{{ m.model_id }}/">{{ m.display_name }}</a></th>
@@ -99,6 +100,12 @@
           <td class="heatmap-empty"><span class="visually-hidden">no run that week</span><span aria-hidden="true">&mdash;</span></td>
           {% elif w in by_week %}
           <td><code>{{ spec.fmt.format(by_week[w]) }}</code></td>
+          {% elif w in no_text %}
+          {#- Sampled, and measured, but this metric is derived from
+              response text and there was none: a provider refusal
+              delivered as stop_reason='refusal' with an empty body.
+              Distinct from "not sampled", which is the cadence case. -#}
+          <td><span class="visually-hidden">sampled, no response text to measure</span><span aria-hidden="true">&mdash;</span></td>
           {% else %}
           <td><span class="visually-hidden">not sampled this week</span><span aria-hidden="true">&mdash;</span></td>
           {% endif %}

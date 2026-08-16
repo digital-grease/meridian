@@ -650,7 +650,7 @@ def _try_write_parquet(week_id: str, metrics: list, snap_dir: Path) -> int | Non
             "refusal_rate": float(m.refusal_rate),
             "refusal_ci_lower": float(m.refusal_ci.lower),
             "refusal_ci_upper": float(m.refusal_ci.upper),
-            "hedge_density": float(m.hedge_density),
+            "hedge_density": _opt_float(m.hedge_density),
             # Null quantiles stay null in the export. A cell measured
             # entirely from body-less refusals has no length
             # distribution, and writing 0.0 would publish a run of
@@ -688,7 +688,7 @@ def _metrics_to_csv(week_id: str, metrics: list) -> str:
         w.writerow([
             week_id, m.prompt_id, m.model_id, m.n_samples, m.unusable_samples,
             m.refusal_rate, m.refusal_ci.lower, m.refusal_ci.upper,
-            m.hedge_density,
+            _blank_if_none(m.hedge_density),
             # Empty, not 0, when there was no text to measure. Same
             # convention the optional columns below already use, and the
             # reason is stronger here: a 0 in a length column reads as a
@@ -1464,18 +1464,23 @@ def notable_shifts(manifest: Manifest, *, top_n: int = 3) -> list[dict]:
             "delta": round(cur.refusal_rate - prior.refusal_rate, 3),
             "magnitude": d / _DRIFT_SCALES["refusal_rate"],
         })
-        # Hedge density.
-        d = abs(cur.hedge_density - prior.hedge_density)
-        shifts.append({
-            "metric": "hedge_density", "metric_label": "Hedge density",
-            "prompt_id": cur.prompt_id, "prompt_title": prompt.title,
-            "model_id": cur.model_id, "model_name": model.display_name,
-            "axis": prompt.axis,
-            "from_value": round(prior.hedge_density, 2),
-            "to_value": round(cur.hedge_density, 2),
-            "delta": round(cur.hedge_density - prior.hedge_density, 2),
-            "magnitude": d / _DRIFT_SCALES["hedge_density"],
-        })
+        # Hedge density. Skipped when either end has no text, for the
+        # same reason the length branch below is: a cell measured
+        # entirely from body-less refusals publishes a null hedge
+        # density, and treating that as 0 would rank a non-measurement
+        # as one of the largest framing shifts of the week.
+        if cur.hedge_density is not None and prior.hedge_density is not None:
+            d = abs(cur.hedge_density - prior.hedge_density)
+            shifts.append({
+                "metric": "hedge_density", "metric_label": "Hedge density",
+                "prompt_id": cur.prompt_id, "prompt_title": prompt.title,
+                "model_id": cur.model_id, "model_name": model.display_name,
+                "axis": prompt.axis,
+                "from_value": round(prior.hedge_density, 2),
+                "to_value": round(cur.hedge_density, 2),
+                "delta": round(cur.hedge_density - prior.hedge_density, 2),
+                "magnitude": d / _DRIFT_SCALES["hedge_density"],
+            })
         # Length median (relative shift). Skipped when either end has no
         # length at all: a cell measured entirely from body-less refusals
         # publishes a null median, and treating that as 0 would rank a
@@ -1587,7 +1592,13 @@ def _metric_status(manifest: Manifest) -> list[dict]:
         {"metric": "Refusal rate", "status": "live",
          "note": f"e.g. {sample.refusal_rate:.2f} on first metric record"},
         {"metric": "Hedge density", "status": "live",
-         "note": f"e.g. {sample.hedge_density:.2f} markers/100 tok on first record"},
+         "note": (
+             f"e.g. {sample.hedge_density:.2f} markers/100 tok on first record"
+             if sample.hedge_density is not None
+             # Null means the first record's cell carried no text, same
+             # case the length note below describes.
+             else "null on the first record: that cell carried no response text"
+         )},
         {"metric": "Length distribution", "status": "live",
          "note": (
              f"median, p25/p75 — first record median = {sample.length.median:.0f}"
