@@ -73,6 +73,16 @@ data/internal/
 crash.log
 crash.*.log
 
+# Lambda deployment bundles. Terraform's archive_file data source
+# rebuilds these from the .py sources next to them on every plan, so
+# tracking one means a binary conflict on every handler edit. The .py
+# file is the source of truth; the zip is build output.
+#
+# Scoped to this directory rather than a repo-wide *.zip so a zip we
+# genuinely mean to publish (a data export, a corpus bundle) is not
+# silently swallowed.
+infra/terraform/ec2-cohabit/lambda/*.zip
+
 # AI tooling artifacts
 .claude/
 .aider*

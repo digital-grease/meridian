@@ -252,12 +252,20 @@ log "running pipeline for ISO week $WEEK"
 # MERIDIAN_SECRETS_SSM=1 was set in /etc/meridian/config.env.
 PIPELINE_START_EPOCH=$(date -u +%s)
 set +e
-# --max-cost is a hard ceiling in USD for this invocation. The corpus is
-# fixed and a normal week lands well under it, so the only way to reach
-# it is a config or corpus change that multiplied the call count, which
-# is exactly when an unattended weekly job should stop rather than spend.
-# 40 sits above the observed weekly spend and below the ~$45/month total
-# API budget in CLAUDE.md.
+# --max-cost is a hard ceiling in USD for this invocation, gating the
+# pre-flight ESTIMATE rather than actual spend.
+#
+# The headroom is no longer generous. As of 2026-08-16 an even week
+# estimates $27.45 (Opus 4.8 plus Opus 5) and an odd week $22.91
+# (gpt-5.5), so 40 leaves 31% on the even week rather than the
+# comfortable margin this comment used to claim. Raising a completion
+# cap or adding a fourth paid runner will cross it.
+#
+# That is the intended behaviour, not a misconfiguration: an unattended
+# job that has become several times more expensive should stop and ask.
+# If a run aborts here, find out WHICH change moved the number before
+# raising the ceiling. See meridian/BUDGET.md for the current per-week
+# figures.
 MAX_COST_USD="${MAX_COST_USD:-40}"
 uv run python -m meridian.pipeline.cli run --week "$WEEK" --yes --max-cost "$MAX_COST_USD"
 RUN_RC=$?

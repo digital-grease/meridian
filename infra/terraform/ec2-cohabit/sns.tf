@@ -63,54 +63,37 @@ resource "aws_cloudwatch_metric_alarm" "orchestrator_errors" {
   ok_actions         = [aws_sns_topic.alerts.arn]
 }
 
-# 2. NOT PRESENT: the dead man's switch on "nothing invoked us".
+# 2. The dead man's switch on "nothing invoked us", added 2026-08-16.
+#    Lives in canary.tf.
 #
-#    This is the one check that would have caught 2026-W30 and
-#    2026-W31 directly, and it is deliberately absent rather than
-#    forgotten. Read this before adding it back.
+#    It is a scheduled Lambda rather than an alarm for a reason worth
+#    keeping written down, because the alarm form is the obvious thing
+#    to reach for and it does not work.
 #
-#    It was written here as a metric alarm on AWS/Lambda Invocations
-#    with period = 86400, evaluation_periods = 7, datapoints_to_alarm =
-#    7 and treat_missing_data = "breaching", i.e. "the trailing seven
-#    1-day windows all contained zero invocations". The logic is right;
-#    the resource is not applyable. PutMetricAlarm enforces an API-side
-#    rule that terraform validate cannot see: "An alarm's total current
-#    evaluation period can be no longer than one day, so this number
-#    multiplied by Period cannot be more than 86,400 seconds." Seven
-#    days of one-day periods is 604,800 seconds, so the API rejects it
-#    with a ValidationError and the whole apply goes red. There is no
-#    variation that gets around it either: a weekly job cannot be
-#    watched by an alarm whose entire memory is 24 hours, because 24
-#    hours of silence is the normal state six days out of seven.
+#    Note it does NOT cover 2026-W30 and 2026-W31, despite being written
+#    in response to them. Those weeks were invoked and then raised, and
+#    Invocations counts a failed invocation the same as a successful one
+#    (the metric still reads Sum = 1.0 for both Mondays). Alarm 1 above
+#    is what catches that. This covers the disjoint case where nothing
+#    is invoked at all, which alarm 1 cannot see because a function that
+#    never runs emits no Errors datapoint either.
 #
-#    The replacement is a SCHEDULED CANARY, which is not subject to the
-#    one-day rule because it is not an alarm at all: an EventBridge
-#    schedule fires a small Lambda every Tuesday around 12:00 UTC, a few
-#    hours after Monday's run should have started. The canary calls
-#    cloudwatch:GetMetricStatistics for AWS/Lambda Invocations on
-#    meridian-orchestrator over the trailing 8 days, sums the
-#    datapoints, and publishes to this topic if the sum is zero.
-#    Detection latency is the same 15-24 hours the alarm would have
-#    given, against the 14 days it actually took in July. What it needs:
-#    an execution role carrying AWSLambdaBasicExecutionRole,
-#    cloudwatch:GetMetricStatistics on "*" since that call takes no
-#    resource-level permissions, and sns:Publish on
-#    aws_sns_topic.alerts.arn; a log group with the same 90-day
-#    retention as the orchestrator's; and a trigger, either an
-#    aws_scheduler_schedule with an invoke role or an
-#    aws_cloudwatch_event_rule with an aws_lambda_permission.
+#    It was written here first as a metric alarm on AWS/Lambda
+#    Invocations with period = 86400, evaluation_periods = 7,
+#    datapoints_to_alarm = 7 and treat_missing_data = "breaching", i.e.
+#    "the trailing seven 1-day windows all contained zero invocations".
+#    The logic is right; the resource is not applyable. PutMetricAlarm
+#    enforces an API-side rule that terraform validate cannot see: "An
+#    alarm's total current evaluation period can be no longer than one
+#    day, so this number multiplied by Period cannot be more than 86,400
+#    seconds." Seven days of one-day periods is 604,800 seconds, so the
+#    API rejects it with a ValidationError and the whole apply goes red.
+#    No variation escapes the rule: a weekly job cannot be watched by an
+#    alarm whose entire memory is 24 hours, because 24 hours of silence
+#    is the normal state six days out of seven.
 #
-#    It is not landed here because it cannot be verified before the
-#    2026-08-17 run: a new function, a new role and a new schedule that
-#    have never been planned or applied are a poor trade against an
-#    apply that must succeed this weekend. Removing the broken alarm
-#    regresses nothing that existed before 2026-08, since the account
-#    had no alarms at all until this file; alarms 1 and 3 and the
-#    on_failure destination in lambda.tf all still land.
-#
-#    Until the canary exists, absence of a run is caught only by the
-#    downstream publish workflow going red, which is what happened on
-#    2026-07-27 and 2026-08-03 and took two weeks.
+#    A scheduled function has no such constraint, because it is not an
+#    alarm and can look back as far as it likes. See canary.tf.
 
 # 3. EventBridge Scheduler could not deliver to its target. Distinct
 #    from alarm 1: the function never ran, so it emitted neither an
@@ -118,13 +101,23 @@ resource "aws_cloudwatch_metric_alarm" "orchestrator_errors" {
 #
 #    AWS/Scheduler exposes ScheduleGroup as its only dimension, with no
 #    per-schedule breakdown, so this alarm covers every schedule in the
-#    group. meridian-weekly is the sole occupant of the default group
-#    today; if another schedule is ever added there, move meridian's to
-#    its own group and re-dimension this alarm, or it will page for
-#    somebody else's failure.
+#    group and cannot say which one failed.
+#
+#    As of 2026-08-16 the default group holds two meridian schedules,
+#    meridian-weekly and meridian-canary, and this alarm deliberately
+#    covers both: the earlier note here said to split them into separate
+#    groups if a second was ever added, and that advice is withdrawn.
+#    Both are meridian's, so a page for either is a page for us, and one
+#    alarm over the pair is cheaper than two alarms plus two groups. The
+#    original concern stands only for a schedule belonging to something
+#    else, which would page us for a stranger's failure; keep those out
+#    of the default group.
+#
+#    The description therefore names the group and both candidates
+#    rather than asserting which run was lost.
 resource "aws_cloudwatch_metric_alarm" "scheduler_target_errors" {
   alarm_name          = "meridian-scheduler-target-errors"
-  alarm_description   = "EventBridge Scheduler failed to invoke the meridian orchestrator (schedule ${aws_scheduler_schedule.weekly.name}, group ${coalesce(aws_scheduler_schedule.weekly.group_name, "default")}). The Monday run did not start."
+  alarm_description   = "EventBridge Scheduler failed to deliver to a target in group ${coalesce(aws_scheduler_schedule.weekly.group_name, "default")}. Either the Monday orchestrator run (${aws_scheduler_schedule.weekly.name}) or the Tuesday dead man's switch (${aws_scheduler_schedule.canary.name}) did not start; the metric has no per-schedule dimension, so check both."
   namespace           = "AWS/Scheduler"
   metric_name         = "TargetErrorCount"
   dimensions          = { ScheduleGroup = coalesce(aws_scheduler_schedule.weekly.group_name, "default") }

@@ -35,11 +35,22 @@ what you expect the invoice to say.
 
 - Corpus: 30 prompts public
 - Ollama `llama3.2:3b` — every week (free, local baseline)
-- Claude Opus 4.8 — **even ISO weeks only** (newest Opus until Fable unlocks)
+- Claude Opus 4.8 — **even ISO weeks only**
+- Claude Opus 5 — **even ISO weeks only**, alongside 4.8 rather than
+  replacing it, so the 4-8 series continues and the two versions are
+  compared within a week rather than across one
 - GPT-5.5 — **odd ISO weeks only**
 
-**Weekly cost: $0 (Ollama) + $8.35 (Opus) OR $22.91 (GPT-5.5), alternating.**
-**Monthly average: ~$68 ($813/yr.)**
+**Weekly cost: $0 (Ollama) + $27.45 (even: $8.35 Opus 4.8 + $19.10 Opus 5)
+OR $22.91 (odd: GPT-5.5).**
+**Monthly average: ~$109 ($1,309/yr.)**
+
+Both alternating weeks now sit under the $40 `--max-cost` ceiling in
+`scripts/run-weekly.sh`, the even week at 69% of it. That margin is
+thinner than it looks: raising Opus 5's completion cap, or adding a
+fourth paid runner, would put an even week through the ceiling and stop
+the run rather than overspend. Raise the ceiling deliberately if either
+happens; do not raise it in response to an abort without checking which.
 
 The GPT-5.5 week is now the expensive one, which reverses the old
 ordering. That is the 8192 completion cap: gpt-5.5 bills reasoning

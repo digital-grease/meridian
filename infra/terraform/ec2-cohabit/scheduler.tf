@@ -26,9 +26,17 @@ resource "aws_iam_role" "scheduler" {
 
 data "aws_iam_policy_document" "scheduler_invoke" {
   statement {
-    effect    = "Allow"
-    actions   = ["lambda:InvokeFunction"]
-    resources = [aws_lambda_function.orchestrator.arn]
+    effect  = "Allow"
+    actions = ["lambda:InvokeFunction"]
+    # Both scheduled functions run under this one role: the Monday
+    # orchestrator and the Tuesday dead man's switch (canary.tf). The
+    # policy resource keeps its original "invoke-orchestrator" name so
+    # adding the canary does not churn an inline policy that predates
+    # it; the name is now narrower than the grant.
+    resources = [
+      aws_lambda_function.orchestrator.arn,
+      aws_lambda_function.canary.arn,
+    ]
   }
 }
 
