@@ -28,6 +28,14 @@ from meridian.runners.base import (
 #: Anthropic tolerates the API default (1.0) but nothing else. Extend
 #: this list when a new thinking-default model errors with that message.
 _TEMPERATURE_DEPRECATED_PREFIXES: tuple[str, ...] = (
+    # claude-opus-5 removes temperature outright rather than deprecating
+    # it: a non-default value is a 400, same as 4.7 and 4.8. Listing it
+    # here is what makes the orchestrator skip the zero-temperature
+    # batch for this runner. Omitting it would send temperature=0 on 5
+    # samples per prompt and fail every one of them, which is exactly
+    # how 2026-W27 lost 150 gpt-5.5 samples before openai.py grew the
+    # equivalent list.
+    "claude-opus-5",
     "claude-opus-4-7",
     "claude-opus-4-8",
 )

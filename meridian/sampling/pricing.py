@@ -85,6 +85,7 @@ from dataclasses import dataclass, field
 # a provider's whole family is priced the same, e.g. self-hosted Ollama).
 # Values checked 2026-06 from each provider's pricing page / model docs.
 PRICING: dict[tuple[str, str], tuple[float, float]] = {
+    ("anthropic", "claude-opus-5"):            ( 5.00, 25.00),
     ("anthropic", "claude-opus-4-8"):          ( 5.00, 25.00),
     ("anthropic", "claude-opus-4-7"):          ( 5.00, 25.00),
     ("anthropic", "claude-sonnet-4-6"):        ( 3.00, 15.00),
@@ -116,7 +117,17 @@ FREE_PROVIDERS: frozenset[str] = frozenset({"ollama"})
 #: importable as pure arithmetic (the ``estimate`` subcommand runs
 #: without credentials).
 REASONING_DEFAULT_PREFIXES: dict[str, tuple[str, ...]] = {
-    "anthropic": ("claude-opus-4-7", "claude-opus-4-8"),
+    # claude-opus-5 belongs here for a stronger reason than its
+    # predecessors: on 4.7 and 4.8 a request that omits the `thinking`
+    # parameter runs WITHOUT thinking, and they earn the label on
+    # measured output length alone (468 billed output tokens per call at
+    # the 1024 cap in 2026-W28, against gpt-5.5's 296). On claude-opus-5
+    # omitting `thinking` runs adaptive thinking, and max_tokens caps
+    # thinking plus visible output together, so the cap is unambiguously
+    # what bounds spend. Sampling it at the shared 1024 would reproduce
+    # the 2026-W27 truncated-completion failure by construction, which
+    # is why its runner carries an explicit cap in meridian/config.yaml.
+    "anthropic": ("claude-opus-5", "claude-opus-4-7", "claude-opus-4-8"),
     "openai": ("gpt-5", "o1", "o3", "o4"),
 }
 

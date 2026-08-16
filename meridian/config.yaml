@@ -58,6 +58,38 @@ runners:
     enabled: true
     cadence: even_weeks
 
+  # Added 2026-08-16. Runs the SAME weeks as claude-opus-4-8 rather than
+  # replacing it or alternating with it, for two reasons.
+  #
+  # The 4-8 series stays intact. Swapping the model id would end that
+  # series at 2026-W32 and start a new one, and a drift record whose
+  # subject changes is not a drift record.
+  #
+  # Same-week pairing removes the temporal confound. Two frontier models
+  # sampled in the same week against the same corpus differ only by
+  # model; split across alternating weeks they also differ by whatever
+  # moved in the world that week, which is the thing we are trying to
+  # measure. The one-week offset between the alternating frontier
+  # runners is already the weakest join in the dataset; do not add
+  # another.
+  #
+  # max_tokens is explicit and is NOT optional here. claude-opus-5 runs
+  # adaptive thinking whenever the `thinking` parameter is omitted, and
+  # max_tokens caps thinking plus visible output together, so the shared
+  # 1024 would be spent on reasoning and return empty completions with
+  # no visible answer. That is the 2026-W27 failure exactly (see
+  # site/content/reports/2026-07-24-truncated-response-correction.md).
+  # 8192 leaves roughly 7k of reasoning headroom above the longest
+  # visible response observed on this corpus; billing is on tokens
+  # produced, not on the cap. check_run_health.py now reports cap
+  # exhaustion instead of publishing it green, so raise this if it says
+  # so rather than waiting for a correction.
+  - provider: anthropic
+    model_id: "claude-opus-5"
+    enabled: true
+    cadence: even_weeks
+    max_tokens: 8192
+
   - provider: openai
     model_id: "gpt-5.5"
     enabled: true
