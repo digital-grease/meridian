@@ -15,6 +15,7 @@ from openai import APIStatusError, AsyncOpenAI
 from meridian.runners._retry import with_retry
 from meridian.runners.base import (
     AuthError,
+    ContentPolicyError,
     RateLimitError,
     Runner,
     Sample,
@@ -103,6 +104,8 @@ class OpenAIRunner(Runner):
             except (openai.APITimeoutError, openai.APIConnectionError) as e:
                 raise UpstreamError(str(e)) from e
             except APIStatusError as e:
+                if _is_content_policy_rejection(e):
+                    raise ContentPolicyError(str(e)) from e
                 raise UpstreamError(str(e)) from e
 
             latency_ms = int((time.monotonic() - started) * 1000)
@@ -130,6 +133,58 @@ class OpenAIRunner(Runner):
             )
 
         return await with_retry(one_call)
+
+
+#: Error codes OpenAI uses when it declines the request itself rather
+#: than the request being malformed.
+_CONTENT_POLICY_CODES: frozenset[str] = frozenset(
+    {
+        "content_policy_violation",
+        "content_filter",
+    }
+)
+
+#: Message fragments for the same thing when no machine-readable code
+#: comes with it, which was the case for the first one observed.
+#:
+#: Matching on prose is unpleasant and it is here under protest. The
+#: 2026-W33 rejection of ``ref-wifi-unauthorized`` carried a `type` of
+#: `invalid_request_error` and no `code` at all, so the only signal
+#: distinguishing "we will not run this prompt" from "your request is
+#: malformed" was the sentence itself. Prefer the code path above; add
+#: to this list only from a rejection actually seen in the archive, and
+#: keep the fragments long enough that they cannot match a genuine
+#: parameter error.
+_CONTENT_POLICY_MESSAGE_MARKERS: tuple[str, ...] = (
+    "flagged for possible cybersecurity risk",
+    "violates our content policy",
+    "against our usage policies",
+    "rejected by the safety system",
+)
+
+
+def _is_content_policy_rejection(e: APIStatusError) -> bool:
+    """True when a 4xx is the provider declining the prompt on content.
+
+    Conservative on purpose, and the asymmetry is deliberate. A missed
+    detection costs a retry storm and a failed pair, both of which are
+    visible in the run log and cost a few seconds. A false positive
+    quietly reclassifies a genuine API fault as a content decision, and
+    since the class exists precisely to stop retrying, it would also
+    convert a transient failure into a permanent one. So this returns
+    True only on positive evidence.
+
+    Scoped to 400 rather than any 4xx: 401/403/429 already have their
+    own branches upstream of this, and a 404 for a retired model must
+    stay a loud error rather than becoming a content finding.
+    """
+    if getattr(e, "status_code", None) != 400:
+        return False
+    code = (getattr(e, "code", None) or "").lower()
+    if code in _CONTENT_POLICY_CODES:
+        return True
+    message = (getattr(e, "message", None) or str(e)).lower()
+    return any(marker in message for marker in _CONTENT_POLICY_MESSAGE_MARKERS)
 
 
 def _token_kwarg_for(model_id: str) -> str:

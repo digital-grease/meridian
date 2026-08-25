@@ -287,11 +287,22 @@ async def _cmd_run(args: argparse.Namespace) -> int:
     )
     embedding_model = build_embedding_model(config.embedding)
 
+    # Straight from the run rather than via _rejections_by_key(): the
+    # entry this run just appended says the same thing, but reading it
+    # back would make the manifest depend on the log write having
+    # succeeded. The counts are already in hand here.
+    rejections_by_key = {
+        (runner_key.split("/", 1)[-1], prompt_id): count
+        for runner_key, per_prompt in outcome.content_policy_rejections.items()
+        for prompt_id, count in per_prompt.items()
+    }
+
     manifest = build_manifest(
         store=store, corpus=corpus, week_id=week_id, display_info=display_info,
         prior_manifests_dir=prior_manifests_dir,
         stance_by_key=stance_by_key,
         embedding_model=embedding_model,
+        rejections_by_key=rejections_by_key,
     )
     paths = _output_paths(week_id)
     write_manifest(manifest, paths)
@@ -304,6 +315,7 @@ async def _cmd_run(args: argparse.Namespace) -> int:
             prior_manifests_dir=prior_manifests_dir,
             stance_by_key=stance_by_key,
             embedding_model=embedding_model,
+            rejections_by_key=rejections_by_key,
         )
         internal_path = _internal_manifest_path(week_id)
         write_manifest(internal, [internal_path])
@@ -551,6 +563,34 @@ def _cmd_estimate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _rejections_by_key(week_id: str) -> dict[tuple[str, str], int]:
+    """Provider-declined request counts for ``week_id``, from the run log.
+
+    A rejected request writes no sample, so unlike every other input to
+    a manifest this one cannot be recovered from storage. The run log is
+    the only durable record of it, which makes reading it here the
+    difference between a rebuild that preserves the count and one that
+    silently republishes the cell as an unexplained small sample. That
+    second outcome is the 2026-W33 failure re-created by the tool meant
+    to correct it.
+
+    Last entry wins when a week was run more than once, matching the
+    re-run semantics everywhere else: the newest run is the one whose
+    samples are on disk.
+    """
+    entries = read_run_log(REPO_ROOT / "data" / "run_log.jsonl")
+    out: dict[tuple[str, str], int] = {}
+    for entry in entries:
+        if entry.week_id != week_id:
+            continue
+        out = {
+            (runner_key.split("/", 1)[-1], prompt_id): count
+            for runner_key, per_prompt in entry.content_policy_rejections.items()
+            for prompt_id, count in per_prompt.items()
+        }
+    return out
+
+
 def _cmd_build_manifest(args: argparse.Namespace) -> int:
     config, store, _runners = _build_context(args, need_runners=False)
     corpus = load_corpus()
@@ -563,12 +603,15 @@ def _cmd_build_manifest(args: argparse.Namespace) -> int:
     ))
     embedding_model = build_embedding_model(config.embedding)
 
+    rejections_by_key = _rejections_by_key(week_id)
+
     manifest = build_manifest(
         store=store, corpus=corpus, week_id=week_id,
         history_weeks=args.history_weeks, display_info=display_info,
         prior_manifests_dir=prior_manifests_dir,
         stance_by_key=stance_by_key,
         embedding_model=embedding_model,
+        rejections_by_key=rejections_by_key,
     )
     paths = _output_paths(week_id)
     write_manifest(manifest, paths)
@@ -583,6 +626,7 @@ def _cmd_build_manifest(args: argparse.Namespace) -> int:
             prior_manifests_dir=prior_manifests_dir,
             stance_by_key=stance_by_key,
             embedding_model=embedding_model,
+            rejections_by_key=rejections_by_key,
         )
         internal_path = _internal_manifest_path(week_id)
         write_manifest(internal, [internal_path])

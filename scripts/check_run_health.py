@@ -454,6 +454,51 @@ def evaluate(entry: dict) -> RunHealth:
     )
 
 
+def rejection_health(entry: dict) -> RunHealth:
+    """Report requests the provider declined to run. Never fails.
+
+    A warning rather than a failure, and the reasoning is the same one
+    that put a tolerance on unusable samples: this recurs. The rejections
+    land on the ``ref-`` prompts, which exist precisely to sit on the
+    refusal boundary, and the commercial roster alternates weekly, so a
+    hard gate here goes red on a predictable cadence for a condition
+    nobody can fix from this side. That is how an operator learns to stop
+    reading the alert, which costs more than the finding is worth.
+
+    It must still be *said*. Before 2026-W33 it was not: a rejection
+    aborted the pair, the cell published at ``n_samples=2`` with no
+    stated cause, and the only trace was one line in the errors array
+    that read like a transient upstream failure. The cell now carries
+    ``rejected_samples`` and this line names the prompts, so a reader
+    can tell a thin cell from a blocked one.
+
+    Deliberately not folded into the unusable-sample fraction above.
+    That fraction is a data-quality measure over samples we hold, and a
+    rejection is not a sample; adding it would move a threshold tuned
+    against a different denominator.
+    """
+    rejections = entry.get("content_policy_rejections") or {}
+    total = sum(sum(v.values()) for v in rejections.values())
+    if not total:
+        return RunHealth("ok", "")
+
+    week = entry.get("week_id", "?")
+    cells = sorted(
+        f"{runner}/{prompt}={count}"
+        for runner, per_prompt in rejections.items()
+        for prompt, count in per_prompt.items()
+    )
+    return RunHealth(
+        "warn",
+        f"{total} request(s) in {week} were declined by the provider on "
+        f"content grounds and never ran: {'; '.join(cells)}. Those cells "
+        f"publish with the samples that did complete and carry a "
+        f"rejected_samples count, so a smaller n is explained rather than "
+        f"unexplained. This is a fact about the provider's platform, not "
+        f"about the model, and it is not counted as a refusal.",
+    )
+
+
 def combine(*verdicts: RunHealth) -> RunHealth:
     """Fold several verdicts into one, worst level wins, worst detail first.
 
@@ -583,7 +628,11 @@ def main(argv: list[str] | None = None) -> int:
         _publish_detail(detail)
         return EXIT_FAIL
 
-    verdicts = [evaluate(entry), cadence_health(entries, args.week)]
+    verdicts = [
+        evaluate(entry),
+        cadence_health(entries, args.week),
+        rejection_health(entry),
+    ]
     if malformed:
         lines = ", ".join(str(n) for n in malformed)
         verdicts.append(RunHealth(

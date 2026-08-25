@@ -60,6 +60,22 @@ class RunLogEntry:
     # Defaulted so entries written before 2026-08-15 stay parseable:
     # retention is forever and the reader must never break on an old line.
     api_refusal_samples: dict[str, dict[str, int]] = field(default_factory=dict)
+    # Requests the provider declined to run, "provider/model" -> prompt_id
+    # -> count. Distinct from all three fields above because there is no
+    # response to classify: the platform rejected the request before the
+    # model saw it, so it is not an error in our pipeline, not a hole in
+    # a response, and not a model behaviour.
+    #
+    # Logged because it moves a cell's denominator without appearing in
+    # any count that explains why. 2026-W33 published gpt-5.5 on
+    # ref-wifi-unauthorized at n_samples=2 flagged "insufficient data",
+    # and nothing anywhere distinguished requests the platform refused
+    # from requests that were never issued at all. Defaulted so entries
+    # written before 2026-08-25 stay parseable: retention is forever and
+    # the reader must never break on an old line.
+    content_policy_rejections: dict[str, dict[str, int]] = field(
+        default_factory=dict
+    )
 
 
 def _config_hash(config: PipelineConfig) -> str:
@@ -103,6 +119,9 @@ def append_run_log(
         },
         api_refusal_samples={
             k: dict(v) for k, v in outcome.api_refusal_samples.items() if v
+        },
+        content_policy_rejections={
+            k: dict(v) for k, v in outcome.content_policy_rejections.items() if v
         },
         estimated_cost_usd=round(estimated_cost_usd, 4),
         actual_cost_usd=round(actual_cost_usd, 4),

@@ -95,6 +95,7 @@ def _metric_record_dict(
     prior_samples: list[Sample] | None = None,
     insufficient_data_n: int = MIN_SAMPLES_FOR_PUBLICATION,
     unusable_count: int = 0,
+    rejected_count: int = 0,
     week_id: str | None = None,
     prior_week: str | None = None,
 ) -> dict:
@@ -104,6 +105,22 @@ def _metric_record_dict(
     :mod:`meridian.analysis.usability`); ``unusable_count`` is how many
     were dropped, carried onto the record so the published data states
     its own sample loss rather than quietly reporting a smaller ``n``.
+
+    ``rejected_count`` states the same thing about a loss one step
+    earlier: requests the provider declined to run, which never became
+    samples at all. It is reported and never used in a metric. The two
+    counts are separate because they are different claims: an unusable
+    sample is a response we received and could not measure, a rejection
+    is a response that does not exist. Reading ``n_samples`` alone,
+    2026-W33's gpt-5.5 cell on ``ref-wifi-unauthorized`` looked like a
+    thin sample of two for no stated reason. A cell reporting
+    ``n_samples=2`` beside ``rejected_samples=18`` was not lightly
+    sampled, it was mostly blocked, and those are opposite readings.
+
+    That week itself cannot be restated this way: the rejection aborted
+    the pair, so the requests after it were never issued and the number
+    that WOULD have been rejected was never observed. The count is only
+    meaningful from the point the pair stopped aborting.
 
     ``week_id`` and ``prior_week`` identify the two ends of the drift
     comparison and are recorded on every emitted ``*_drift`` entry (see
@@ -171,6 +188,7 @@ def _metric_record_dict(
         "model_id": model_id,
         "n_samples": len(samples),
         "unusable_samples": unusable_count,
+        "rejected_samples": rejected_count,
         "refusal_rate": round(refusal_rate, 3),
         "refusal_ci": {
             "lower": round(max(0.0, ci.lower), 3),
@@ -541,6 +559,7 @@ def _metrics_for_week(
     include_drift_tests: bool = False,
     insufficient_data_n: int = MIN_SAMPLES_FOR_PUBLICATION,
     unmeasured_out: list[dict] | None = None,
+    rejections_by_key: dict[tuple[str, str], int] | None = None,
 ) -> list[dict]:
     """Compute per-(prompt × model) metrics for one week over ``prompts``.
 
@@ -644,6 +663,9 @@ def _metrics_for_week(
                     prior_samples=prior_samples if include_drift_tests else None,
                     insufficient_data_n=insufficient_data_n,
                     unusable_count=len(unusable),
+                    rejected_count=(rejections_by_key or {}).get(
+                        (model_id, prompt.id), 0
+                    ),
                     week_id=week_id,
                     prior_week=prior_week if include_drift_tests else None,
                 )
@@ -748,6 +770,7 @@ def build_manifest(
     embedding_model: "EmbeddingModel | None" = None,
     insufficient_data_n: int = MIN_SAMPLES_FOR_PUBLICATION,
     prior_manifests_dir: Path | None = None,
+    rejections_by_key: dict[tuple[str, str], int] | None = None,
 ) -> dict:
     """Construct a Manifest dict matching the site schema.
 
@@ -770,6 +793,7 @@ def build_manifest(
         include_drift_tests=True,
         insufficient_data_n=insufficient_data_n,
         unmeasured_out=unmeasured,
+        rejections_by_key=rejections_by_key,
     )
     _apply_bh_correction(current_metrics)
     models = _models_from_storage(store, week_id, display_info, scoped_prompts)

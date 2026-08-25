@@ -42,6 +42,23 @@ async def with_retry(
     Retries on :class:`RateLimitError` (respecting ``retry_after_s``) and
     :class:`UpstreamError`. Does not retry on :class:`AuthError` — missing
     credentials will not become present by trying again.
+
+    Nor on :class:`ContentPolicyError`, for the same reason stated
+    differently: the provider has declined the prompt itself, and a
+    prompt does not become acceptable by being sent again. That one is
+    load-bearing rather than merely tidy. Those rejections land on the
+    ``ref-`` prompts, the corpus samples each prompt up to 25 times, and
+    the commercial roster alternates weekly, so classifying one as
+    transient turns a single deterministic refusal into a hundred
+    pointless round trips against a rate-limited API, every other week,
+    forever.
+
+    Retryable classes are named explicitly rather than excluded by
+    subtraction. A new RunnerError subclass is therefore not retried
+    until someone decides it should be, which is the safe default: the
+    cost of not retrying something transient is one failed pair in the
+    run log, and the cost of retrying something deterministic is the
+    paragraph above.
     """
     async for attempt in AsyncRetrying(
         stop=stop_after_attempt(max_attempts),

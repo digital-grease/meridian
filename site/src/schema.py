@@ -234,6 +234,20 @@ class MetricRecord(Frozen):
     #: the token cap before emitting output). Defaulted to 0 so
     #: manifests published before 2026-07-24 stay valid.
     unusable_samples: int = Field(default=0, ge=0)
+    #: Requests the provider declined to run for this cell, so they never
+    #: became samples. Excluded from every metric and reported only.
+    #:
+    #: Distinct from ``unusable_samples`` because the two describe
+    #: different losses: that one is a response we received and could not
+    #: measure, this one is a response that does not exist. Keeping them
+    #: apart is what lets a reader tell "the model answered and we could
+    #: not score it" from "the platform would not run the prompt", which
+    #: are opposite findings and only one is about the model.
+    #:
+    #: Defaulted to 0 so manifests published before 2026-08-25 stay
+    #: valid; a default keeps this a widening change, so SCHEMA_VERSION
+    #: does not move.
+    rejected_samples: int = Field(default=0, ge=0)
     refusal_rate: float = Field(ge=0.0, le=1.0)
     refusal_ci: ConfidenceInterval
     #: None when the cell carried no response text to measure. Same

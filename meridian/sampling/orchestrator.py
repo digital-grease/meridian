@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 
 from meridian.analysis import usability
 from meridian.corpus import Corpus, Prompt
-from meridian.runners import Runner, RunnerError
+from meridian.runners import ContentPolicyError, Runner, RunnerError
 from meridian.runners.base import IntegrityError, Sample
 from meridian.storage import LocalSampleStore
 
@@ -105,6 +105,26 @@ class RunOutcome:
     #: 20 prompts" mean completely different things, and the runner-level
     #: total cannot tell them apart.
     api_refusal_samples: dict[str, dict[str, int]] = field(default_factory=dict)
+    #: Requests the PROVIDER declined to run, keyed
+    #: ``"provider/model_id"`` -> prompt_id -> count.
+    #:
+    #: Not samples, and deliberately not in any of the three dicts above.
+    #: ``unusable_samples`` means a request succeeded and returned
+    #: nothing; ``api_refusal_samples`` means the model declined; both
+    #: describe a response we received. This one has no response at all:
+    #: the platform rejected the request before the model saw it, so it
+    #: is neither a hole in the data nor a model behaviour.
+    #:
+    #: It is recorded because the alternative is that it vanishes. Until
+    #: 2026-W33 a rejection aborted the whole pair and left the cell
+    #: published at ``n_samples=2`` with nothing anywhere saying why the
+    #: other eighteen requests were missing. Counted per prompt for the
+    #: same reason as ``api_refusal_samples``: "18 on one prompt" and
+    #: "1 each across 18 prompts" are different events and a runner-level
+    #: total cannot tell them apart.
+    content_policy_rejections: dict[str, dict[str, int]] = field(
+        default_factory=dict
+    )
 
     @property
     def total_unusable(self) -> int:
@@ -113,6 +133,12 @@ class RunOutcome:
     @property
     def total_api_refusals(self) -> int:
         return sum(sum(v.values()) for v in self.api_refusal_samples.values())
+
+    @property
+    def total_content_policy_rejections(self) -> int:
+        return sum(
+            sum(v.values()) for v in self.content_policy_rejections.values()
+        )
 
 
 class Orchestrator:
@@ -209,6 +235,7 @@ class Orchestrator:
                     n_zero_batch = max(0, self.plan.samples_per_pair - already_have)
                     start_zero = already_have
 
+                rejections: list[ContentPolicyError] = []
                 try:
                     if n_default_batch > 0:
                         if not runner.supports_temperature(
@@ -230,6 +257,7 @@ class Orchestrator:
                                 max_tokens=run_max_tokens,
                                 concurrency=self.plan.concurrency_per_provider,
                                 start_index=start_default,
+                                rejections_out=rejections,
                             ):
                                 self.store.append(
                                     self.plan.week_id,
@@ -264,6 +292,7 @@ class Orchestrator:
                                 max_tokens=run_max_tokens,
                                 concurrency=self.plan.concurrency_per_provider,
                                 start_index=start_zero,
+                                rejections_out=rejections,
                             ):
                                 self.store.append(
                                     self.plan.week_id,
@@ -279,6 +308,23 @@ class Orchestrator:
 
                     outcome.pairs_complete += 1
                     status = "OK"
+                    if rejections:
+                        # The pair still completed: whatever the platform
+                        # did let through is a real measurement and is
+                        # published. The count travels beside it so the
+                        # cell's N can be read against what was attempted
+                        # rather than looking like a small sample nobody
+                        # can explain.
+                        outcome.content_policy_rejections.setdefault(
+                            runner_key, {}
+                        )[prompt.id] = len(rejections)
+                        _log.warning(
+                            "%s/%s: provider declined %d request(s) for %s "
+                            "on content grounds; cell publishes with the "
+                            "remainder",
+                            runner.provider, runner.model_id,
+                            len(rejections), prompt.id,
+                        )
                 except RunnerError as e:
                     outcome.pairs_failed += 1
                     outcome.errors.append(

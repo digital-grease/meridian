@@ -45,6 +45,37 @@ class UpstreamError(RunnerError):
     """Any other upstream failure. Includes transient 5xx and malformed responses."""
 
 
+class ContentPolicyError(RunnerError):
+    """The provider rejected the REQUEST on content grounds. No completion exists.
+
+    Split out of :class:`UpstreamError` because it violates that class's
+    one promise. UpstreamError means "transient", and
+    :func:`meridian.runners._retry.with_retry` acts on that by retrying
+    it four times with exponential backoff. A content-policy 400 is
+    deterministic: the same prompt returns the same rejection every
+    time, so those four attempts only spend wall clock and rate-limit
+    budget before recording the failure they were always going to
+    record. First seen on 2026-W33, where ``openai/gpt-5.5`` rejected
+    ``ref-wifi-unauthorized`` with "This content was flagged for
+    possible cybersecurity risk".
+
+    Deliberately NOT a refusal, and the distinction is the one
+    :mod:`meridian.analysis.usability` already draws in
+    ``_API_REFUSAL_REASONS``: a refusal is the MODEL declining in a
+    response we received, while this is the PLATFORM declining to run
+    the prompt at all. The model never saw it. Folding this into the
+    refusal rate would publish a model behaviour that was never
+    observed, and on the refusal-boundary axis specifically, which is
+    the axis least able to absorb an invented data point.
+
+    What it is instead, and whether the fact deserves its own published
+    outcome, is a live question. It is a real measurement of something
+    (the provider will not accept this prompt) and discarding it loses
+    that. But it is a measurement of the platform, not the model, and
+    the corpus currently has nowhere to put one.
+    """
+
+
 class Sample(BaseModel):
     """One response captured from one model for one prompt.
 
@@ -158,11 +189,34 @@ class Runner(abc.ABC):
         max_tokens: int = 1024,
         concurrency: int = 4,
         start_index: int = 0,
+        rejections_out: list[ContentPolicyError] | None = None,
     ) -> AsyncIterator[Sample]:
         """Yield ``n`` samples with bounded concurrency.
 
         Callers receive samples in completion order, not request order.
         ``request_index`` is set sequentially on each Sample.
+
+        Any error still cancels the remaining requests and propagates,
+        with one exception. When ``rejections_out`` is provided, a
+        :class:`ContentPolicyError` on an individual request is appended
+        to it and the batch CONTINUES.
+
+        That exception exists because of what the all-or-nothing version
+        cost. 2026-W33 sampled ``gpt-5.5`` on ``ref-wifi-unauthorized``:
+        requests 0 and 1 returned prose refusals from the model,
+        something in flight beside them came back as a platform content
+        rejection, and the raise took the other eighteen requests with
+        it. The published cell was ``n_samples=2``, flagged "insufficient
+        data", for a model that was answering the prompt perfectly well.
+        The filter is evidently probabilistic rather than absolute, since
+        it passed two of the first few and blocked another, so throwing
+        away the whole cell on one hit discards a measurement that was
+        working.
+
+        A rejection is not a sample and is never yielded. It is counted,
+        published as ``rejected_samples`` on the cell, and left out of
+        every metric, because "the platform would not run this request"
+        is a fact about the platform and the corpus measures models.
         """
         sem = asyncio.Semaphore(concurrency)
 
@@ -179,7 +233,12 @@ class Runner(abc.ABC):
         tasks = [asyncio.create_task(one(start_index + i)) for i in range(n)]
         try:
             for coro in asyncio.as_completed(tasks):
-                yield await coro
+                try:
+                    yield await coro
+                except ContentPolicyError as e:
+                    if rejections_out is None:
+                        raise
+                    rejections_out.append(e)
         except BaseException:
             for t in tasks:
                 t.cancel()

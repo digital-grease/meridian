@@ -450,6 +450,7 @@ def render_dashboard(
 
 _METRICS_COLUMNS = [
     "week_id", "prompt_id", "model_id", "n_samples", "unusable_samples",
+    "rejected_samples",
     "refusal_rate", "refusal_ci_lower", "refusal_ci_upper",
     "hedge_density", "length_median", "length_p25", "length_p75",
     "stance", "stance_confidence", "embedding_centroid_shift",
@@ -647,6 +648,7 @@ def _try_write_parquet(week_id: str, metrics: list, snap_dir: Path) -> int | Non
             "model_id": m.model_id,
             "n_samples": m.n_samples,
             "unusable_samples": m.unusable_samples,
+            "rejected_samples": m.rejected_samples,
             "refusal_rate": float(m.refusal_rate),
             "refusal_ci_lower": float(m.refusal_ci.lower),
             "refusal_ci_upper": float(m.refusal_ci.upper),
@@ -687,6 +689,7 @@ def _metrics_to_csv(week_id: str, metrics: list) -> str:
     for m in metrics:
         w.writerow([
             week_id, m.prompt_id, m.model_id, m.n_samples, m.unusable_samples,
+            m.rejected_samples,
             m.refusal_rate, m.refusal_ci.lower, m.refusal_ci.upper,
             _blank_if_none(m.hedge_density),
             # Empty, not 0, when there was no text to measure. Same
