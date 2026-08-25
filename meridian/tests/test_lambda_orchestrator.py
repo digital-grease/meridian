@@ -123,6 +123,7 @@ def _load_orchestrator(monkeypatch, env: dict[str, str] | None = None):
     # Not set by default, so the "unset falls back to 600" case is a real
     # observation rather than an accident of the developer's shell.
     monkeypatch.delenv("SSM_COMMAND_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("SSM_EXECUTION_TIMEOUT_SECONDS", raising=False)
     for name, value in (env or {}).items():
         monkeypatch.setenv(name, value)
 
@@ -566,6 +567,81 @@ def test_ssm_command_timeout_falls_back_when_the_variable_is_empty(load_orchestr
     assert module.SSM_COMMAND_TIMEOUT_SECONDS == 600
     module.lambda_handler({"source": "scheduler"}, _Context())
     assert module.ssm.send_command.call_args.kwargs["TimeoutSeconds"] == 600
+
+
+# ---------- the execution ceiling, which is a different knob ----------
+#
+# TimeoutSeconds above bounds DELIVERY. These bound the RUN. The module
+# shipped believing the second thing did not exist on this side, so
+# AWS-RunShellScript's `executionTimeout` default of 3600 s applied
+# unannounced and SIGKILLed 2026-W34 at the one-hour mark with no
+# manifest written and the instance left billing. Assert on the document
+# parameter, not on a module global: the whole failure was a value that
+# was never sent.
+
+
+def _execution_timeout(module):
+    return module.ssm.send_command.call_args.kwargs["Parameters"]["executionTimeout"]
+
+
+def test_ssm_execution_timeout_is_sent_as_a_document_parameter(load_orchestrator):
+    module = load_orchestrator(SSM_EXECUTION_TIMEOUT_SECONDS="7200")
+
+    assert module.SSM_EXECUTION_TIMEOUT_SECONDS == 7200
+    module.lambda_handler({"source": "scheduler"}, _Context())
+    # SSM document parameters are lists of strings, not ints.
+    assert _execution_timeout(module) == ["7200"]
+
+
+def test_ssm_execution_timeout_defaults_well_clear_of_the_run(load_orchestrator):
+    """The default has to beat the real runtime with room to spare. A
+    2026-W34-shaped run takes about 2h10m, so anything at or below the
+    3600 s document default reproduces the bug."""
+    module = load_orchestrator()
+
+    assert module.SSM_EXECUTION_TIMEOUT_SECONDS == 21600
+    module.lambda_handler({"source": "scheduler"}, _Context())
+    assert _execution_timeout(module) == ["21600"]
+
+
+def test_ssm_execution_timeout_falls_back_when_the_variable_is_empty(load_orchestrator):
+    """Same tostring() blanking hazard as the delivery timeout: an unset
+    tfvar renders "" rather than dropping the variable, and int("") is an
+    init-time failure with no handler running to explain it."""
+    module = load_orchestrator(SSM_EXECUTION_TIMEOUT_SECONDS="")
+
+    assert module.SSM_EXECUTION_TIMEOUT_SECONDS == 21600
+    module.lambda_handler({"source": "scheduler"}, _Context())
+    assert _execution_timeout(module) == ["21600"]
+
+
+def test_send_command_still_carries_the_wrapper_invocation(load_orchestrator):
+    """Guard the regression the refactor above could cause: `commands`
+    and `executionTimeout` now share the Parameters dict, so a careless
+    edit could send the ceiling and drop the thing being run."""
+    module = load_orchestrator()
+
+    module.lambda_handler({"source": "scheduler"}, _Context())
+    params = module.ssm.send_command.call_args.kwargs["Parameters"]
+    assert len(params["commands"]) == 1
+    assert "run-weekly.sh" in params["commands"][0]
+
+
+def test_dispatch_comment_carries_the_reaper_ownership_signal(load_orchestrator):
+    """meridian-reaper decides whose boot an instance is by matching this
+    Comment against DISPATCH_COMMENT_MATCH in its own environment.
+
+    The coupling is invisible from either side and it fails silently in
+    the safe direction: rename the Comment here and the reaper stops
+    recognising meridian's own dispatches, concludes every running
+    instance belongs to specter, and quietly never reaps anything again.
+    Nothing errors, no alarm fires, and the backstop is gone. Pin the
+    substring so a rename has to come here and read this."""
+    module = load_orchestrator()
+
+    module.lambda_handler({"source": "scheduler"}, _Context())
+    comment = module.ssm.send_command.call_args.kwargs["Comment"]
+    assert "meridian weekly pipeline" in comment
 
 
 # ---------- everything else still alerts ----------------------------

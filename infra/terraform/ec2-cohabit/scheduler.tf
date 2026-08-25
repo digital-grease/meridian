@@ -28,14 +28,21 @@ data "aws_iam_policy_document" "scheduler_invoke" {
   statement {
     effect  = "Allow"
     actions = ["lambda:InvokeFunction"]
-    # Both scheduled functions run under this one role: the Monday
-    # orchestrator and the Tuesday dead man's switch (canary.tf). The
-    # policy resource keeps its original "invoke-orchestrator" name so
-    # adding the canary does not churn an inline policy that predates
-    # it; the name is now narrower than the grant.
+    # All three scheduled functions run under this one role: the Monday
+    # orchestrator, the Tuesday dead man's switch (canary.tf) and the
+    # hourly instance reaper (reaper.tf). The policy resource keeps its
+    # original "invoke-orchestrator" name so adding to it does not churn
+    # an inline policy that predates it; the name is now narrower than
+    # the grant.
+    #
+    # A function missing from this list does not fail loudly. The
+    # schedule applies cleanly, fires on time, and is denied at invoke,
+    # so the symptom is a watchdog that has simply never run. Add the
+    # ARN in the same change that adds the schedule.
     resources = [
       aws_lambda_function.orchestrator.arn,
       aws_lambda_function.canary.arn,
+      aws_lambda_function.reaper.arn,
     ]
   }
 }

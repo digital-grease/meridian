@@ -12,10 +12,23 @@ data "aws_instances" "by_tag" {
     values = [var.instance_name_tag]
   }
 
-  filter {
-    name   = "instance-state-name"
-    values = ["pending", "running", "stopped", "stopping", "shutting-down"]
-  }
+  # Deliberately the `instance_state_names` argument and NOT a second
+  # filter block, which is what this used to be.
+  #
+  # The provider applies its own instance_state_names on top of whatever
+  # filters it is given, and that argument defaults to ["running"]. So a
+  # filter naming the other states was dead weight: the running-only
+  # default stayed in force and a stopped instance was invisible to the
+  # lookup. local.instance_id then resolved to "" via the try(), and the
+  # precondition in terraform_data.validate_instance below failed with a
+  # message about a missing Name tag, which is not the problem and sends
+  # you looking in the wrong place.
+  #
+  # This matters because the cohabit instance is stopped most of the
+  # week by design. Stopped is the NORMAL state to run terraform in, so
+  # the tag-lookup fallback was broken in the common case and only
+  # appeared to work when someone happened to apply mid-run.
+  instance_state_names = ["pending", "running", "stopped", "stopping", "shutting-down"]
 }
 
 locals {

@@ -69,6 +69,30 @@ SSM_COMMAND_TIMEOUT_SECONDS = int(
     os.environ.get("SSM_COMMAND_TIMEOUT_SECONDS", "600") or "600"
 )
 
+# The run budget that the comment above says does not exist on this side.
+#
+# It does. AWS-RunShellScript carries its own `executionTimeout` document
+# parameter, and when the SendCommand below omits it the document default
+# applies, which is 3600 s. That is a real ceiling on the wrapper, imposed
+# here, by us, silently: at one hour SSM SIGKILLs the shell and reports
+# ResponseCode 137 with StatusDetails ExecutionTimedOut.
+#
+# 2026-W34 is what that costs. Sampling had grown to two Anthropic runners
+# plus ollama when opus-5 joined opus-4-8 in ca9b0cc, so the run needed
+# about 2h10m. It was killed at 10:00:00 UTC having written no manifest,
+# which 404'd the publish workflow. Worse, SIGKILL cannot be trapped, so
+# self_stop_if_needed in scripts/run-weekly.sh never ran and the
+# g5.2xlarge billed roughly 18 idle hours before a human noticed.
+#
+# Set it explicitly and generously. This is a ceiling for a runaway run,
+# not a schedule: a healthy run stops the instance when it finishes and
+# never approaches it. Keep it well clear of the real runtime, because
+# every hour it is too tight is a week of data lost, while every hour it
+# is too loose costs nothing unless the run has already hung.
+SSM_EXECUTION_TIMEOUT_SECONDS = int(
+    os.environ.get("SSM_EXECUTION_TIMEOUT_SECONDS", "21600") or "21600"
+)
+
 # Optional: where to drop a run-log record when a Monday dies before the
 # pipeline ever starts. Empty means "not configured", and the record is
 # logged to CloudWatch only.
@@ -456,11 +480,17 @@ def _send_wrapper(we_own_lifecycle: bool) -> str:
     send_resp = ssm.send_command(
         InstanceIds=[INSTANCE_ID],
         DocumentName="AWS-RunShellScript",
-        Parameters={"commands": [cmd]},
+        Parameters={
+            "commands": [cmd],
+            # The EXECUTION ceiling. Omitting this does not mean "no
+            # limit", it means the document default of 3600 s, which is
+            # how 2026-W34 died. See SSM_EXECUTION_TIMEOUT_SECONDS above.
+            "executionTimeout": [str(SSM_EXECUTION_TIMEOUT_SECONDS)],
+        },
         # DELIVERY deadline only: how long SSM keeps trying to hand this
         # command to the agent before marking it DeliveryTimedOut. It has
-        # no bearing on how long the wrapper may run, which the wrapper
-        # itself owns. See SSM_COMMAND_TIMEOUT_SECONDS above.
+        # no bearing on how long the wrapper may run once it has started.
+        # See SSM_COMMAND_TIMEOUT_SECONDS above.
         TimeoutSeconds=SSM_COMMAND_TIMEOUT_SECONDS,
         Comment="meridian weekly pipeline (fire-and-forget)",
     )

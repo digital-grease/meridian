@@ -124,6 +124,10 @@ resource "aws_lambda_function" "orchestrator" {
       # Read by _send_wrapper as the SSM DELIVERY deadline. Until 2026-08
       # the function never read this at all and hardcoded 600.
       SSM_COMMAND_TIMEOUT_SECONDS = tostring(var.ssm_command_timeout_seconds)
+      # The actual run ceiling, passed as the AWS-RunShellScript
+      # `executionTimeout` document parameter. Unset means 3600 s, not
+      # unlimited, which is what killed 2026-W34 mid-run.
+      SSM_EXECUTION_TIMEOUT_SECONDS = tostring(var.ssm_execution_timeout_seconds)
       # Destination for the failure run-log record written when a Monday
       # dies before the pipeline starts. Leave the bucket empty to turn
       # the S3 write off; the record is still logged to CloudWatch.
