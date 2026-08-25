@@ -358,6 +358,22 @@
       <code>2026-W30</code>, recurring the following week. Affects the
       odd-week frontier slot (<code>gpt-5.5</code>) and the
       <code>llama3.2:3b</code> local baseline.</dd>
+
+    <dt><code>2026-W34</code> &mdash; all runners</dt>
+    <dd>No samples published, for any model. Unlike the two weeks above
+      the run did start on time and sampled for a full hour before it
+      was killed mid-capture. The dispatch mechanism applies a default
+      execution ceiling of one hour that we had never overridden, and
+      the roster had quietly outgrown it: adding
+      <code>claude-opus-5</code> alongside <code>claude-opus-4-8</code>
+      took the week to roughly two hours and ten minutes of sampling.
+      No manifest was written, so nothing reached the archive. Partial
+      raw samples for the models that had completed remain on the
+      sampling host and will not be published, because half a week&rsquo;s
+      capture presented as the week would misstate exactly what this
+      record is for. Affects the even-week frontier slot
+      (<code>claude-opus-4-8</code> and <code>claude-opus-5</code>) and
+      the <code>llama3.2:3b</code> local baseline.</dd>
   </dl>
 
   <p>
@@ -373,9 +389,23 @@
   </p>
 
   <p>
-    Neither week was re-sampled. A run today would carry today's model
-    behavior under a July label, which is precisely the substitution
-    this record exists to make visible. The two weeks stay empty.
+    <code>2026-W34</code> failed differently, and the difference is
+    worth stating because it is the fix for the two weeks above being
+    tested. Detection worked: the run went red the same morning, the
+    alert was sent, and an issue was filed within seconds. What the
+    kill also did was bypass the step where the sampling host shuts
+    itself down, so a GPU instance billed for eighteen idle hours
+    before a human noticed. Both the missing execution ceiling and the
+    unguarded shutdown have since been fixed, the second with a
+    scheduled check that stops the host when a run has ended without
+    stopping it.
+  </p>
+
+  <p>
+    None of these weeks was re-sampled. A run today would carry
+    today's model behavior under an earlier label, which is precisely
+    the substitution this record exists to make visible. The weeks stay
+    empty.
   </p>
 
   <p class="callout">

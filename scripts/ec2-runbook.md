@@ -266,3 +266,94 @@ the longitudinal record. Options at that point are an On-Demand Capacity
 Reservation for the Monday window (bills continuously, so it conflicts
 with the infra budget target) or negotiating a different cohabitation
 host with specter.
+
+## Recovery: instance left running after a run
+
+Alert subjects:
+
+- `[meridian] reaper stopped an instance the weekly run left running`
+- `[meridian] ATTENTION: instance still running, reaper could not verify it is idle`
+- `[meridian] ATTENTION: instance running after meridian finished, but it is busy`
+
+`scripts/run-weekly.sh` stops the instance itself on every exit path it
+can reach. The qualifier is the point: the stop is a function call, not
+a trap, and no trap survives `SIGKILL` anyway. Anything that kills the
+wrapper outright skips it, and a g5.2xlarge left running costs roughly
+$1.21/hour against an infra budget of about $45/month.
+
+`meridian-reaper` (infra/terraform/ec2-cohabit/reaper.tf) runs hourly
+and cleans up after exactly that. It stops the instance only when
+meridian started the current boot and meridian's own run has already
+reached a terminal status, and it re-checks that the box is idle before
+acting. A boot that meridian did not start is specter's and is never
+touched.
+
+**Every reaper alert is a bug report.** The reaper firing means the
+wrapper did not stop its own instance, and that cause is still there
+whether or not the box got stopped. Do not close the alert on the stop
+alone.
+
+1. Find the run it cleaned up after:
+
+   ```bash
+   aws ssm list-command-invocations \
+       --region us-east-2 --details --max-items 5 \
+       --query 'CommandInvocations[].{Cmd:CommandId,Status:Status,Code:ResponseCode,Elapsed:ExecutionElapsedTime,Req:RequestedDateTime}' \
+       --output table
+   ```
+
+2. Read the status. `TimedOut` with `ResponseCode 137` and an
+   `ExecutionElapsedTime` suspiciously close to a round number is SSM
+   killing the wrapper at the `executionTimeout` ceiling, which is what
+   happened in 2026-W34 at exactly `PT1H0.004S`. Raise
+   `ssm_execution_timeout_seconds` and re-apply. Any other terminal
+   status means the wrapper died some other way; go to
+   `/data/meridian/logs/run-weekly.log` for the cause.
+
+3. If the alert says the reaper *could not verify* the box is idle, it
+   deliberately did not stop it and the instance is still billing.
+   Confirm nothing is running, then stop it by hand:
+
+   ```bash
+   aws ec2 stop-instances --instance-ids <id> --region us-east-2
+   ```
+
+4. If the alert says the box is *busy*, that is most likely specter work
+   started after meridian finished. Nothing is wrong except meridian's
+   failed self-stop. Stop it when the box is free.
+
+A run killed part-way writes no manifest, so the publish workflow will
+404 for that week. Once the cause is fixed and a run has completed,
+publish it with
+`gh workflow run weekly-pipeline.yml -f week=<ISO week>`.
+
+## When a run finishes after 13:00 UTC
+
+The publish workflow reads S3 on a fixed schedule and does not come back
+later. A run that finishes after it has already gone red leaves a
+complete, healthy manifest sitting in S3 that nothing will ever commit,
+and the dashboard silently keeps serving the previous week.
+
+This is not hypothetical and it is easy to miss: 2026-W33 sampled
+successfully at 16:31 UTC after capacity retries pushed the start to
+16:04, three hours after the 13:00 publish had already 404'd and filed
+its issue. The manifest sat unpublished for eight days while the failure
+looked identical to a week that produced no data at all.
+
+Before assuming a red publish means a lost week, check whether the data
+exists:
+
+```bash
+aws s3 ls s3://meridian-archive-prod/meridian/manifests/ --region us-east-2 | tail -5
+```
+
+If the week's manifest is there, nothing needs re-sampling. Publish it:
+
+```bash
+gh workflow run weekly-pipeline.yml --ref main -f week=<ISO week>
+```
+
+The `health` job may still go red on a data-quality finding. That is by
+design and does not block the site: the site build gates on the
+`publish` job's `artifacts_committed` output, not on the workflow's
+conclusion.
