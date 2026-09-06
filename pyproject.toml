@@ -39,7 +39,7 @@ analysis-heavy = [
   # Ceiling is <6 (not <5) so uv can pull sentence-transformers 5.x, which is
   # the only line that permits transformers>=5, required to clear the HIGH
   # transformers RCE advisories (GHSA LightGlue/Trainer, patched 5.5.0).
-  "sentence-transformers>=3.0,<6",
+  "sentence-transformers>=6,<7",
   "numpy>=1.26,<3",
 ]
 changepoint = [
