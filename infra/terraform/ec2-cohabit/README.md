@@ -43,12 +43,37 @@ The companion modules are:
   via the AWS-native `schedule_expression_timezone` field — no manual
   DST math.
 
+## State
+
+State for this stack is shared in S3 at
+`s3://meridian-tfstate-421515025815/meridian/ec2-cohabit.tfstate` (versioned,
+encrypted, public access blocked, TLS only) with an S3-native lock
+(`use_lockfile`). Never keep a local `terraform.tfstate` here: until
+2026-10 each operator host kept its own, and the copy on one host sat
+weeks behind the live infrastructure while another host applied.
+
+The state bucket is bootstrapped once with the AWS CLI rather than by
+Terraform, since a stack cannot create its own backend.
+
+Credentials come from the environment. The provider pins
+`aws_profile = "tf"` through `terraform.tfvars`, but the backend does not
+read variables, so set the profile for every command:
+
+```bash
+AWS_PROFILE=tf terraform init
+```
+
+A host that still has a local state file from before the move should run
+`terraform init -reconfigure` and then delete the local file. Do not use
+`-migrate-state` there: it would copy that host's state over the shared
+one.
+
 ## Apply
 
 ```bash
 cd infra/terraform/ec2-cohabit
 
-terraform init
+AWS_PROFILE=tf terraform init
 terraform plan \
   -var alert_email="you@example.com" \
   -var archive_bucket_name="<bucket from ../s3/>" \

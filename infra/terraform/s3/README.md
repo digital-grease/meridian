@@ -30,11 +30,36 @@ between storage classes and never expires anything, current or non-current.
   - **GitHub Actions OIDC role** (opt-in via `enable_github_oidc_role`).
     Preferred when the weekly pipeline runs in GitHub Actions.
 
+## State
+
+State for this stack is shared in S3 at
+`s3://meridian-tfstate-421515025815/meridian/s3.tfstate` (versioned,
+encrypted, public access blocked, TLS only) with an S3-native lock
+(`use_lockfile`). Never keep a local `terraform.tfstate` here: until
+2026-10 each operator host kept its own, and the copy on one host sat
+weeks behind the live infrastructure while another host applied.
+
+The state bucket is bootstrapped once with the AWS CLI rather than by
+Terraform, since a stack cannot create its own backend.
+
+Credentials come from the environment. The provider pins
+`aws_profile = "tf"` through `terraform.tfvars`, but the backend does not
+read variables, so set the profile for every command:
+
+```bash
+AWS_PROFILE=tf terraform init
+```
+
+A host that still has a local state file from before the move should run
+`terraform init -reconfigure` and then delete the local file. Do not use
+`-migrate-state` there: it would copy that host's state over the shared
+one.
+
 ## Apply
 
 ```bash
 cd infra/terraform/s3
-terraform init
+AWS_PROFILE=tf terraform init
 terraform plan -var bucket_name=meridian-archive-prod
 terraform apply -var bucket_name=meridian-archive-prod
 ```
