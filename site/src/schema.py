@@ -263,6 +263,19 @@ class MetricRecord(Frozen):
     length: LengthStats
     stance: Stance = "na"
     stance_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    #: Why ``stance`` is what it is when the classifier did not score the
+    #: cell, as a short code: ``runner-error`` / ``classifier-error`` (the
+    #: classifier call failed), ``unparseable``, ``no-substantive-response``,
+    #: ``empty-response`` or ``axis-excluded``. None on a scored cell and
+    #: when stance is disabled.
+    #:
+    #: Exists because ``stance="na"`` at confidence 0.0 reads the same
+    #: whether the response took no position or the classifier was never
+    #: reached. 2026-W36 to W38 published the second as the first for
+    #: every model. Only the code is published, never the provider's
+    #: error text. Defaulted so manifests published before 2026-10-05
+    #: stay valid; a widening change, so SCHEMA_VERSION does not move.
+    stance_reason: str | None = None
     embedding_centroid_shift: float | None = Field(default=None, ge=0.0)
     refusal_drift: DriftTest | None = None
     hedge_drift: DriftTest | None = None

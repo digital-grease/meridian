@@ -62,11 +62,14 @@ from meridian.pipeline.manifest_writer import (
 from meridian.pipeline.embedding_loader import build_embedding_model
 from meridian.pipeline.run_log import append_run_log, read_run_log
 from meridian.pipeline.snapshot import emit_responses_snapshot, snapshot_path
-from meridian.pipeline.stance_collect import collect_stance_results
+from meridian.pipeline.stance_collect import (
+    collect_stance_results,
+    stance_call_health,
+)
 from meridian.pipeline.stance_runner import build_stance_classifier
 from meridian.sampling.cost import BudgetLedger, compute_actual_cost, guard_runners
 from meridian.sampling.orchestrator import Orchestrator, SamplingPlan
-from meridian.sampling.pricing import TemperaturePlan, estimate_cost
+from meridian.sampling.pricing import TemperaturePlan, calls_per_pair, estimate_cost
 from meridian.sampling.weeks import iso_week_for
 from meridian.storage import LocalSampleStore
 from meridian.storage.s3 import maybe_build_uploader
@@ -172,6 +175,18 @@ async def _cmd_run(args: argparse.Namespace) -> int:
         temperature_plan=_temperature_plan(plan),
     )
     print(est.pretty())
+
+    # The roster this run owes, fixed before any request is sent, so the
+    # health check can judge every runner that was due rather than only
+    # the ones that came back with results. Same per-pair arithmetic as
+    # the estimate above: a model that rejects temperature=0 is not
+    # expected to fill that batch.
+    expected_samples = {
+        f"{r.provider}/{r.model_id}": len(corpus.all()) * calls_per_pair(
+            r, plan.samples_per_pair, _temperature_plan(plan),
+        )
+        for r in runners
+    }
 
     # Read defensively: callers that build the Namespace by hand (the
     # run-log integration tests do) predate this flag, and a missing
@@ -282,6 +297,7 @@ async def _cmd_run(args: argparse.Namespace) -> int:
         outcome=outcome,
         estimated_cost_usd=est.total,
         note=run_note,
+        expected_samples=expected_samples,
     )
 
     display_info = _display_info_for(config)
@@ -366,6 +382,20 @@ async def _maybe_collect_stance(
     for r in results.values():
         by_stance[r.stance] = by_stance.get(r.stance, 0) + 1
     print(f"stance: classified {len(results)} pair(s) — {by_stance}")
+    health = stance_call_health(results)
+    if health.degraded:
+        # Loud on purpose: the manifest still publishes, with stance "na"
+        # at confidence 0.0 on the failed cells, and that row looks like a
+        # finding unless something says it is a dead classifier.
+        message = (
+            f"STANCE CLASSIFIER DEGRADED: {health.errored} of "
+            f"{health.attempted} classifier call(s) failed for {week_id} "
+            f"({config.stance.provider}/{config.stance.model_id}). Stance "
+            f"for those cells is unmeasured, not neutral. First failure: "
+            f"{(health.first_error or '')[:200]}"
+        )
+        _log.error(message)
+        print(message, file=sys.stderr)
     return results
 
 
@@ -398,6 +428,7 @@ def _append_run_log_entry(
     outcome,
     estimated_cost_usd: float,
     note: str | None = None,
+    expected_samples: dict[str, int] | None = None,
 ) -> None:
     """Write one RunLogEntry to data/run_log.jsonl for this invocation.
 
@@ -412,6 +443,10 @@ def _append_run_log_entry(
         for prompt_id in store.prompts_for(week_id, model_id):
             all_samples.extend(store.read(week_id, model_id, prompt_id))
     cost_report = compute_actual_cost(all_samples)
+    stored_samples: dict[str, int] = {}
+    for sample in all_samples:
+        key = f"{sample.provider}/{sample.model_id}"
+        stored_samples[key] = stored_samples.get(key, 0) + 1
 
     log_path = REPO_ROOT / "data" / "run_log.jsonl"
     append_run_log(
@@ -424,6 +459,8 @@ def _append_run_log_entry(
         estimated_cost_usd=estimated_cost_usd,
         actual_cost_usd=cost_report.total_usd,
         note=note,
+        expected_samples=expected_samples,
+        stored_samples=stored_samples,
     )
     print(
         f"run log: estimated ${estimated_cost_usd:.2f} / "

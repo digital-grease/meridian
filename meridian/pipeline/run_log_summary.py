@@ -36,15 +36,29 @@ class WeeklySummary:
 def summarize_weekly(entries: Iterable[RunLogEntry]) -> list[WeeklySummary]:
     """Fold RunLogEntries into one WeeklySummary per week_id.
 
-    A run can be retried within the same week; the latest finished_at
-    per week wins. Pairs counts, samples, and costs take the latest
-    entry's values rather than summing retries — the last entry is the
-    authoritative state at week close.
+    A run can be retried or resumed within the same week, and the two
+    kinds of number in an entry fold differently:
+
+    * Samples are summed. Each invocation counts only the samples it
+      wrote itself, so a resumed run that skipped every stored pair
+      records 0 here. Taking the latest entry alone reported a week whose
+      first run wrote 750 samples and whose resume wrote 0 as a week of
+      0 samples, and a week whose resume finished the job as a week of
+      only the resume's share.
+    * Pair counts, errors and costs come from the latest entry. A retry
+      re-attempts the pairs that failed and skips the ones already stored,
+      so its pair counts are the state of the week at close, and
+      ``actual_cost_usd`` is already summed over every sample stored for
+      the week.
 
     Ordering: newest week first (reverse chronological by week_id).
     """
     by_week: dict[str, RunLogEntry] = {}
+    samples_by_week: dict[str, int] = {}
     for e in entries:
+        samples_by_week[e.week_id] = (
+            samples_by_week.get(e.week_id, 0) + e.total_samples_written
+        )
         prev = by_week.get(e.week_id)
         if prev is None or e.finished_at > prev.finished_at:
             by_week[e.week_id] = e
@@ -60,7 +74,7 @@ def summarize_weekly(entries: Iterable[RunLogEntry]) -> list[WeeklySummary]:
             WeeklySummary(
                 week_id=e.week_id,
                 latest_finished_at=e.finished_at,
-                total_samples_written=e.total_samples_written,
+                total_samples_written=samples_by_week[e.week_id],
                 pairs_complete=e.pairs_complete,
                 pairs_skipped=e.pairs_skipped,
                 pairs_failed=e.pairs_failed,

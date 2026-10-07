@@ -159,6 +159,12 @@ def test_cmd_run_appends_run_log_entry(
     assert entry.actual_cost_usd == 0.0
     # per_runner_samples keys are "provider/model_id"
     assert any("claude-opus-4-7" in k for k in entry.per_runner_samples)
+    # The roster and what it owed are fixed before the first request, so
+    # the health check can judge a runner that wrote nothing at all.
+    assert entry.expected_runners == ["fake/claude-opus-4-7"]
+    assert entry.expected_samples == {"fake/claude-opus-4-7": 2 * 3}
+    assert entry.stored_samples == {"fake/claude-opus-4-7": 2 * 3}
+    assert entry.error_summary == {}
 
 
 def test_cmd_run_dry_run_does_not_append(

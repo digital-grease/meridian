@@ -34,6 +34,7 @@ the ~$30/week sampling spend.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
 from meridian.analysis.refusal import classify_refusal
 from meridian.analysis.stance import (
@@ -125,3 +126,54 @@ async def collect_stance_results(
                 )
             out[(prompt_id, model_id)] = result
     return out
+
+
+#: Reasons that mean the classifier was never asked, so the pair says
+#: nothing about whether the classifier works.
+_NOT_ASKED = frozenset({
+    "axis-excluded", "no-substantive-response", "empty-response",
+})
+
+#: Reason prefixes that mean the classifier was asked and the call failed.
+_CALL_FAILED = ("runner-error", "classifier-error")
+
+
+@dataclass(frozen=True)
+class StanceCallHealth:
+    """How the week's stance classifier calls went.
+
+    ``attempted`` counts pairs the classifier was actually asked about,
+    cache hits included; ``errored`` counts those whose call failed.
+    ``first_error`` is one failure reason, for the log line.
+    """
+
+    attempted: int
+    errored: int
+    first_error: str | None
+
+    @property
+    def degraded(self) -> bool:
+        """More than half the calls failed.
+
+        2026-W36 to W38 lost every stance score, for every model, to an
+        exhausted balance on the classifier's key, and the run printed an
+        unremarkable ``{'na': 30}`` tally. A classifier that fails on most
+        of its calls has not measured the week, whatever the tally says.
+        """
+        return self.attempted > 0 and self.errored * 2 > self.attempted
+
+
+def stance_call_health(
+    results: dict[tuple[str, str], StanceResult],
+) -> StanceCallHealth:
+    attempted = errored = 0
+    first_error: str | None = None
+    for result in results.values():
+        if result.reason in _NOT_ASKED:
+            continue
+        attempted += 1
+        if result.reason and result.reason.startswith(_CALL_FAILED):
+            errored += 1
+            if first_error is None:
+                first_error = result.reason
+    return StanceCallHealth(attempted, errored, first_error)

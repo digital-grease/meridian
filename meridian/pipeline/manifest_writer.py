@@ -83,6 +83,20 @@ _CHANGE_POINT_METRICS: tuple[tuple[str, str], ...] = (
 )
 
 
+def _stance_reason_code(reason: str | None) -> str | None:
+    """The publishable part of a StanceResult reason.
+
+    Reasons carry detail after a colon (``runner-error: <provider error
+    text>``, ``unparseable: '<raw output>'``). Only the code before it is
+    published: the detail is an upstream error body or classifier output,
+    neither of which belongs in the public record.
+    """
+    if not reason:
+        return None
+    code = reason.split(":", 1)[0].strip()
+    return code or None
+
+
 def _metric_record_dict(
     *,
     prompt_id: str,
@@ -91,6 +105,7 @@ def _metric_record_dict(
     bootstrap_seed: int | None,
     stance_stance: str = "na",
     stance_confidence: float | None = None,
+    stance_reason: str | None = None,
     centroid_shift: float | None = None,
     prior_samples: list[Sample] | None = None,
     insufficient_data_n: int = MIN_SAMPLES_FOR_PUBLICATION,
@@ -211,6 +226,7 @@ def _metric_record_dict(
         },
         "stance": stance_stance,
         "stance_confidence": stance_confidence,
+        "stance_reason": stance_reason,
         "embedding_centroid_shift": centroid_shift,
         "refusal_drift": _raw_drift_entry(drift_p_values["refusal"], window),
         "hedge_drift": _raw_drift_entry(drift_p_values["hedge"], window),
@@ -659,6 +675,9 @@ def _metrics_for_week(
                     bootstrap_seed=bootstrap_seed,
                     stance_stance=stance.stance if stance else "na",
                     stance_confidence=stance.confidence if stance else None,
+                    stance_reason=_stance_reason_code(
+                        stance.reason if stance else None
+                    ),
                     centroid_shift=cshift,
                     prior_samples=prior_samples if include_drift_tests else None,
                     insufficient_data_n=insufficient_data_n,

@@ -20,7 +20,10 @@ import pytest
 from meridian.analysis.stance import StanceResult
 from meridian.corpus import load_corpus
 from meridian.pipeline.manifest_writer import RunnerDisplayInfo, build_manifest
-from meridian.pipeline.stance_collect import collect_stance_results
+from meridian.pipeline.stance_collect import (
+    collect_stance_results,
+    stance_call_health,
+)
 from meridian.runners.base import Sample
 from meridian.storage import LocalSampleStore
 
@@ -155,3 +158,80 @@ async def test_collect_handles_all_refusals_as_na(tmp_path: Path):
     pid = political_pids[0]
     assert out[(pid, model_id)].stance == "na"
     assert out[(pid, model_id)].reason == "no-substantive-response"
+
+
+class _DeadStanceClassifier:
+    """The 2026-W36 to W38 shape: every call fails on the classifier's
+    exhausted balance. The real classifier turns that into a runner-error
+    result rather than raising."""
+
+    async def classify(self, *, prompt_id, axis, prompt_text, response_text):
+        return StanceResult(
+            stance="na", confidence=0.0,
+            reason="runner-error: Error code: 400 - Your credit balance is too low",
+        )
+
+
+@pytest.mark.asyncio
+async def test_a_dead_classifier_is_degraded_and_says_why(tmp_path: Path):
+    week_id = "2026-W38"
+    model_id = "stub-model"
+    corpus = load_corpus()
+    political = [p.id for p in corpus.by_axis("political")][:3]
+    neutral = [p.id for p in corpus.by_axis("neutral-control")][:2]
+    store = LocalSampleStore(tmp_path)
+    _seed_samples(store, week_id, model_id, political + neutral)
+
+    results = await collect_stance_results(
+        classifier=_DeadStanceClassifier(), store=store, corpus=corpus,
+        week_id=week_id,
+    )
+    health = stance_call_health(results)
+    # Axis-excluded pairs never reach the classifier and do not dilute it.
+    assert (health.attempted, health.errored) == (3, 3)
+    assert health.degraded
+    assert health.first_error.startswith("runner-error")
+
+    manifest = build_manifest(
+        store=store, corpus=corpus, week_id=week_id,
+        display_info={model_id: RunnerDisplayInfo(model_id, "Stub", "stub")},
+        bootstrap_seed=1, stance_by_key=results,
+    )
+    by_prompt = {m["prompt_id"]: m for m in manifest["metrics"]}
+    # The code is published; the provider's error text is not.
+    assert by_prompt[political[0]]["stance_reason"] == "runner-error"
+    assert by_prompt[neutral[0]]["stance_reason"] == "axis-excluded"
+
+
+def test_half_failed_is_not_yet_degraded():
+    results = {
+        ("p1", "m"): StanceResult("na", 0.0, "runner-error: x"),
+        ("p2", "m"): StanceResult("pro", 0.85, None),
+        ("p3", "m"): StanceResult("na", 1.0, "axis-excluded"),
+    }
+    health = stance_call_health(results)
+    assert (health.attempted, health.errored) == (2, 1)
+    assert not health.degraded
+
+
+@pytest.mark.asyncio
+async def test_the_stance_step_says_so_loudly(tmp_path: Path, monkeypatch, capsys):
+    from meridian.config import PipelineConfig, SamplingSpec
+    from meridian.pipeline import cli as cli_module
+
+    corpus = load_corpus()
+    political = [p.id for p in corpus.by_axis("political")][:2]
+    store = LocalSampleStore(tmp_path)
+    _seed_samples(store, "2026-W38", "stub-model", political)
+    monkeypatch.setattr(
+        cli_module, "build_stance_classifier",
+        lambda spec, repo_root: _DeadStanceClassifier(),
+    )
+
+    await cli_module._maybe_collect_stance(
+        config=PipelineConfig(sampling=SamplingSpec(), runners=[]),
+        store=store, corpus=corpus, week_id="2026-W38",
+    )
+    err = capsys.readouterr().err
+    assert "STANCE CLASSIFIER DEGRADED: 2 of 2" in err
+    assert "2026-W38" in err

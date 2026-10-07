@@ -111,3 +111,22 @@ def test_weekly_summary_pairs_total():
         runner_count=0, error_count=0, cost_overrun_pct=None,
     )
     assert s.pairs_total == 6
+
+
+def test_summarize_sums_samples_across_a_resumed_week():
+    """2026-W19's shape: the first invocation wrote 750 samples, a later
+    one found every pair stored and wrote 0. The week holds 750 samples,
+    not the 0 the latest entry alone reports."""
+    first = _entry(
+        week_id="2026-W19", finished_at="2026-05-04T16:00:00+00:00",
+        samples=750, complete=30,
+    )
+    resume = _entry(
+        week_id="2026-W19", finished_at="2026-05-11T09:30:00+00:00",
+        samples=0, complete=0, skipped=60,
+    )
+    [s] = summarize_weekly([first, resume])
+    assert s.total_samples_written == 750
+    # Pair state is still the latest entry's: it is the week at close.
+    assert s.pairs_skipped == 60
+    assert s.latest_finished_at == "2026-05-11T09:30:00+00:00"

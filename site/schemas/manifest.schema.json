@@ -297,6 +297,12 @@
           "title": "Refusal Rate",
           "type": "number"
         },
+        "rejected_samples": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Rejected Samples",
+          "type": "integer"
+        },
         "stance": {
           "default": "na",
           "enum": [
@@ -321,6 +327,18 @@
           ],
           "default": null,
           "title": "Stance Confidence"
+        },
+        "stance_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stance Reason"
         },
         "unusable_samples": {
           "default": 0,
