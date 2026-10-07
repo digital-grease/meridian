@@ -83,6 +83,14 @@ INSTANCE_ID=$(curl -sS \
   -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" \
   http://169.254.169.254/latest/meta-data/instance-id || true)
 
+# A real newline, for building alert bodies. The bodies used to carry
+# "\n" inside double quotes, which bash passes through as a backslash and
+# an n, so every SNS email arrived as one long line with literal "\n"
+# markers in it. printf '%b' would interpret them, but it would also
+# interpret any backslash in the health detail or the run_log line pasted
+# into the same body.
+NL=$'\n'
+
 publish() {
   # SNS alerts are best-effort. CloudWatch / journald is the truth.
   #
@@ -94,6 +102,10 @@ publish() {
   # running at roughly $1/hour, which is the exact alert least affordable
   # to lose. Commas and colons only.
   local subject="$1" body="$2"
+  # SNS caps Subject at 100 characters and rejects a longer one, which the
+  # swallowed failure below would turn into an alert that never arrives.
+  # "[meridian] " takes 11 of them.
+  subject="${subject:0:89}"
   if [ -z "$SNS_TOPIC_ARN" ] || [ "$SNS_TOPIC_ARN" = "REPLACE-WITH-SNS-TOPIC-ARN" ]; then
     log "(no SNS_TOPIC_ARN set; skipping publish: $subject)"
     return 0
@@ -222,7 +234,7 @@ log "pre-flight: scanning for specter processes"
 if pgrep -af 'specter' >/dev/null 2>&1; then
   PROC_DETAIL=$(pgrep -af 'specter' | head -5)
   defer_and_exit "deferred, specter process detected" \
-    "pgrep matched:\n${PROC_DETAIL}\nSkipping this week per the no-backfill policy. WE_OWN_LIFECYCLE=$WE_OWN_LIFECYCLE (1 means this instance is being stopped again now)."
+    "pgrep matched:${NL}${PROC_DETAIL}${NL}Skipping this week per the no-backfill policy. WE_OWN_LIFECYCLE=$WE_OWN_LIFECYCLE (1 means this instance is being stopped again now)."
 fi
 log "pre-flight: clear"
 
@@ -391,30 +403,40 @@ RUN_LOG_TAIL=$(tail -1 "$REPO_DIR/data/run_log.jsonl" 2>/dev/null || echo "(no r
 # than letting it fall through to the failure branch by accident.
 HEALTH_RC=0
 HEALTH_DETAIL="(health check not run)"
+HEALTH_TITLE=""
+HEALTH_TITLE_FILE=$(mktemp 2>/dev/null || echo "/tmp/meridian-health-title.$$")
 if [ -f "$REPO_DIR/scripts/check_run_health.py" ]; then
   set +e
   HEALTH_DETAIL=$(uv run python "$REPO_DIR/scripts/check_run_health.py" "$WEEK" \
-    --run-log "$REPO_DIR/data/run_log.jsonl" 2>&1)
+    --run-log "$REPO_DIR/data/run_log.jsonl" --title-file "$HEALTH_TITLE_FILE" 2>&1)
   HEALTH_RC=$?
   set -e
+  HEALTH_TITLE=$(head -1 "$HEALTH_TITLE_FILE" 2>/dev/null || true)
   log "run health check rc=$HEALTH_RC: $HEALTH_DETAIL"
 fi
+rm -f "$HEALTH_TITLE_FILE" 2>/dev/null || true
 
+# SNS is for findings a human must act on, and nothing else. A success
+# email every Monday, and a "completed with warnings" one most Mondays,
+# trained the inbox to skip [meridian] mail, which is how 2026-W36's
+# empty Anthropic balance sat unread until it also cost 2026-W38. Clean
+# and warn verdicts go to the log here; the publish workflow's health job
+# puts warnings in its step summary and annotations. Only a failed health
+# check or a failed pipeline publishes.
 if [ "$RUN_RC" -eq 0 ] && [ "$HEALTH_RC" -eq 3 ]; then
-  publish "weekly run completed with warnings ($WEEK)" \
-    "The pipeline exited 0 and the run is usable, but the health check raised a warning. Affected cells may be under-sampled, so read the detail before treating this week as comparable.\n\nHealth check:\n${HEALTH_DETAIL}\n\nWall-clock: ${ELAPSED}s\nWE_OWN_LIFECYCLE=$WE_OWN_LIFECYCLE\n\nRun-log entry:\n${RUN_LOG_TAIL}"
-  log "pipeline succeeded in ${ELAPSED}s but health check warned (rc=3)"
+  log "pipeline succeeded in ${ELAPSED}s, health check warned (rc=3, not alerted): ${HEALTH_TITLE:-no title}"
 elif [ "$RUN_RC" -eq 0 ] && [ "$HEALTH_RC" -ne 0 ]; then
-  publish "weekly run NOT HEALTHY ($WEEK, health rc=$HEALTH_RC)" \
-    "The pipeline exited 0 but the health check judged the week unusable. This is the 2026-08-10 shape: a run that reports success while its samples carry nothing measurable. Do not treat this week as comparable until someone has read the detail.\n\nHealth check:\n${HEALTH_DETAIL}\n\nWall-clock: ${ELAPSED}s\nWE_OWN_LIFECYCLE=$WE_OWN_LIFECYCLE\n\nRun-log entry:\n${RUN_LOG_TAIL}"
+  publish "${HEALTH_TITLE:-weekly run NOT HEALTHY ($WEEK, health rc=$HEALTH_RC)}" \
+    "The pipeline exited 0 but the health check judged the week unusable. Do not treat this week as comparable until someone has read the detail.${NL}${NL}Health check:${NL}${HEALTH_DETAIL}${NL}${NL}Wall-clock: ${ELAPSED}s${NL}WE_OWN_LIFECYCLE=$WE_OWN_LIFECYCLE${NL}${NL}Run-log entry:${NL}${RUN_LOG_TAIL}"
   log "pipeline succeeded in ${ELAPSED}s but health check FAILED the week (rc=$HEALTH_RC)"
 elif [ "$RUN_RC" -eq 0 ]; then
-  publish "weekly run succeeded ($WEEK)" \
-    "Wall-clock: ${ELAPSED}s\nWE_OWN_LIFECYCLE=$WE_OWN_LIFECYCLE\n\nHealth check:\n${HEALTH_DETAIL}\n\nRun-log entry:\n${RUN_LOG_TAIL}"
-  log "pipeline succeeded in ${ELAPSED}s"
+  log "pipeline succeeded in ${ELAPSED}s (not alerted: clean runs do not page)"
 else
-  publish "weekly run FAILED ($WEEK, rc=$RUN_RC)" \
-    "Wall-clock: ${ELAPSED}s\nWE_OWN_LIFECYCLE=$WE_OWN_LIFECYCLE\n\nLog tail:\n$(tail -80 "$LOG_FILE")\n\nRun-log entry (if any):\n${RUN_LOG_TAIL}"
+  # Health first: when the run died after writing its run_log entry, the
+  # health check already says which provider and why, and the log tail
+  # below it is 80 lines of the last thing that happened.
+  publish "weekly run FAILED ($WEEK, rc=$RUN_RC)${HEALTH_TITLE:+, $HEALTH_TITLE}" \
+    "Health check:${NL}${HEALTH_DETAIL}${NL}${NL}Wall-clock: ${ELAPSED}s${NL}WE_OWN_LIFECYCLE=$WE_OWN_LIFECYCLE${NL}${NL}Log tail:${NL}$(tail -80 "$LOG_FILE")${NL}${NL}Run-log entry (if any):${NL}${RUN_LOG_TAIL}"
   log "pipeline FAILED with rc=$RUN_RC in ${ELAPSED}s"
 fi
 

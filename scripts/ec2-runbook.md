@@ -155,7 +155,11 @@ Expected outcome:
 - Pre-flight passes (no specter processes; GPU idle).
 - Pipeline runs against the previous ISO week.
 - Raw + manifest + snapshot upload to S3.
-- SNS publishes a "weekly run succeeded" message.
+- No SNS message. A clean or warning run is logged only (look for
+  `pipeline succeeded` in the wrapper output); SNS fires only when the
+  health check fails the week or the pipeline itself fails, with the
+  finding in the subject, e.g. `PAGE 2026-W38 anthropic BILLING: 0/1200
+  samples`.
 - Wrapper exits 0; you're still in the SSM session.
 
 If the run completes cleanly, stop the instance from your laptop:
@@ -194,9 +198,9 @@ Watch CloudWatch Logs for the Lambda:
 aws logs tail /aws/lambda/meridian-orchestrator --region us-east-2 --follow
 ```
 
-The instance should start, the wrapper runs, SNS publishes "weekly
-run succeeded," and the wrapper stops the instance (because
-`WE_OWN_LIFECYCLE=1`).
+The instance should start, the wrapper runs and logs `pipeline
+succeeded` (a clean run sends no SNS message), and the wrapper stops the
+instance (because `WE_OWN_LIFECYCLE=1`).
 
 If everything works, the EventBridge Scheduler will fire the same
 flow automatically every Monday at 04:00 America/Chicago.

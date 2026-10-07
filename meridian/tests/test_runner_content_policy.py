@@ -434,19 +434,36 @@ _health = _ilu.module_from_spec(_spec)
 _spec.loader.exec_module(_health)
 
 
-def test_rejections_warn_and_do_not_fail():
+def test_rejections_are_reported_and_do_not_warn():
     """A hard gate here would go red every odd week for a condition
-    nobody can fix from this side, which is how an operator learns to
-    stop reading the alert."""
+    nobody can fix from this side, and a warning did the same thing more
+    quietly: every odd week from 2026-W35 warned about the same prompt.
+    A rejection is a measurement; it is said, not alerted on."""
     verdict = _health.rejection_health({
         "week_id": "2026-W33",
         "content_policy_rejections": {
             "openai/gpt-5.5": {"ref-wifi-unauthorized": 18}
         },
+        "expected_samples": {"openai/gpt-5.5": 600},
+    })
+
+    assert verdict.level == "ok"
+    assert "ref-wifi-unauthorized" in verdict.detail
+
+
+def test_rejections_across_much_of_a_runner_warn():
+    """Past a tenth of what the runner owed it is the platform's policy
+    moving, not one boundary prompt."""
+    verdict = _health.rejection_health({
+        "week_id": "2026-W33",
+        "content_policy_rejections": {
+            "openai/gpt-5.5": {f"p{i}": 20 for i in range(4)}
+        },
+        "expected_samples": {"openai/gpt-5.5": 600},
     })
 
     assert verdict.level == "warn"
-    assert "ref-wifi-unauthorized" in verdict.detail
+    assert verdict.tag == ("openai", "POLICY", "80/600 rejected")
 
 
 def test_no_rejections_is_silent():

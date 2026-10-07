@@ -177,6 +177,14 @@ jobs:
     timeout-minutes: 10
     outputs:
       health_detail: ${{ steps.check.outputs.health_detail }}
+      # The alert's subject line ("PAGE 2026-W38 anthropic BILLING: 0/1200
+      # samples"), the issue fingerprint (week/subject/class), whether an
+      # on-cadence runner lost most of its data, and every finding on its
+      # own line. All four are written on every verdict.
+      health_title: ${{ steps.check.outputs.health_title }}
+      health_fingerprint: ${{ steps.check.outputs.health_fingerprint }}
+      health_data_loss: ${{ steps.check.outputs.health_data_loss }}
+      health_report: ${{ steps.check.outputs.health_report }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -270,6 +278,9 @@ jobs:
           TOPIC_ARN: ${{ vars.ALERT_TOPIC_ARN }}
           WEEK: ${{ needs.publish.outputs.week }}
           HEALTH_DETAIL: ${{ needs.health.outputs.health_detail }}
+          HEALTH_TITLE: ${{ needs.health.outputs.health_title }}
+          HEALTH_REPORT: ${{ needs.health.outputs.health_report }}
+          HEALTH_DATA_LOSS: ${{ needs.health.outputs.health_data_loss }}
           PUBLISH_RESULT: ${{ needs.publish.result }}
           HEALTH_RESULT: ${{ needs.health.result }}
         run: |
@@ -280,7 +291,10 @@ jobs:
             exit 0
           fi
           RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          FINDING="${HEALTH_DETAIL:-}"
+          # One finding per line, worst first. health_report carries real
+          # newlines; health_detail is the same findings on one line and is
+          # only the fallback for a health job that predates the report.
+          FINDING="${HEALTH_REPORT:-${HEALTH_DETAIL:-}}"
           if [ -z "$FINDING" ]; then
             FINDING="the health job failed without reporting a finding; see the job log."
           fi
@@ -297,17 +311,31 @@ jobs:
           Recovery procedure: scripts/ec2-runbook.md
           Run: ${RUN_URL}"
           elif [ "${HEALTH_RESULT}" = "failure" ]; then
-            SUBJECT="[meridian] weekly run had failures (${WEEK})"
-            MESSAGE="The weekly run for ${WEEK} published its artifacts and then failed its
-          health check:
-
-            ${FINDING}
-
-          The manifest, snapshot and run_log for ${WEEK} are committed to main
+            # The title names the ISO week that was sampled, the provider
+            # and the class ("PAGE 2026-W38 anthropic BILLING: 0/1200
+            # samples"). "weekly run had failures" named none of them.
+            SUBJECT="[meridian] ${HEALTH_TITLE:-weekly run had failures (${WEEK})}"
+            if [ "${HEALTH_DATA_LOSS:-false}" = "true" ]; then
+              # No reassurance here. 2026-W36 and W38 lost every Anthropic
+              # sample, and an alert that opened by saying the dashboard was
+              # fine read as routine for two weeks.
+              CONTEXT="An on-cadence provider lost most or all of its samples for ${WEEK}.
+          Those cells are not measured this week and the dashboard is publishing
+          the gap. Fix the cause before the provider's next scheduled run, record
+          the loss in data/gaps.jsonl, and decide per the no-backfill policy
+          whether a recovery run is allowed."
+            else
+              CONTEXT="The manifest, snapshot and run_log for ${WEEK} are committed to main
           (append-only retention), and the site deploy is NOT blocked by this, so
           the dashboard is already serving the week. What needs a decision is the
           data: inspect the run_log entry, fix the cause, and decide per the
-          no-backfill policy whether to re-run or document the gap.
+          no-backfill policy whether to re-run or document the gap."
+            fi
+            MESSAGE="${HEALTH_TITLE:-The weekly run for ${WEEK} failed its health check.}
+
+          ${FINDING}
+
+          ${CONTEXT}
 
           Run: ${RUN_URL}"
           else
@@ -332,17 +360,25 @@ jobs:
       # Needs no AWS credentials at all, so `if: always()` also keeps it
       # off the credentials step's success. This is the durable record and
       # it must survive every way the SNS path can break.
+      #
+      # One issue per finding, not one per run. The fingerprint is week,
+      # subject and class ("2026-W38/anthropic/BILLING"); when an open
+      # issue already carries it, a re-run of this workflow comments on
+      # that issue instead of opening a duplicate next to it.
       - name: Open issue on failure
         if: always()
         uses: actions/github-script@v9
         env:
           WEEK: ${{ needs.publish.outputs.week }}
           HEALTH_DETAIL: ${{ needs.health.outputs.health_detail }}
+          HEALTH_TITLE: ${{ needs.health.outputs.health_title }}
+          HEALTH_FINGERPRINT: ${{ needs.health.outputs.health_fingerprint }}
+          HEALTH_REPORT: ${{ needs.health.outputs.health_report }}
+          HEALTH_DATA_LOSS: ${{ needs.health.outputs.health_data_loss }}
           PUBLISH_RESULT: ${{ needs.publish.result }}
           HEALTH_RESULT: ${{ needs.health.result }}
         with:
           script: |
-            const iso = new Date().toISOString().slice(0, 10);
             const run_url = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const week = process.env.WEEK || "the target week";
             const publishFailed = process.env.PUBLISH_RESULT === "failure";
@@ -350,12 +386,15 @@ jobs:
             // Same discriminator as the SNS step: which job failed, not
             // whether a finding happens to be present. A health job that
             // died before writing its output still failed the health job.
+            const report = (process.env.HEALTH_REPORT || process.env.HEALTH_DETAIL || "").trim();
             const finding =
-              (process.env.HEALTH_DETAIL || "").trim() ||
+              report ||
               "the health job failed without reporting a finding; see the job log.";
-            let title, body;
+            const dataLoss = process.env.HEALTH_DATA_LOSS === "true";
+            let title, body, fingerprint;
             if (publishFailed) {
-              title = `Pipeline publish failed: ${iso}`;
+              title = `Pipeline publish failed: ${week}`;
+              fingerprint = `${week}/publish/FAILED`;
               body = [
                 `The weekly publish step failed for ${week}, so no artifacts were committed`,
                 `and the site still shows the previous week. Sampling lives on the EC2`,
@@ -366,22 +405,39 @@ jobs:
                 `Re-run via the \`workflow_dispatch\` button on this workflow.`,
               ].join("\n");
             } else if (healthFailed) {
-              title = `Pipeline run had failures: ${iso}`;
+              title = (process.env.HEALTH_TITLE || "").trim() ||
+                `Pipeline run had failures: ${week}`;
+              fingerprint = (process.env.HEALTH_FINGERPRINT || "").trim() ||
+                `${week}/health/FAILED`;
+              // No "finding about the data rather than a publication
+              // outage" when a provider lost most of its samples: that
+              // sentence is what made 2026-W36 read as routine.
+              const context = dataLoss
+                ? [
+                    `An on-cadence provider lost most or all of its samples for ${week}.`,
+                    `Those cells are not measured this week. Fix the cause before the`,
+                    `provider's next scheduled run, record the loss in data/gaps.jsonl, and`,
+                    `decide per the no-backfill policy whether a recovery run is allowed.`,
+                  ]
+                : [
+                    `The raw manifest/snapshot/run_log for ${week} were committed`,
+                    `(append-only retention) and the site deploy went ahead, so this is a`,
+                    `finding about the data rather than a publication outage. Inspect the`,
+                    `run_log entry and the orchestrator Lambda CloudWatch logs, fix the cause,`,
+                    `and decide per the no-backfill policy whether to re-run or document the gap.`,
+                  ];
               body = [
-                `The weekly run published its artifacts but recorded failures:`,
+                `The weekly run for ${week} published its artifacts and failed its health check:`,
                 ``,
-                `    ${finding}`,
+                ...finding.split("\n").map((line) => `- ${line}`),
                 ``,
-                `The raw manifest/snapshot/run_log for ${week} were committed`,
-                `(append-only retention) and the site deploy went ahead, so this is a`,
-                `finding about the data rather than a publication outage. Inspect the`,
-                `run_log entry and the orchestrator Lambda CloudWatch logs, fix the cause,`,
-                `and decide per the no-backfill policy whether to re-run or document the gap.`,
+                ...context,
                 ``,
                 `Run: ${run_url}`,
               ].join("\n");
             } else {
-              title = `Pipeline alerted: ${iso}`;
+              title = `Pipeline alerted: ${week}`;
+              fingerprint = `${week}/alert/UNKNOWN`;
               body = [
                 `The weekly pipeline's alert job fired for ${week} but neither half reports`,
                 `a plain failure, so the reason is not one this alert knows how to`,
@@ -394,6 +450,34 @@ jobs:
                 `Run: ${run_url}`,
               ].join("\n");
             }
+            const marker = `<!-- meridian-fingerprint: ${fingerprint} -->`;
+            // Dedupe is best effort. If the lookup or the comment fails
+            // (a 5xx, secondary rate limiting), fall through and open a
+            // new issue: a duplicate is acceptable, a missing record is not.
+            try {
+              const open = await github.paginate(github.rest.issues.listForRepo, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: "open",
+                labels: "pipeline",
+                per_page: 100,
+              });
+              const existing = open.find(
+                (issue) => !issue.pull_request && (issue.body || "").includes(marker),
+              );
+              if (existing) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existing.number,
+                  body: [`RECURRING: the same finding fired again.`, ``, body].join("\n"),
+                });
+                core.info(`commented on #${existing.number} (${fingerprint})`);
+                return;
+              }
+            } catch (err) {
+              core.warning(`dedupe failed, opening a new issue: ${err.message}`);
+            }
             // Assign the repo owner so the issue generates a direct
             // notification rather than sitting in the watch feed. Belt
             // and braces alongside the SNS alert above: if the SNS path
@@ -402,7 +486,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               title,
-              body,
+              body: `${body}\n\n${marker}`,
               labels: ["pipeline", "automated", "bug"],
               assignees: [context.repo.owner],
             });
