@@ -45,6 +45,7 @@ STATIC_PAGE_PATHS = [
     "/methodology/",
     "/reports/",
     "/data/",
+    "/data/coverage/",
     "/contribute/",
     "/funding/",
 ]

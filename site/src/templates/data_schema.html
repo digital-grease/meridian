@@ -41,8 +41,9 @@
     <dt><code>hedge_density</code></dt><dd>Hedging markers per 100 tokens.</dd>
     <dt><code>length_median</code></dt><dd>Median response length in tokens.</dd>
     <dt><code>length_p25</code>, <code>length_p75</code></dt><dd>25th / 75th percentile lengths.</dd>
-    <dt><code>stance</code></dt><dd>Pro / anti / neutral / n/a. Applied only to stance-bearing prompts.</dd>
-    <dt><code>stance_confidence</code></dt><dd>Classifier confidence for stance, in [0, 1]. Empty where stance is n/a.</dd>
+    <dt><code>stance</code></dt><dd>Pro / anti / neutral / n/a. Applied only to stance-bearing prompts (the political and historical-contested axes). The current week&rsquo;s files carry the stance from its own manifest. Every earlier week&rsquo;s files are regenerated on each build from the history in the current manifest, and a history entry carries stance only when it was backfilled from that week&rsquo;s committed manifest. A history entry built any other way, for example from raw samples on the pipeline host, holds no stance, so its rows show n/a with an empty confidence.{% set scored = [] %}{% set unscored = [] %}{% for h in manifest.history %}{% if h.metrics | selectattr('stance_confidence', 'ne', none) | list %}{% set _ = scored.append(h.week_id) %}{% else %}{% set _ = unscored.append(h.week_id) %}{% endif %}{% endfor %}{% if manifest.history %} In this build, past weeks with stance in their files: {% if scored %}{% for w in scored %}<code>{{ w }}</code>{% if not loop.last %}, {% endif %}{% endfor %}{% else %}none{% endif %}; without: {% if unscored %}{% for w in unscored %}<code>{{ w }}</code>{% if not loop.last %}, {% endif %}{% endfor %}{% else %}none{% endif %}.{% endif %} Each week&rsquo;s own stance results, including any later correction, stay in its manifest, <code>data/manifests/&lt;week&gt;.json</code> in the source repository.</dd>
+    <dt><code>stance_confidence</code></dt><dd>In [0, 1], and read together with <code>stance</code>, because it encodes whether the classifier was reached rather than a graded confidence. <code>0.85</code>: the classifier scored the response (it reports one fixed value). <code>1.0</code> with stance n/a: the classifier was deliberately not asked, because the prompt is not on a stance-bearing axis or the model gave no substantive response to classify. <code>0.0</code> with stance n/a: the classifier was asked and returned nothing usable (the call failed, or its answer could not be parsed), so the stance is <em>unmeasured</em>, not neutral and not n/a; <code>2026-W36</code> to <code>2026-W38</code> carry this on almost every stance-bearing cell in their manifests (see <a href="/data/coverage/">coverage</a>). Empty when stance classification was not run, and on past-week rows whose history entry holds no stance (see <code>stance</code>).</dd>
+    <dt><code>stance_reason</code> <span class="muted">(<code>metrics.jsonl</code> only)</span></dt><dd>Why <code>stance</code> is what it is when the classifier did not score the cell, as a short code: <code>runner-error</code> or <code>classifier-error</code> (the call failed), <code>unparseable</code>, <code>no-substantive-response</code>, <code>empty-response</code> or <code>axis-excluded</code>. Null on a scored cell, when stance was not run, and on results produced before the field was added on 2026-10-05, where <code>stance_confidence</code> above is the only signal. Only the code is published, never a provider&rsquo;s error text.</dd>
     <dt><code>embedding_centroid_shift</code></dt><dd>Cosine distance of this week&rsquo;s embedding centroid from the prior week&rsquo;s, ≥ 0.</dd>
     <dt><code>flagged_for_review</code></dt><dd>Boolean: human review flagged this row.</dd>
     <dt><code>flag_reason</code></dt><dd>Free-text note; empty when not flagged.</dd>
@@ -57,6 +58,17 @@
     The machine-readable JSON Schema is at
     <code>site/schemas/manifest.schema.json</code> in the source repository.
   </p>
+  <p>Four top-level keys say how a manifest came to be. All are empty or
+    false on an ordinary week. They were added in 2026-10, so a manifest
+    first published earlier lacks them unless a later correction or
+    reconstruction wrote one (<code>corrections</code> is added to a past
+    week&rsquo;s manifest when that week is corrected).</p>
+  <dl class="metric-glossary">
+    <dt><code>partial</code></dt><dd>True when the week&rsquo;s run did not finish and the manifest publishes what it captured. <code>2026-W34</code> is the first: killed at the SSM execution timeout and built later from its archived raw samples.</dd>
+    <dt><code>notes</code></dt><dd>Plain-language statements about the week: why it is partial, what is missing, when and from what the manifest was built.</dd>
+    <dt><code>coverage</code></dt><dd>On a partial week, one entry per model: <code>expected_samples</code> against <code>captured_samples</code>, <code>prompts_complete</code> of <code>prompts_expected</code>, the prompts cut short (<code>partial_prompts</code>, which publish at the smaller n their row shows) and the prompts never sampled (<code>missing_prompts</code>, which have no row), and a <code>status</code> of <code>complete</code>, <code>partial</code> or <code>lost</code>.</dd>
+    <dt><code>corrections</code></dt><dd>Versioned corrections applied after publication, oldest first: the <code>date</code>, the metric <code>fields</code> the correction was allowed to change, how many rows (<code>cells</code>) changed, a <code>summary</code>, and the path of the public <code>report</code>. The file as first published stays in the repository&rsquo;s history.</dd>
+  </dl>
 
   <h2><code>responses.jsonl.gz</code></h2>
   <p>

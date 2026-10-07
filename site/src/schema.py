@@ -358,6 +358,46 @@ class SilentUpdateWarning(Frozen):
     severity: Literal["low", "medium", "high"]
 
 
+class RunnerCoverage(Frozen):
+    """What one runner captured for the week, against what it owed.
+
+    Written on a manifest whose run did not complete (``Manifest.partial``),
+    so the gap is stated in the record itself and not only in the
+    project's gap ledger. ``missing_prompts`` were never sampled and have
+    no metric record; ``partial_prompts`` were cut short and publish at
+    the smaller n their record shows.
+    """
+    model_id: str
+    provider: str
+    expected_samples: int = Field(ge=0)
+    captured_samples: int = Field(ge=0)
+    prompts_expected: int = Field(ge=0)
+    prompts_complete: int = Field(ge=0)
+    partial_prompts: list[str] = Field(default_factory=list)
+    missing_prompts: list[str] = Field(default_factory=list)
+    status: Literal["complete", "partial", "lost"]
+
+
+class ManifestCorrection(Frozen):
+    """One versioned correction applied to a manifest after publication.
+
+    The corrected file replaces the published one, and git history keeps
+    the original; this entry is what tells a reader of the file alone
+    that it changed, when, which fields, and where the public account
+    is.
+    """
+    #: ISO date the correction was applied, e.g. ``"2026-10-08"``.
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    #: Metric-record fields the correction was allowed to change.
+    fields: list[str]
+    #: Metric records that changed.
+    cells: int = Field(ge=0)
+    summary: str
+    #: Site path of the public correction report, e.g.
+    #: ``"/reports/2026-10-08-stance-classifier-correction/"``.
+    report: str | None = None
+
+
 class Manifest(Frozen):
     schema_version: int
     snapshot: Snapshot
@@ -368,6 +408,19 @@ class Manifest(Frozen):
     unmeasured: list[UnmeasuredCell] = Field(default_factory=list)
     flagged: list[str] = Field(default_factory=list)
     silent_update_warnings: list[SilentUpdateWarning] = Field(default_factory=list)
+    #: True when the week's run did not finish and the manifest publishes
+    #: what it captured. ``coverage`` says what is missing, per runner,
+    #: and ``notes`` says why. 2026-W34 is the first: killed at the SSM
+    #: execution timeout, built later from its archived raw samples.
+    #: The three fields below are defaulted, so every earlier manifest
+    #: stays valid; a widening change, so SCHEMA_VERSION does not move.
+    partial: bool = False
+    #: Plain-language statements about how this manifest came to be,
+    #: for any reader of the file. Empty on an ordinary week.
+    notes: list[str] = Field(default_factory=list)
+    coverage: list[RunnerCoverage] = Field(default_factory=list)
+    #: Versioned corrections applied after publication, oldest first.
+    corrections: list[ManifestCorrection] = Field(default_factory=list)
 
     def unmeasured_for(self, pid: str, mid: str) -> UnmeasuredCell | None:
         return next(

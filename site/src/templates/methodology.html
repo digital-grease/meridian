@@ -173,10 +173,14 @@
       under a model&rsquo;s name came from that model.
       <a href="/reports/2026-10-06-roster-succession/">Notice</a>.</dd>
 
-    <dt>2026-W36 &middot; <code>claude-opus-5</code> added</dt>
-    <dd>Began in <code>2026-W36</code>, sampled alongside
+    <dt>2026-W34 &middot; <code>claude-opus-5</code> added</dt>
+    <dd>Began in <code>2026-W34</code>, sampled alongside
       <code>claude-opus-4-8</code> on even weeks rather than replacing
-      it. No notice was published.</dd>
+      it. Its first week is partial (13 of 30 prompts) and its second,
+      <code>2026-W36</code>, has a single prompt; its first complete
+      week is <code>2026-W40</code>. See the
+      <a href="/data/coverage/">coverage table</a>. No notice was
+      published.</dd>
 
     <dt>2026-W28 &middot; <code>claude-opus-4-7</code> &rarr; <code>claude-opus-4-8</code></dt>
     <dd><code>claude-opus-4-8</code> began in <code>2026-W28</code> and
@@ -366,8 +370,9 @@
 
   <h3 id="data-gaps">Known data gaps</h3>
   <p>
-    Weeks where a scheduled runner produced no samples are listed here
-    rather than silently interpolated. Backfilling after the fact is not
+    Weeks where a scheduled runner produced no samples, or fewer than
+    it should have, are listed here rather than silently interpolated,
+    and so are weeks where a metric (such as stance) was not measured. Backfilling after the fact is not
     done: a sample taken later is not a sample taken that week, and the
     local-baseline noise floor depends on real-time capture.
   </p>
@@ -387,46 +392,29 @@
     cells are unsampled by design. Those weeks have data, just not for
     that model.
   </p>
-  <dl class="metric-glossary">
-    <dt><code>2026-W17</code> &mdash; <code>llama3.2:3b</code></dt>
-    <dd>No samples written. The runner host for that week did not have
-      ollama installed; the failure was silent (no error in
-      <code>run_log.jsonl</code>) and was caught on review the
-      following week. Affects continuity of the local-baseline noise
-      floor for one week; does not affect any commercial-model metric.</dd>
-
-    <dt><code>2026-W30</code> &mdash; all runners</dt>
-    <dd>No samples written, for any model. The weekly run never
-      started: the orchestrator's request to start the sampling
-      instance was rejected with
-      <code>InsufficientInstanceCapacity</code>, meaning AWS had no
-      capacity for that instance type in its availability zone that
-      morning. Affects the even-week frontier slot
-      (<code>claude-opus-4-8</code>) and the <code>llama3.2:3b</code>
-      local baseline.</dd>
-
-    <dt><code>2026-W31</code> &mdash; all runners</dt>
-    <dd>No samples written, for any model. Same cause as
-      <code>2026-W30</code>, recurring the following week. Affects the
-      odd-week frontier slot (<code>gpt-5.5</code>) and the
-      <code>llama3.2:3b</code> local baseline.</dd>
-
-    <dt><code>2026-W34</code> &mdash; all runners</dt>
-    <dd>No samples published, for any model. Unlike the two weeks above
-      the run did start on time and sampled for a full hour before it
-      was killed mid-capture. The dispatch mechanism applies a default
-      execution ceiling of one hour that we had never overridden, and
-      the roster had quietly outgrown it: adding
-      <code>claude-opus-5</code> alongside <code>claude-opus-4-8</code>
-      took the week to roughly two hours and ten minutes of sampling.
-      No manifest was written, so nothing reached the archive. Partial
-      raw samples for the models that had completed remain on the
-      sampling host and will not be published, because half a week&rsquo;s
-      capture presented as the week would misstate exactly what this
-      record is for. Affects the even-week frontier slot
-      (<code>claude-opus-4-8</code> and <code>claude-opus-5</code>) and
-      the <code>llama3.2:3b</code> local baseline.</dd>
+  <p>
+    The list below is generated from the gap ledger,
+    <a href="/data/coverage/gaps.jsonl"><code>gaps.jsonl</code></a>, on
+    every build. The same ledger drives the
+    <a href="/data/coverage/">coverage table</a>, which shows for every
+    week and model whether it was due, how much was captured against
+    what was expected, and links to the evidence. A gap the ledger does
+    not explain is marked there as unexplained.
+  </p>
+  {% if coverage.ledger %}
+  <dl class="metric-glossary gap-ledger">
+    {% for r in coverage.ledger %}
+    <dt><a href="/data/coverage/#{{ r.week_id }}"><code>{{ r.week_id }}</code></a> &middot; {% if "/" in r.scope %}<code>{{ r.scope_label }}</code>{% else %}{{ r.scope_label }}{% endif %}
+      {% if r.kind != "note" %}<span class="cov cov-{{ r.kind }}">{{ r.kind | capitalize }}</span>{% endif %}</dt>
+    <dd>{{ r.reason }}{% if r.evidence %}
+      <span class="muted">Evidence:
+      {% for e in r.evidence %}{% if e.href %}<a href="{{ e.href }}">{{ e.text }}</a>{% else %}<code>{{ e.text }}</code>{% endif %}{% if not loop.last %}; {% endif %}{% endfor %}.</span>{% endif %}
+      {% if r.recorded_at %}<span class="muted">Recorded {{ r.recorded_at }}.</span>{% endif %}</dd>
+    {% endfor %}
   </dl>
+  {% else %}
+  <p class="muted">The gap ledger has no entries for the weeks in this build.</p>
+  {% endif %}
 
   <p>
     The <code>2026-W30</code> and <code>2026-W31</code> outages went
@@ -443,21 +431,44 @@
   <p>
     <code>2026-W34</code> failed differently, and the difference is
     worth stating because it is the fix for the two weeks above being
-    tested. Detection worked: the run went red the same morning, the
-    alert was sent, and an issue was filed within seconds. What the
-    kill also did was bypass the step where the sampling host shuts
-    itself down, so a GPU instance billed for eighteen idle hours
-    before a human noticed. Both the missing execution ceiling and the
-    unguarded shutdown have since been fixed, the second with a
-    scheduled check that stops the host when a run has ended without
-    stopping it.
+    tested. The run started on time and sampled for a full hour before
+    the dispatch mechanism killed it: that mechanism applies a default
+    execution ceiling of one hour that we had never overridden, and
+    adding <code>claude-opus-5</code> alongside
+    <code>claude-opus-4-8</code> had taken the week to roughly two hours
+    and ten minutes of sampling. Detection worked: the run went red the
+    same morning, the alert was sent, and an issue was filed within
+    seconds. What the kill also did was bypass the step where the
+    sampling host shuts itself down, so a GPU instance billed for
+    eighteen idle hours before a human noticed. Both the missing
+    execution ceiling and the unguarded shutdown have since been fixed,
+    the second with a scheduled check that stops the host when a run
+    has ended without stopping it.
+  </p>
+
+  <p>
+    <code>2026-W34</code> is published as a partial week.
+    <code>claude-opus-4-8</code> and <code>llama3.2:3b</code> completed
+    before the kill; <code>claude-opus-5</code> has 259 of its 600
+    samples, over 13 of the 30 prompts, and is marked partial wherever
+    the week appears. Everything published for the week was captured on
+    2026-08-24, the Monday that run was scheduled for, as every week is;
+    the samples were archived from the sampling host afterwards and
+    nothing was added to them. An earlier
+    version of this page said the week would not be published. That was
+    already untrue in one respect, because the week&rsquo;s metrics had
+    been carried in the history of every later manifest and served under
+    <a href="/data/2026-W34/"><code>/data/2026-W34/</code></a> since
+    2026-W35, and 2026-W35 and 2026-W36 compared their drift against it.
+    Publishing the week with its coverage stated makes the record match
+    what it was already using.
   </p>
 
   <p>
     None of these weeks was re-sampled. A run today would carry
-    today's model behavior under an earlier label, which is precisely
-    the substitution this record exists to make visible. The weeks stay
-    empty.
+    today&rsquo;s model behavior under an earlier label, which is
+    precisely the substitution this record exists to make visible.
+    Lost weeks stay empty, and partial weeks stay partial.
   </p>
 
   <p class="callout">

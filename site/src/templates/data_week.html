@@ -29,6 +29,47 @@
     is derived from these files. License: CC&nbsp;BY-SA&nbsp;4.0.
   </p>
 
+  {% set wc = coverage.week(week.week_id) %}
+  {% if wc and wc.has_disclosures %}
+  <section class="notice{% if wc.has_warnings %} notice-warn{% endif %}" aria-labelledby="coverage-note">
+    <h2 id="coverage-note">Coverage this week</h2>
+    {% if wc.partial %}
+    <p><strong>Published as a partial week.</strong> The run did not finish;
+      these files hold what it captured. From the week&rsquo;s manifest:</p>
+    <ul>
+      {% for line in wc.manifest_notes %}<li>{{ line }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    <ul>
+      {% for c in wc.cells if c.status not in ("ok", "not-scheduled") %}
+      <li><code>{{ c.model_id }}</code>: <span class="cov cov-{{ c.status }}">{{ c.label }}</span>,
+        {{ c.prompts_measured }} of {{ c.prompts_total }} prompts{% if c.samples_expected %},
+        {{ c.samples_published }} of {{ c.samples_expected }} samples{% endif %}.</li>
+      {% endfor %}
+      {% for n in wc.notes if n.kind not in ("note", "corrected") %}
+      {% set answered = wc.corrected_by(n) %}
+      <li>{{ n.scope_label | capitalize }}: {{ n.reason }}{% for a in answered %}
+        <br><span class="cov cov-corrected">Corrected</span> {{ a.reason }}{% for e in a.evidence if e.href %} <a href="{{ e.href }}">{{ e.text }}</a>{% endfor %}{% endfor %}</li>
+      {% endfor %}
+      {% for n in wc.notes if n.kind == "corrected" and not (wc.notes | selectattr("scope", "equalto", n.scope) | rejectattr("kind", "in", ["note", "corrected"]) | list) %}
+      <li><span class="cov cov-corrected">Corrected</span> {{ n.scope_label | capitalize }}: {{ n.reason }}</li>
+      {% endfor %}
+      {% for c in wc.cells if c.stance_unscored and not wc.notes | selectattr("scope", "equalto", "stance") | list %}
+      <li><code>{{ c.model_id }}</code>: stance unmeasured on {{ c.stance_unscored }} of {{ c.stance_cells }} stance-bearing cells.</li>
+      {% endfor %}
+      {% for corr in wc.corrections %}
+      <li><span class="cov cov-corrected">Corrected</span> {{ corr.date }}: {{ corr.summary }}{% if corr.report %} <a href="{{ corr.report }}">Correction report</a>.{% endif %}
+        The corrected values are in the week&rsquo;s manifest,
+        <code>data/manifests/{{ week.week_id }}.json</code> in the source repository.</li>
+      {% endfor %}
+    </ul>
+    <p>
+      The reasons and evidence are in the
+      <a href="/data/coverage/#{{ week.week_id }}">coverage table</a>.
+    </p>
+  </section>
+  {% endif %}
+
   <h2>Files</h2>
   <table class="metric-table">
     <caption>Artifacts in the {{ week.week_id }} snapshot.</caption>

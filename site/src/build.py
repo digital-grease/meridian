@@ -42,6 +42,7 @@ if str(_REPO_ROOT_FOR_IMPORTS) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT_FOR_IMPORTS))
 
 import excerpts  # noqa: E402
+import data_coverage as coverage_mod  # noqa: E402
 from chart import OKABE_ITO, heatmap_cell_style, sparkline, viridis_color  # noqa: E402
 from schema import SCHEMA_VERSION, Manifest, is_measured  # noqa: E402
 
@@ -458,11 +459,64 @@ _METRICS_COLUMNS = [
 ]
 
 
-def _per_week_readme(week_id: str) -> str:
+def _coverage_readme_section(wc: "coverage_mod.WeekCoverage | None") -> str:
+    """The week's disclosures, in plain text, for its README.md.
+
+    The files under /data/<week>/ are what people download and cite, so
+    a partial week, a lost or degraded model and a later correction must
+    travel with them, not only sit on the HTML page. Empty when the week
+    has nothing to disclose.
+    """
+    if wc is None or not wc.has_disclosures:
+        return ""
+    lines = ["## Coverage", ""]
+    if wc.partial:
+        lines.append(
+            "PARTIAL WEEK. The run did not finish; these files hold what it "
+            "captured. From the week's manifest:"
+        )
+        lines.extend(f"- {n}" for n in wc.manifest_notes)
+        lines.append("")
+    for c in wc.cells:
+        if c.status in ("ok", "not-scheduled"):
+            continue
+        samples = (
+            f", {c.samples_published} of {c.samples_expected} samples"
+            if c.samples_expected else ""
+        )
+        lines.append(
+            f"- {c.model_id}: {c.label}, {c.prompts_measured} of "
+            f"{c.prompts_total} prompts{samples}."
+        )
+    for n in wc.notes:
+        if n.kind in ("note", "corrected"):
+            continue
+        lines.append(f"- {n.scope_label[:1].upper()}{n.scope_label[1:]}: {n.reason}")
+        for a in wc.corrected_by(n):
+            lines.append(f"  Corrected: {a.reason}")
+    for corr in wc.corrections:
+        report = corr.get("report")
+        lines.append(
+            f"- Corrected {corr.get('date')}: {corr.get('summary')}"
+            + (f" Report: https://meridianaudit.org{report}" if report else "")
+        )
+    lines.extend([
+        "",
+        f"Reasons and evidence: https://meridianaudit.org/data/coverage/#{wc.week_id}",
+        "",
+        "",
+    ])
+    return "\n".join(lines)
+
+
+def _per_week_readme(
+    week_id: str, wc: "coverage_mod.WeekCoverage | None" = None,
+) -> str:
     return (
         f"# Meridian snapshot: {week_id}\n\n"
         f"ISO week {week_id}. Contains computed metrics plus the raw\n"
         f"response samples they were derived from.\n\n"
+        + _coverage_readme_section(wc) +
         f"## Files\n\n"
         f"- `metrics.csv` / `metrics.jsonl` — one row per (prompt × model).\n"
         f"- `metrics.parquet` — same data, columnar; present when the site\n"
@@ -513,7 +567,9 @@ def _gap_week_readme(week_id: str) -> str:
         f"which is precisely the substitution this project exists to\n"
         f"make visible.\n\n"
         f"The cause of this specific gap is documented at\n"
-        f"https://meridianaudit.org/methodology/#data-gaps\n\n"
+        f"https://meridianaudit.org/methodology/#data-gaps\n"
+        f"and the models that were due at\n"
+        f"https://meridianaudit.org/data/coverage/#{week_id}\n\n"
         f"## License\n\n"
         f"CC-BY-SA 4.0.\n"
     )
@@ -747,7 +803,8 @@ def publish_data(
 
         csv_text = _metrics_to_csv(week_id, metrics)
         jsonl_text = _metrics_to_jsonl(week_id, metrics)
-        readme_text = _per_week_readme(week_id)
+        cov = base_context.get("coverage")
+        readme_text = _per_week_readme(week_id, cov.week(week_id) if cov else None)
 
         artifacts = {
             "metrics.csv": csv_text,
@@ -1010,9 +1067,86 @@ def load_run_log_summary(repo_root: Path) -> list:
     from meridian.pipeline.run_log import read_run_log
     from meridian.pipeline.run_log_summary import summarize_weekly
 
+    return summarize_weekly(read_run_log(_run_log_path(repo_root)))
+
+
+def _run_log_path(repo_root: Path) -> Path:
     override = os.environ.get("MERIDIAN_RUN_LOG")
-    log_path = Path(override) if override else repo_root / "data" / "run_log.jsonl"
-    return summarize_weekly(read_run_log(log_path))
+    return Path(override) if override else repo_root / "data" / "run_log.jsonl"
+
+
+def _gap_ledger_path(repo_root: Path) -> Path:
+    """``data/gaps.jsonl``, or ``MERIDIAN_GAPS`` when set.
+
+    The override exists for the same reason as ``MERIDIAN_RUN_LOG``:
+    tests script this input through a tmp_path file and never touch the
+    real ledger, which is append-only public record.
+    """
+    override = os.environ.get("MERIDIAN_GAPS")
+    return Path(override) if override else repo_root / "data" / "gaps.jsonl"
+
+
+def _manifests_dir(repo_root: Path) -> Path:
+    override = os.environ.get("MERIDIAN_MANIFESTS_DIR")
+    return Path(override) if override else repo_root / "data" / "manifests"
+
+
+def load_coverage(repo_root: Path, manifest: Manifest) -> "coverage_mod.Coverage":
+    """The per-(week, model) coverage ledger rendered at /data/coverage/
+    and, through its ledger, under /methodology/#data-gaps."""
+    from meridian.analysis.stance import STANCE_AXES
+
+    ledger_raw, skipped = coverage_mod.load_gap_ledger(_gap_ledger_path(repo_root))
+    if skipped:
+        print(
+            f"WARNING: gap ledger lines skipped (not JSON or no ISO "
+            f"week_id): {skipped}",
+            file=sys.stderr,
+        )
+    return coverage_mod.build_coverage(
+        manifest,
+        run_log_rows=coverage_mod.load_run_log_rows(_run_log_path(repo_root)),
+        ledger_raw=ledger_raw,
+        ledger_skipped=skipped,
+        manifests_dir=_manifests_dir(repo_root),
+        stance_axes=STANCE_AXES,
+    )
+
+
+def publish_coverage(
+    env: Environment,
+    out_dir: Path,
+    cov: "coverage_mod.Coverage",
+    base_context: dict,
+) -> None:
+    """Emit /data/coverage/: the page, the ledger as CSV and JSONL, the
+    gap ledger verbatim, and SHA256SUMS over all of them."""
+    cov_dir = out_dir / "data" / "coverage"
+    cov_dir.mkdir(parents=True, exist_ok=True)
+    ledger_path = _gap_ledger_path(REPO_ROOT)
+    try:
+        ledger_text = ledger_path.read_text(encoding="utf-8")
+    except (FileNotFoundError, NotADirectoryError):
+        ledger_text = ""
+    artifacts = {
+        "coverage.csv": coverage_mod.coverage_csv(cov),
+        "coverage.jsonl": coverage_mod.coverage_jsonl(cov),
+        "gaps.jsonl": ledger_text,
+    }
+    sums = []
+    for name, text in artifacts.items():
+        (cov_dir / name).write_text(text)
+        sums.append(f"{_sha256_of(text)}  {name}")
+    (cov_dir / "SHA256SUMS").write_text("\n".join(sorted(sums)) + "\n")
+    files = [
+        {"name": name, "size": len(text.encode("utf-8"))}
+        for name, text in artifacts.items()
+    ]
+    render_page(
+        env, "data_coverage.html",
+        cov_dir / "index.html",
+        dict(base_context, coverage=cov, coverage_files=files),
+    )
 
 
 # Reference scales for normalising per-metric weekly deltas into a
@@ -1776,6 +1910,7 @@ def build(manifest_path: Path, out_dir: Path) -> dict:
         "heatmap": drift_heatmap(manifest),
         "notable": notable_shifts(manifest),
         "model_refusal_series": model_refusal_series(manifest),
+        "coverage": load_coverage(REPO_ROOT, manifest),
     }
 
     # Pages in STATIC_PAGES that get their own OG PNG. Tuple of
@@ -1802,6 +1937,7 @@ def build(manifest_path: Path, out_dir: Path) -> dict:
 
     render_dashboard(env, out_dir, manifest, base_context)
     publish_data(env, out_dir, manifest_path, manifest, base_context)
+    publish_coverage(env, out_dir, base_context["coverage"], base_context)
 
     # MERIDIAN_REDIRECTS overrides the map's location. Production never
     # sets it, so the canonical path stays the only one that ships. It

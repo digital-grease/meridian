@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+{% set path = "/data/coverage/" %}
+
+{% block title %}Data coverage · Meridian{% endblock %}
+{% block description %}Every week of the Meridian record and, for each model, whether it was due, how much was captured against what was expected, and why anything is missing, with links to the evidence.{% endblock %}
+
+{% macro status_tag(c) %}<span class="cov cov-{{ c.status }}">{{ c.label }}</span>{% endmacro %}
+
+{% macro samples(c) %}
+{% if c.samples_expected %}<code>{{ c.samples_published }}</code>&nbsp;/&nbsp;<code>{{ c.samples_expected }}</code>{% elif c.scheduled %}<code>{{ c.samples_published }}</code>{% else %}<span class="muted">&ndash;</span>{% endif %}
+{% endmacro %}
+
+{% macro evidence(items) %}
+{% for e in items %}{% if e.href %}<a href="{{ e.href }}">{{ e.text }}</a>{% else %}<code>{{ e.text }}</code>{% endif %}{% if not loop.last %}; {% endif %}{% endfor %}
+{% endmacro %}
+
+{% block main %}
+{% set crumbs = [
+  {"href": "/", "text": "Home"},
+  {"href": "/data/", "text": "Data"},
+  {"text": "Coverage"}
+] %}
+{% include "_breadcrumbs.html" %}
+
+{% set counts = coverage.counts() %}
+<article class="page">
+  <h1>Data coverage</h1>
+  <p class="lede">
+    Every week of the record and, for each model, whether it was due,
+    how much was captured against what was expected, and why anything
+    is missing. This page is generated on every build from the run log,
+    the published manifests and the gap ledger, so it cannot fall out of
+    step with the data the way hand-written notes can.
+  </p>
+
+  <p>
+    {{ coverage.weeks | length }} weeks, {{ counts["ok"] + counts["partial"] + counts["degraded"] + counts["lost"] + counts["scheduled"] }}
+    scheduled model-weeks:
+    <strong>{{ counts["ok"] }}</strong> complete,
+    <strong>{{ counts["partial"] }}</strong> partial,
+    <strong>{{ counts["degraded"] }}</strong> degraded,
+    <strong>{{ counts["lost"] }}</strong> lost{% if counts["scheduled"] %},
+    <strong>{{ counts["scheduled"] }}</strong> not yet published{% endif %}.
+    The narrative account of each gap is under
+    <a href="/methodology/#data-gaps">known data gaps</a>.
+  </p>
+
+  <h2 id="statuses">What each status means</h2>
+  <dl class="metric-glossary">
+    <dt><span class="cov cov-ok">OK</span></dt>
+    <dd>The model was due and every prompt was measured. The sample
+      count can still sit a little under the expected figure when a
+      provider declined some requests; those cells carry a
+      <code>rejected_samples</code> count.</dd>
+    <dt><span class="cov cov-partial">Partial</span></dt>
+    <dd>The model was due and some prompts, or most of the samples, are
+      missing. What was captured is published and every metric on it is
+      real, but the week does not cover the whole corpus for this model.</dd>
+    <dt><span class="cov cov-degraded">Degraded</span></dt>
+    <dd>Captured, but known to be impaired, for example responses
+      truncated before any visible output. The linked correction says
+      what was done about it.</dd>
+    <dt><span class="cov cov-lost">Lost</span></dt>
+    <dd>The model was due and nothing for it is in the record. Lost
+      weeks are not backfilled: a sample taken later is not a sample
+      taken that week.</dd>
+    <dt><span class="cov cov-corrected">Corrected</span></dt>
+    <dd>A ledger record or a manifest correction that fixed something an
+      earlier record disclosed. The earlier record stays on the page,
+      marked as corrected: the ledger is append-only.</dd>
+    <dt><span class="cov cov-scheduled">Not yet published</span></dt>
+    <dd>The run log records samples for the model that week, but none
+      are in the published record yet.</dd>
+    <dt><span class="cov cov-not-scheduled">Not scheduled</span></dt>
+    <dd>The model was not due that week. Frontier models alternate by
+      ISO week parity, so this is the normal state of roughly half of
+      their weeks, and models enter and leave the roster over time.</dd>
+  </dl>
+  <p class="muted">
+    &ldquo;Expected&rdquo; is the run&rsquo;s recorded expectation where
+    the run log has one; for older runs it is the number of prompts
+    times the samples per prompt the model normally receives. A status
+    marked <em>unexplained</em> has no gap ledger entry yet, which is
+    itself a finding; that includes a cell that measured every prompt but
+    is short of the expected samples with no unusable or declined samples
+    to account for the difference.
+  </p>
+
+  <h2 id="matrix">Week by model</h2>
+  <div class="table-scroll">
+  <table class="metric-table coverage-matrix">
+    <caption>Status and samples published against samples expected, newest week first.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Week</th>
+        {% for provider, model_id in coverage.models %}
+        <th scope="col"><code>{{ model_id }}</code></th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for w in coverage.weeks %}
+      <tr>
+        <th scope="row"><a href="#{{ w.week_id }}"><code>{{ w.week_id }}</code></a></th>
+        {% for c in w.cells %}
+        <td>
+          {% if c.status == "not-scheduled" %}
+          <span class="cov cov-not-scheduled" aria-hidden="true">&ndash;</span><span class="visually-hidden">Not scheduled</span>
+          {% else %}
+          {{ status_tag(c) }}
+          <br>{{ samples(c) }}
+          {% endif %}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  <h2 id="weeks">Week by week</h2>
+  {% for w in coverage.weeks %}
+  <section class="coverage-week" aria-labelledby="{{ w.week_id }}">
+    <h3 id="{{ w.week_id }}"><code>{{ w.week_id }}</code></h3>
+    <p>
+      {% if w.published %}<a href="/data/{{ w.week_id }}/">Data for {{ w.week_id }}</a>.{% else %}<a href="/data/{{ w.week_id }}/">No data for {{ w.week_id }}</a>.{% endif %}
+      {% if not w.run_logged %}
+      <span class="muted">The run log has no entry for this week.</span>
+      {% endif %}
+    </p>
+    {% for note in w.recovery_notes %}
+    <p class="notice">Run log entry reconstructed after the fact: {{ note }}</p>
+    {% endfor %}
+    {% if w.partial %}
+    <div class="notice notice-warn">
+      <p><strong>Published as a partial week.</strong> From the week&rsquo;s manifest:</p>
+      <ul>{% for line in w.manifest_notes %}<li>{{ line }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+    {% for n in w.notes %}
+    {% set answered = w.corrected_by(n) %}
+    <p class="notice{% if n.kind in ('lost', 'partial', 'degraded') and not answered %} notice-warn{% endif %}">
+      <strong>{{ n.scope_label | capitalize }}</strong>
+      {% if n.kind != "note" %}<span class="cov cov-{{ n.kind }}">{{ n.kind | capitalize }}</span>{% endif %}
+      {{ n.reason }}
+      {% if answered %}<span class="muted">Since corrected; see the correction record for this week.</span>{% endif %}
+      {% if n.evidence %}<span class="muted">Evidence: {{ evidence(n.evidence) }}.</span>{% endif %}
+    </p>
+    {% endfor %}
+    {% for c in w.corrections %}
+    <p class="notice"><strong>Correction {{ c.date }}</strong>
+      <span class="cov cov-corrected">Corrected</span>
+      {{ c.summary }}{% if c.cells is defined and c.cells %} {{ c.cells }} row(s) changed.{% endif %}
+      {% if c.report %}<a href="{{ c.report }}">Correction report</a>.{% endif %}
+    </p>
+    {% endfor %}
+    {% set listed = w.cells | rejectattr("status", "equalto", "not-scheduled") | list %}
+    {% if listed %}
+    <div class="table-scroll">
+    <table class="metric-table">
+      <caption>Models due in {{ w.week_id }}.</caption>
+      <thead>
+        <tr>
+          <th scope="col">Model</th>
+          <th scope="col">Status</th>
+          <th scope="col">Prompts</th>
+          <th scope="col">Samples</th>
+          <th scope="col">Run log</th>
+          <th scope="col">Why</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in listed %}
+        <tr>
+          <th scope="row"><code>{{ c.model_id }}</code></th>
+          <td>{{ status_tag(c) }}{% if c.unexplained %} <span class="muted">unexplained</span>{% endif %}</td>
+          <td><code>{{ c.prompts_measured }}</code>&nbsp;/&nbsp;<code>{{ c.prompts_total }}</code></td>
+          <td>{{ samples(c) }}</td>
+          <td>{% if c.samples_logged is none %}<span class="muted">no entry</span>{% else %}<code>{{ c.samples_logged }}</code> written{% endif %}</td>
+          <td>
+            {% for r in c.reasons %}<p>{{ r }}</p>{% endfor %}
+            {% if c.unusable_samples %}<p class="muted">{{ c.unusable_samples }} captured samples had no usable content and are excluded from every metric.</p>{% endif %}
+            {% if c.rejected_samples %}<p class="muted">{{ c.rejected_samples }} requests were declined by the provider and never ran.</p>{% endif %}
+            {% if c.stance_unscored %}<p class="muted">Stance unmeasured on {{ c.stance_unscored }} of {{ c.stance_cells }} stance-bearing cells: the classifier call failed.</p>{% endif %}
+            {% if c.evidence %}<p class="muted">Evidence: {{ evidence(c.evidence) }}.</p>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No model was due and nothing was captured.</p>
+    {% endif %}
+  </section>
+  {% endfor %}
+
+  <h2 id="files">Files</h2>
+  <table class="metric-table">
+    <caption>Everything published under <code>/data/coverage/</code>.</caption>
+    <thead>
+      <tr><th scope="col">File</th><th scope="col">Size</th><th scope="col">Contents</th></tr>
+    </thead>
+    <tbody>
+      {% set file_notes = {
+        "coverage.csv": "One row per scheduled or published (week, model): status, prompts and samples against expected, run log count, reasons and evidence.",
+        "coverage.jsonl": "The same rows, one JSON object per line.",
+        "gaps.jsonl": "The gap ledger exactly as committed: one hand-recorded explanation per line, append-only."
+      } %}
+      {% for f in coverage_files %}
+      <tr>
+        <th scope="row"><a href="/data/coverage/{{ f.name }}"><code>{{ f.name }}</code></a></th>
+        <td><code>{{ f.size }}&nbsp;B</code></td>
+        <td>{{ file_notes.get(f.name, "") }}</td>
+      </tr>
+      {% endfor %}
+      <tr>
+        <th scope="row"><a href="/data/coverage/SHA256SUMS"><code>SHA256SUMS</code></a></th>
+        <td class="muted">&ndash;</td>
+        <td>SHA-256 digest for every file above.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    Each gap ledger line carries <code>week_id</code>, <code>scope</code>
+    (<code>all</code>, a <code>provider/model</code>, or
+    <code>stance</code> for the stance classifier), <code>kind</code>
+    (<code>lost</code>, <code>partial</code>, <code>degraded</code>,
+    <code>note</code>, or <code>corrected</code> for a later correction
+    of an earlier record with the same week and scope), <code>reason</code>, <code>evidence</code> and
+    <code>recorded_at</code>. Lines are added, never edited; a later line
+    can extend or correct an earlier one.
+  </p>
+</article>
+{% endblock %}

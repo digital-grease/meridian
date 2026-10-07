@@ -190,6 +190,53 @@
       "title": "LengthStats",
       "type": "object"
     },
+    "ManifestCorrection": {
+      "additionalProperties": false,
+      "description": "One versioned correction applied to a manifest after publication.\n\nThe corrected file replaces the published one, and git history keeps\nthe original; this entry is what tells a reader of the file alone\nthat it changed, when, which fields, and where the public account\nis.",
+      "properties": {
+        "cells": {
+          "minimum": 0,
+          "title": "Cells",
+          "type": "integer"
+        },
+        "date": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "title": "Date",
+          "type": "string"
+        },
+        "fields": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "report": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Report"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "date",
+        "fields",
+        "cells",
+        "summary"
+      ],
+      "title": "ManifestCorrection",
+      "type": "object"
+    },
     "MetricRecord": {
       "additionalProperties": false,
       "properties": {
@@ -446,6 +493,74 @@
       "title": "PromptRecord",
       "type": "object"
     },
+    "RunnerCoverage": {
+      "additionalProperties": false,
+      "description": "What one runner captured for the week, against what it owed.\n\nWritten on a manifest whose run did not complete (``Manifest.partial``),\nso the gap is stated in the record itself and not only in the\nproject's gap ledger. ``missing_prompts`` were never sampled and have\nno metric record; ``partial_prompts`` were cut short and publish at\nthe smaller n their record shows.",
+      "properties": {
+        "captured_samples": {
+          "minimum": 0,
+          "title": "Captured Samples",
+          "type": "integer"
+        },
+        "expected_samples": {
+          "minimum": 0,
+          "title": "Expected Samples",
+          "type": "integer"
+        },
+        "missing_prompts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Prompts",
+          "type": "array"
+        },
+        "model_id": {
+          "title": "Model Id",
+          "type": "string"
+        },
+        "partial_prompts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Partial Prompts",
+          "type": "array"
+        },
+        "prompts_complete": {
+          "minimum": 0,
+          "title": "Prompts Complete",
+          "type": "integer"
+        },
+        "prompts_expected": {
+          "minimum": 0,
+          "title": "Prompts Expected",
+          "type": "integer"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "complete",
+            "partial",
+            "lost"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "model_id",
+        "provider",
+        "expected_samples",
+        "captured_samples",
+        "prompts_expected",
+        "prompts_complete",
+        "status"
+      ],
+      "title": "RunnerCoverage",
+      "type": "object"
+    },
     "SilentUpdateWarning": {
       "additionalProperties": false,
       "description": "Candidate silent-model-update event on the neutral-control axis.\n\nFlagged when a model's axis-level metric shifts week-over-week by\nmore than ``meridian.analysis.silent_update`` thresholds. These\nare *candidates*, not proven updates \u2014 the public report should say\n\"appears to have updated\" and invite human review.",
@@ -579,6 +694,20 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "corrections": {
+      "items": {
+        "$ref": "#/$defs/ManifestCorrection"
+      },
+      "title": "Corrections",
+      "type": "array"
+    },
+    "coverage": {
+      "items": {
+        "$ref": "#/$defs/RunnerCoverage"
+      },
+      "title": "Coverage",
+      "type": "array"
+    },
     "flagged": {
       "items": {
         "type": "string"
@@ -606,6 +735,18 @@
       },
       "title": "Models",
       "type": "array"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Notes",
+      "type": "array"
+    },
+    "partial": {
+      "default": false,
+      "title": "Partial",
+      "type": "boolean"
     },
     "prompts": {
       "items": {
