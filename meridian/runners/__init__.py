@@ -1,5 +1,6 @@
 from meridian.runners.base import (
     AuthError,
+    BillingError,
     ContentPolicyError,
     RateLimitError,
     Runner,
@@ -10,6 +11,7 @@ from meridian.runners.base import (
 
 __all__ = [
     "AuthError",
+    "BillingError",
     "ContentPolicyError",
     "RateLimitError",
     "Runner",

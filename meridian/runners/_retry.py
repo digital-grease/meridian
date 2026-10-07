@@ -15,18 +15,24 @@ from tenacity import (
     AsyncRetrying,
     RetryError,
     retry_if_exception_type,
+    retry_if_not_exception_type,
     stop_after_attempt,
     wait_exponential,
 )
 
 from meridian.runners.base import (
     AuthError,
+    BillingError,
     RateLimitError,
     RunnerError,
     UpstreamError,
 )
 
 T = TypeVar("T")
+
+#: Failures of the account rather than the request. Never retried.
+_TERMINAL: tuple[type[RunnerError], ...] = (AuthError, BillingError)
+
 _log = logging.getLogger(__name__)
 
 
@@ -53,6 +59,13 @@ async def with_retry(
     pointless round trips against a rate-limited API, every other week,
     forever.
 
+    Nor on :class:`BillingError`. An empty balance or an exhausted quota
+    is a state of the account, and it does not refill between attempts.
+    The provider also reports some of these under a retryable-looking
+    status (OpenAI sends ``insufficient_quota`` as a 429), which is why
+    the runners map them to their own class before this wrapper sees
+    them rather than leaving them to look like a rate limit.
+
     Retryable classes are named explicitly rather than excluded by
     subtraction. A new RunnerError subclass is therefore not retried
     until someone decides it should be, which is the safe default: the
@@ -63,7 +76,10 @@ async def with_retry(
     async for attempt in AsyncRetrying(
         stop=stop_after_attempt(max_attempts),
         wait=wait_exponential(multiplier=min_wait, max=max_wait),
-        retry=retry_if_exception_type((RateLimitError, UpstreamError)),
+        retry=(
+            retry_if_exception_type((RateLimitError, UpstreamError))
+            & retry_if_not_exception_type(_TERMINAL)
+        ),
         reraise=True,
     ):
         with attempt:
@@ -74,8 +90,11 @@ async def with_retry(
                     _log.warning("rate-limited; sleeping %.1fs", e.retry_after_s)
                     await asyncio.sleep(e.retry_after_s)
                 raise
-            except AuthError:
-                # Tenacity would retry this if we let it; AuthError is terminal.
+            except _TERMINAL:
+                # Terminal for the account, not just this request. The
+                # predicate above also excludes them by name, so they stay
+                # unretried even if one is ever reparented under a
+                # retryable class.
                 raise
             except RunnerError:
                 raise

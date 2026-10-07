@@ -6,6 +6,7 @@ for detecting silent upstream upgrades.
 """
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime, timezone
 
@@ -15,12 +16,16 @@ from openai import APIStatusError, AsyncOpenAI
 from meridian.runners._retry import with_retry
 from meridian.runners.base import (
     AuthError,
+    BillingError,
     ContentPolicyError,
     RateLimitError,
     Runner,
+    RunnerError,
     Sample,
     UpstreamError,
 )
+
+_log = logging.getLogger(__name__)
 
 
 #: o-series reasoning model prefixes reject the `temperature` parameter
@@ -76,6 +81,38 @@ class OpenAIRunner(Runner):
     def supports_temperature(self, temperature: float) -> bool:
         return _openai_supports_temperature(self.model_id, temperature)
 
+    async def prepare(self) -> None:
+        """Send one 1-token request so a dead account fails the runner up front.
+
+        Raises :class:`BillingError` or :class:`AuthError`, which the
+        orchestrator records as one failure for the whole runner before
+        any prompt is attempted. Every other failure is logged and
+        swallowed, because the probe exists to answer "can this account
+        pay" and an inconclusive answer must not cost a week of samples.
+
+        ``temperature`` is omitted rather than sent, so the API default
+        applies. That is the one value every model accepts, including
+        the default-only gpt-5.5 and the o-series that rejects the
+        parameter outright. The token cap goes under whichever name
+        :func:`_token_kwarg_for` says this model accepts.
+        """
+        try:
+            await self.client.chat.completions.create(
+                model=self.model_id,
+                messages=[{"role": "user", "content": _PROBE_PROMPT}],
+                **{_token_kwarg_for(self.model_id): _PROBE_MAX_TOKENS},
+            )
+        except openai.APIError as e:
+            err = _map_error(e)
+            if isinstance(err, (BillingError, AuthError)):
+                raise err from e
+            _log.warning(
+                "[%s/%s] preflight probe inconclusive (%s: %s); sampling anyway",
+                self.provider, self.model_id, type(err).__name__, e,
+            )
+            return
+        _log.info("[%s/%s] preflight probe ok", self.provider, self.model_id)
+
     async def sample(
         self,
         prompt: str,
@@ -96,17 +133,8 @@ class OpenAIRunner(Runner):
                     temperature=temperature,
                     **{token_kwarg: max_tokens},
                 )
-            except openai.AuthenticationError as e:
-                raise AuthError(str(e)) from e
-            except openai.RateLimitError as e:
-                retry_after = _parse_retry_after(e)
-                raise RateLimitError(str(e), retry_after_s=retry_after) from e
-            except (openai.APITimeoutError, openai.APIConnectionError) as e:
-                raise UpstreamError(str(e)) from e
-            except APIStatusError as e:
-                if _is_content_policy_rejection(e):
-                    raise ContentPolicyError(str(e)) from e
-                raise UpstreamError(str(e)) from e
+            except openai.APIError as e:
+                raise _map_error(e) from e
 
             latency_ms = int((time.monotonic() - started) * 1000)
             choice = resp.choices[0] if resp.choices else None
@@ -133,6 +161,55 @@ class OpenAIRunner(Runner):
             )
 
         return await with_retry(one_call)
+
+
+#: The preflight probe: the smallest completion the API accepts.
+_PROBE_MAX_TOKENS = 1
+_PROBE_PROMPT = "ping"
+
+#: Error codes OpenAI uses when the account cannot pay for the request.
+#: ``insufficient_quota`` arrives as a 429, the same status as a real
+#: rate limit, so without this check an empty balance is retried with
+#: backoff on every request and then logged as rate limiting.
+_BILLING_CODES: frozenset[str] = frozenset(
+    {
+        "insufficient_quota",
+        "billing_hard_limit_reached",
+        "billing_not_active",
+    }
+)
+
+
+def _is_billing_error(e: APIStatusError) -> bool:
+    """True when OpenAI refused the request because the account cannot pay.
+
+    Matches on the machine-readable ``code`` (or ``type``, which OpenAI
+    sets to the same string for quota errors) and nothing else. A false
+    positive halts the runner for the rest of the week, so prose is not
+    trusted here.
+    """
+    for attr in ("code", "type"):
+        value = getattr(e, attr, None)
+        if isinstance(value, str) and value.lower() in _BILLING_CODES:
+            return True
+    return False
+
+
+def _map_error(e: openai.APIError) -> RunnerError:
+    """Translate an SDK exception into the runner error taxonomy.
+
+    Billing is checked first because OpenAI reports it under 429 and 400,
+    statuses that otherwise mean "retry" and "malformed request".
+    """
+    if isinstance(e, APIStatusError) and _is_billing_error(e):
+        return BillingError(str(e))
+    if isinstance(e, (openai.AuthenticationError, openai.PermissionDeniedError)):
+        return AuthError(str(e))
+    if isinstance(e, openai.RateLimitError):
+        return RateLimitError(str(e), retry_after_s=_parse_retry_after(e))
+    if isinstance(e, APIStatusError) and _is_content_policy_rejection(e):
+        return ContentPolicyError(str(e))
+    return UpstreamError(str(e))
 
 
 #: Error codes OpenAI uses when it declines the request itself rather

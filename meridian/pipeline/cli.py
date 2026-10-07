@@ -241,6 +241,14 @@ async def _cmd_run(args: argparse.Namespace) -> int:
     for err in outcome.errors[:10]:
         print(f"  [{err.error_type}] {err.provider}/{err.model_id}/{err.prompt_id}: {err.message}",
               file=sys.stderr)
+    for runner_key, halt in sorted(outcome.runner_halts.items()):
+        print(
+            f"RUNNER HALTED: {runner_key} {halt['error_type']} at "
+            f"{halt['stage']} ({halt['prompt_id']}), "
+            f"{halt['pairs_not_attempted']} pair(s) not attempted: "
+            f"{halt['message']}",
+            file=sys.stderr,
+        )
 
     run_note: str | None = None
     if ledger is not None:

@@ -13,7 +13,10 @@ internal :meth:`batch` already bounds concurrency to the provider).
 Different runners proceed in parallel via :func:`asyncio.gather`.
 
 Error handling: per-pair errors are collected in the RunOutcome. One
-provider going dark does not stop the rest of the run.
+provider going dark does not stop the rest of the run. An account-level
+failure (BillingError, AuthError) does stop that one runner: the rest of
+its pairs are recorded as failed without a request, and the verdict lands
+once in ``RunOutcome.runner_halts``.
 """
 from __future__ import annotations
 
@@ -25,10 +28,15 @@ from dataclasses import dataclass, field
 from meridian.analysis import usability
 from meridian.corpus import Corpus, Prompt
 from meridian.runners import ContentPolicyError, Runner, RunnerError
-from meridian.runners.base import IntegrityError, Sample
+from meridian.runners.base import AuthError, BillingError, IntegrityError, Sample
 from meridian.storage import LocalSampleStore
 
 _log = logging.getLogger(__name__)
+
+#: Failures that belong to the provider account rather than to a request.
+#: After the first one the orchestrator stops issuing requests for that
+#: runner, because every later request would fail the same way.
+_RUNNER_FATAL: tuple[type[RunnerError], ...] = (BillingError, AuthError)
 
 
 def _fmt_secs(seconds: float) -> str:
@@ -125,6 +133,20 @@ class RunOutcome:
     content_policy_rejections: dict[str, dict[str, int]] = field(
         default_factory=dict
     )
+    #: Runners the orchestrator stopped sampling, keyed
+    #: ``"provider/model_id"``. Each value records ``error_type`` (the
+    #: class name, e.g. ``"BillingError"``), ``stage`` (``"prepare"`` when
+    #: the preflight probe failed, ``"sample"`` when a request did),
+    #: ``prompt_id`` of the request that tripped it (``"*"`` for prepare),
+    #: ``message``, and ``pairs_not_attempted``.
+    #:
+    #: Exists because ``errors`` cannot carry the verdict on its own. A
+    #: halted runner leaves one record per pair, which is right for the
+    #: per-pair accounting but fills the run log's bounded error list, and
+    #: that list is in completion order. 2026-W36 lost every Anthropic
+    #: pair to an empty balance and the log read as 59 unrelated upstream
+    #: faults. This is the one line that says what actually happened.
+    runner_halts: dict[str, dict[str, object]] = field(default_factory=dict)
 
     @property
     def total_unusable(self) -> int:
@@ -184,18 +206,29 @@ class Orchestrator:
                     message=str(e),
                 ))
                 outcome.pairs_failed += total
+                self._record_halt(outcome, runner_key, e, "prepare", "*", total)
                 return
             except RunnerError as e:
-                _log.error("[%s] prepare failed: %s", runner_key, e)
+                # The class name, not a generic "prepare", so the run log
+                # can tell an empty balance from a rejected key from a
+                # probe that merely failed.
+                _log.error(
+                    "[%s] prepare failed (%s), no requests will be sent for "
+                    "this runner: %s", runner_key, type(e).__name__, e,
+                )
                 outcome.errors.append(PairError(
                     provider=runner.provider,
                     model_id=runner.model_id,
                     prompt_id="*",
-                    error_type="prepare",
-                    message=str(e),
+                    error_type=type(e).__name__,
+                    message=str(e)[:200],
                 ))
                 outcome.pairs_failed += total
+                self._record_halt(outcome, runner_key, e, "prepare", "*", total)
                 return
+            # Set by the first account-level failure (see _RUNNER_FATAL).
+            # Every pair after it is failed without a request.
+            halted: RunnerError | None = None
             # A runner may pin its own completion cap (reasoning-default
             # models need a bigger budget because reasoning tokens are
             # billed against it); otherwise the plan's shared cap applies.
@@ -218,6 +251,28 @@ class Orchestrator:
                         runner_key, idx, total, prompt.id, "SKIP",
                         pair_started, run_started,
                         samples_added=0,
+                    )
+                    continue
+
+                if halted is not None:
+                    outcome.pairs_failed += 1
+                    outcome.runner_halts[runner_key]["pairs_not_attempted"] += 1
+                    outcome.errors.append(
+                        PairError(
+                            provider=runner.provider,
+                            model_id=runner.model_id,
+                            prompt_id=prompt.id,
+                            error_type=type(halted).__name__,
+                            message=(
+                                f"not attempted: runner halted after "
+                                f"{type(halted).__name__} on "
+                                f"{outcome.runner_halts[runner_key]['prompt_id']}"
+                            ),
+                        )
+                    )
+                    self._log_progress(
+                        runner_key, idx, total, prompt.id, "HALT",
+                        pair_started, run_started, samples_added=0,
                     )
                     continue
 
@@ -341,6 +396,17 @@ class Orchestrator:
                         runner.provider, runner.model_id, prompt.id, e,
                     )
                     status = "FAIL"
+                    if isinstance(e, _RUNNER_FATAL):
+                        halted = e
+                        self._record_halt(
+                            outcome, runner_key, e, "sample", prompt.id, 0
+                        )
+                        _log.error(
+                            "[%s] %s on %s; no further requests will be sent "
+                            "for this runner this run, remaining pairs are "
+                            "recorded as failed: %s",
+                            runner_key, type(e).__name__, prompt.id, e,
+                        )
 
                 samples_added = (
                     outcome.per_runner_samples[runner_key] - samples_before
@@ -386,6 +452,27 @@ class Orchestrator:
 
         await asyncio.gather(*[run_one_runner(r) for r in self.runners])
         return outcome
+
+    @staticmethod
+    def _record_halt(
+        outcome: RunOutcome,
+        runner_key: str,
+        error: RunnerError,
+        stage: str,
+        prompt_id: str,
+        pairs_not_attempted: int,
+    ) -> None:
+        """Record the one verdict for a runner that stopped sampling."""
+        outcome.runner_halts[runner_key] = {
+            "error_type": (
+                "integrity" if isinstance(error, IntegrityError)
+                else type(error).__name__
+            ),
+            "stage": stage,
+            "prompt_id": prompt_id,
+            "message": str(error)[:200],
+            "pairs_not_attempted": pairs_not_attempted,
+        }
 
     @staticmethod
     def _note_outcome(

@@ -7,6 +7,7 @@ request id, and wall-clock latency.
 """
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime, timezone
 
@@ -16,11 +17,15 @@ from anthropic import APIStatusError, AsyncAnthropic
 from meridian.runners._retry import with_retry
 from meridian.runners.base import (
     AuthError,
+    BillingError,
     RateLimitError,
     Runner,
+    RunnerError,
     Sample,
     UpstreamError,
 )
+
+_log = logging.getLogger(__name__)
 
 
 #: Model-id prefixes whose API deprecates `temperature` (returns 400
@@ -105,6 +110,36 @@ class AnthropicRunner(Runner):
     def supports_temperature(self, temperature: float) -> bool:
         return _anthropic_supports_temperature(self.model_id, temperature)
 
+    async def prepare(self) -> None:
+        """Send one 1-token request so a dead account fails the runner up front.
+
+        Raises :class:`BillingError` or :class:`AuthError`, which the
+        orchestrator records as one failure for the whole runner before
+        any prompt is attempted. Every other failure is logged and
+        swallowed: the probe exists to answer "can this account pay",
+        and an inconclusive answer must not cost a week of samples that
+        the real requests might still have captured. The request omits
+        ``temperature`` so it is valid for every model whatever its
+        temperature rules, and it is sent once, without retry, because
+        neither class it raises is retryable anyway.
+        """
+        try:
+            await self.client.messages.create(
+                model=self.model_id,
+                max_tokens=_PROBE_MAX_TOKENS,
+                messages=[{"role": "user", "content": _PROBE_PROMPT}],
+            )
+        except anthropic.APIError as e:
+            err = _map_error(e)
+            if isinstance(err, (BillingError, AuthError)):
+                raise err from e
+            _log.warning(
+                "[%s/%s] preflight probe inconclusive (%s: %s); sampling anyway",
+                self.provider, self.model_id, type(err).__name__, e,
+            )
+            return
+        _log.info("[%s/%s] preflight probe ok", self.provider, self.model_id)
+
     async def sample(
         self,
         prompt: str,
@@ -125,17 +160,8 @@ class AnthropicRunner(Runner):
             started = time.monotonic()
             try:
                 resp = await self.client.messages.create(**api_kwargs)
-            except anthropic.AuthenticationError as e:
-                raise AuthError(str(e)) from e
-            except anthropic.RateLimitError as e:
-                retry_after = _parse_retry_after(e)
-                raise RateLimitError(str(e), retry_after_s=retry_after) from e
-            except (anthropic.APITimeoutError, anthropic.APIConnectionError) as e:
-                raise UpstreamError(str(e)) from e
-            except APIStatusError as e:
-                if e.status_code in (500, 502, 503, 504):
-                    raise UpstreamError(str(e)) from e
-                raise UpstreamError(str(e)) from e
+            except anthropic.APIError as e:
+                raise _map_error(e) from e
 
             latency_ms = int((time.monotonic() - started) * 1000)
             text = _extract_text(resp)
@@ -156,10 +182,87 @@ class AnthropicRunner(Runner):
                 api_version=f"anthropic-sdk-{anthropic.__version__}",
                 latency_ms=latency_ms,
                 captured_at=datetime.now(timezone.utc),
-                safety_flags=[],
+                safety_flags=_safety_flags(resp),
             )
 
         return await with_retry(one_call)
+
+
+#: The preflight probe. One output token is the smallest request the
+#: Messages API accepts, and the prompt is a single word, so a weekly
+#: probe costs a fraction of a cent on the most expensive model.
+_PROBE_MAX_TOKENS = 1
+_PROBE_PROMPT = "ping"
+
+#: Message fragment Anthropic sends, as a 400 ``invalid_request_error``,
+#: when a prepaid balance is empty. Verbatim from 2026-W36, where it
+#: was the only signal: the status and the error type are the same ones
+#: a malformed request gets.
+_CREDIT_BALANCE_MARKER = "credit balance is too low"
+
+
+def _error_type(e: APIStatusError) -> str | None:
+    """The ``error.type`` field of an Anthropic error body, if present."""
+    body = getattr(e, "body", None)
+    if isinstance(body, dict):
+        inner = body.get("error")
+        if isinstance(inner, dict):
+            value = inner.get("type")
+            return value if isinstance(value, str) else None
+    return None
+
+
+def _is_billing_error(e: APIStatusError) -> bool:
+    """True when Anthropic refused the request because the account cannot pay.
+
+    Positive evidence only. A false positive halts the runner for the
+    rest of the week, so an ordinary 400 must never qualify: it takes
+    a 402, the documented ``billing_error`` type, or the credit-balance
+    sentence on a 400.
+    """
+    status = getattr(e, "status_code", None)
+    if status == 402 or _error_type(e) == "billing_error":
+        return True
+    if status != 400:
+        return False
+    message = (getattr(e, "message", None) or str(e)).lower()
+    return _CREDIT_BALANCE_MARKER in message
+
+
+def _map_error(e: anthropic.APIError) -> RunnerError:
+    """Translate an SDK exception into the runner error taxonomy.
+
+    Billing is checked before anything else because Anthropic reports it
+    under statuses that otherwise mean something retryable or generic.
+    """
+    if isinstance(e, APIStatusError) and _is_billing_error(e):
+        return BillingError(str(e))
+    if isinstance(e, (anthropic.AuthenticationError, anthropic.PermissionDeniedError)):
+        return AuthError(str(e))
+    if isinstance(e, anthropic.RateLimitError):
+        return RateLimitError(str(e), retry_after_s=_parse_retry_after(e))
+    return UpstreamError(str(e))
+
+
+def _safety_flags(resp) -> list[str]:
+    """Provider-reported safety detail worth keeping with the sample.
+
+    A ``stop_reason="refusal"`` response carries ``stop_details`` naming
+    the classifier category that declined it (``cyber``, ``bio``, ...).
+    The refusal itself is already counted from ``stop_reason``; the
+    category is kept so a later analysis can tell which safeguard fired
+    without re-sampling. Anything absent or unexpected yields no flag.
+    """
+    if getattr(resp, "stop_reason", None) != "refusal":
+        return []
+    details = getattr(resp, "stop_details", None)
+    category = (
+        details.get("category") if isinstance(details, dict)
+        else getattr(details, "category", None)
+    )
+    if isinstance(category, str) and category:
+        return [f"refusal_category:{category}"]
+    return ["refusal_category:unspecified"]
 
 
 def _extract_text(resp) -> str:

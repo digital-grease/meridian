@@ -76,6 +76,38 @@ class RunLogEntry:
     content_policy_rejections: dict[str, dict[str, int]] = field(
         default_factory=dict
     )
+    # Runners the orchestrator stopped sampling, "provider/model" ->
+    # {error_type, stage, prompt_id, message, pairs_not_attempted}. One
+    # entry per halted runner and never capped, unlike `errors`, so an
+    # account-level failure (BillingError, AuthError, a failed preflight
+    # probe) is stated once here even when its per-pair records crowd
+    # out everything else in the bounded error list. Defaulted so entries
+    # written before 2026-10-05 stay parseable: retention is forever and
+    # the reader must never break on an old line.
+    runner_halts: dict[str, dict] = field(default_factory=dict)
+    # The roster this invocation was due to sample, "provider/model",
+    # fixed before the first request. Without it the health check could
+    # only judge the runners that showed up in the results, so a run that
+    # wrote nothing at all, or a provider that wrote nothing and recorded
+    # no failed pair, read as clean. Defaulted so entries written before
+    # 2026-10-05 stay parseable; the health check derives an expectation
+    # for those from the roster and pair counts instead.
+    expected_runners: list[str] = field(default_factory=list)
+    # Samples each expected runner should produce this week, "provider/
+    # model" -> count: prompts times the batches the runner accepts (a
+    # model that rejects temperature=0 is not expected to fill the
+    # zero-temperature batch). Same default and reason as above.
+    expected_samples: dict[str, int] = field(default_factory=dict)
+    # Samples on disk for this week, per "provider/model", when the
+    # invocation finished. Differs from `per_runner_samples`, which counts
+    # only what this invocation wrote: a resumed run skips stored pairs,
+    # so its own count understates the week. Defaulted for old entries.
+    stored_samples: dict[str, int] = field(default_factory=dict)
+    # Every recorded error, counted: "provider/model" -> error_type ->
+    # count. Never capped, unlike `errors`, which keeps the first 50 in
+    # completion order and so can be entirely one runner's failures.
+    # Defaulted so entries written before 2026-10-05 stay parseable.
+    error_summary: dict[str, dict[str, int]] = field(default_factory=dict)
 
 
 def _config_hash(config: PipelineConfig) -> str:
@@ -98,7 +130,13 @@ def append_run_log(
     estimated_cost_usd: float,
     actual_cost_usd: float,
     note: str | None = None,
+    expected_samples: dict[str, int] | None = None,
+    stored_samples: dict[str, int] | None = None,
 ) -> RunLogEntry:
+    error_summary: dict[str, dict[str, int]] = {}
+    for e in outcome.errors:
+        per_type = error_summary.setdefault(f"{e.provider}/{e.model_id}", {})
+        per_type[e.error_type] = per_type.get(e.error_type, 0) + 1
     entry = RunLogEntry(
         started_at=started_at.astimezone(timezone.utc).isoformat(timespec="seconds"),
         finished_at=finished_at.astimezone(timezone.utc).isoformat(timespec="seconds"),
@@ -123,6 +161,11 @@ def append_run_log(
         content_policy_rejections={
             k: dict(v) for k, v in outcome.content_policy_rejections.items() if v
         },
+        runner_halts={k: dict(v) for k, v in outcome.runner_halts.items()},
+        expected_runners=sorted(expected_samples or {}),
+        expected_samples=dict(sorted((expected_samples or {}).items())),
+        stored_samples=dict(sorted((stored_samples or {}).items())),
+        error_summary=error_summary,
         estimated_cost_usd=round(estimated_cost_usd, 4),
         actual_cost_usd=round(actual_cost_usd, 4),
         errors=[

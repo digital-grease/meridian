@@ -20,7 +20,31 @@ class RunnerError(Exception):
 
 
 class AuthError(RunnerError):
-    """Missing or invalid credentials."""
+    """Missing or invalid credentials, or a key the provider will not honour.
+
+    Covers 401 and 403. Terminal for the whole runner, not just the
+    request: a key that is rejected once is rejected for every prompt,
+    so the orchestrator stops issuing requests for that runner after the
+    first one (see :class:`BillingError` for why that matters).
+    """
+
+
+class BillingError(RunnerError):
+    """The provider refused the request because the account cannot pay.
+
+    An empty prepaid balance, an exhausted quota, or a hard spend limit.
+    Like :class:`AuthError` it is a property of the account rather than
+    the request, so it is never retried and the orchestrator stops
+    sampling the runner after the first one.
+
+    Split out of :class:`UpstreamError` because of 2026-W36. Anthropic
+    answered every request with HTTP 400 "Your credit balance is too
+    low to access the Anthropic API", the runner classified that as a
+    transient upstream fault, and ``with_retry`` tried each one four
+    times. The run log then held 59 generic UpstreamErrors that read
+    like an outage rather than one unambiguous verdict that the account
+    was out of credit.
+    """
 
 
 class IntegrityError(RunnerError):
@@ -145,9 +169,12 @@ class Runner(abc.ABC):
 
         Default no-op. Subclasses override to validate environment invariants
         that need a network round-trip (e.g. ``OllamaRunner`` verifies the
-        served model digest matches the pinned one). Failure should raise an
-        :class:`IntegrityError`; the orchestrator treats that as fatal for
-        this runner — no samples are written under a mismatched digest.
+        served model digest matches the pinned one, and the commercial
+        runners send a one-token probe). Failure should raise an
+        :class:`IntegrityError`, :class:`BillingError` or
+        :class:`AuthError`; the orchestrator treats any of them as fatal
+        for this runner, records one failure for it in the run log, and
+        writes no samples.
         """
         return None
 
