@@ -30,7 +30,8 @@ class RunLogEntry:
     week_id: str
     host: str
     pid: int
-    config_hash: str
+    # None only on a reconstruction whose original config is not known.
+    config_hash: str | None
     runners: list[str]
     # Sample + failure counts come from RunOutcome; cost from CostReport.
     total_samples_written: int
@@ -108,6 +109,18 @@ class RunLogEntry:
     # completion order and so can be entirely one runner's failures.
     # Defaulted so entries written before 2026-10-05 stay parseable.
     error_summary: dict[str, dict[str, int]] = field(default_factory=dict)
+    # True on a row written after the fact for a run that never logged
+    # itself, by ``cli recover-week``. Such a row is a reconstruction of
+    # what the archived raw samples show, not a record the run made: its
+    # ``note`` says when the samples were taken, why the run left no
+    # entry, and when the row was built. 2026-W34 is the first: killed at
+    # the SSM execution timeout before it could append anything.
+    # Defaulted so every earlier entry stays parseable.
+    recovery: bool = False
+
+
+#: Sentinel: derive ``config_hash`` from the config passed in.
+_FROM_CONFIG = object()
 
 
 def _config_hash(config: PipelineConfig) -> str:
@@ -132,7 +145,20 @@ def append_run_log(
     note: str | None = None,
     expected_samples: dict[str, int] | None = None,
     stored_samples: dict[str, int] | None = None,
+    recovery: bool = False,
+    runners: list[str] | None = None,
+    config_hash: str | None | object = _FROM_CONFIG,
 ) -> RunLogEntry:
+    """Append one run's row to ``log_path`` and return it.
+
+    ``runners`` and ``config_hash`` default to what ``config`` says, which
+    is right for a live run: the row describes the config it ran under.
+    A reconstruction (``recovery=True``) is built months later under a
+    different config, so ``cli recover-week`` passes both explicitly:
+    the week's own roster, and the hash logged by the neighbouring runs
+    of the time (or ``None`` when that is not known). Otherwise the row
+    would name models and a config that did not exist when the week ran.
+    """
     error_summary: dict[str, dict[str, int]] = {}
     for e in outcome.errors:
         per_type = error_summary.setdefault(f"{e.provider}/{e.model_id}", {})
@@ -143,9 +169,14 @@ def append_run_log(
         week_id=week_id,
         host=socket.gethostname(),
         pid=os.getpid(),
-        config_hash=_config_hash(config),
+        config_hash=(
+            _config_hash(config) if config_hash is _FROM_CONFIG
+            else config_hash  # type: ignore[arg-type]
+        ),
         runners=sorted(
-            f"{s.provider}/{s.model_id}" for s in config.runners if s.enabled
+            runners if runners is not None else (
+                f"{s.provider}/{s.model_id}" for s in config.runners if s.enabled
+            )
         ),
         total_samples_written=outcome.total_samples_written,
         pairs_complete=outcome.pairs_complete,
@@ -179,10 +210,16 @@ def append_run_log(
             for e in outcome.errors[:50]  # cap to keep lines bounded
         ],
         note=note,
+        recovery=recovery,
     )
+    row = asdict(entry)
+    if not entry.recovery:
+        # Written only when true, so a live run's row is exactly what it
+        # was before reconstructions existed.
+        del row["recovery"]
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(asdict(entry), sort_keys=True) + "\n")
+        f.write(json.dumps(row, sort_keys=True) + "\n")
     return entry
 
 

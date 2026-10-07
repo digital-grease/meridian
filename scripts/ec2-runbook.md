@@ -217,8 +217,9 @@ SSM Session). If a run fails:
 3. `tail -1 /data/meridian/repo/data/run_log.jsonl` for the structured
    failure entry.
 4. Decide whether to re-run by hand (manual `run-weekly.sh` invocation
-   with `WE_OWN_LIFECYCLE=0`) or accept the gap and document it on
-   the methodology page (per the no-backfill policy).
+   with `WE_OWN_LIFECYCLE=0`) or accept the gap and record it in
+   `data/gaps.jsonl` (per the no-backfill policy), which the site
+   renders under `/methodology/#data-gaps` and `/data/coverage/`.
 
 ### The run stopped on its cost ceiling
 
@@ -279,9 +280,13 @@ only lever.
    run takes 30-90 minutes, so a start after roughly 11:30 UTC will not
    publish the same day. It is still worth running: re-trigger the
    publish afterwards with `gh workflow run weekly-pipeline.yml -f week=<ISO week>`.
-4. If capacity does not return the same morning, the week is lost. Add
-   it to `#data-gaps` in `site/src/templates/methodology.html` and close
-   the auto-filed issue pointing at that entry. Do not sample it later:
+4. If capacity does not return the same morning, the week is lost.
+   Append a line for it to `data/gaps.jsonl` (`week_id`, `scope`,
+   `kind: "lost"`, `runners` for the roster that was due, `reason`,
+   `evidence`, `recorded_at`; format in `scripts/check_run_health.py`
+   and `site/src/data_coverage.py`). The site build renders it under
+   `/methodology/#data-gaps` and `/data/coverage/`; do not hand-edit
+   either page. Close the auto-filed issue pointing at that entry. Do not sample it later:
    a sample taken Thursday is not a Monday sample, and backdating one
    would corrupt exactly the signal this project measures.
 
@@ -350,7 +355,315 @@ alone.
 A run killed part-way writes no manifest, so the publish workflow will
 404 for that week. Once the cause is fixed and a run has completed,
 publish it with
-`gh workflow run weekly-pipeline.yml -f week=<ISO week>`.
+`gh workflow run weekly-pipeline.yml -f week=<ISO week>`. To publish
+what a killed run did capture, as a disclosed partial week, use
+`cli recover-week`; the 2026-W34 procedure below is the worked example.
+
+## Recovery: publish 2026-W34 as a partial week and re-classify W36 to W38 stance
+
+One-off, owner-run. It publishes the samples the killed 2026-W34 run
+captured (the owner decision: a disclosed partial week, not an embargo)
+and re-measures the stance cells 2026-W36 to W38 published as
+unmeasured. No model is re-sampled. The only API calls are to the stance
+classifier (Haiku), about 72 of them.
+
+What it uses:
+
+- `scripts/recovery.sh <step>` on the instance, as the `meridian` user,
+  with the same environment as `run-weekly.sh` (`/etc/meridian/config.env`,
+  repo at `/data/meridian/repo`, `uv`). Each step logs to
+  `/data/meridian/logs/recovery-<step>-<timestamp>.log`.
+- `cli recover-week` (dry run unless `--write`): builds the W34
+  manifest with `partial`, `coverage` and `notes`, the responses
+  snapshot, and ONE run_log entry with `recovery: true`, then uploads
+  them. It never touches `manifests/latest.json`, never re-uploads raw,
+  and refuses before writing anything if the week already has a run_log
+  entry or a manifest (local or S3), or if the local run_log differs
+  from the S3 copy.
+- `scripts/backfill_stance.py classify` (instance, needs the key) and
+  `graft` (anywhere, no network), following the 2026-07-24 correction.
+
+**Deadline: 2026-W34 must be on `main` before Monday 2026-10-12 09:00
+UTC.** The W34 run_log entry exists only on the instance and in S3 until
+the publish workflow commits it. The next weekly run resets the repo to
+`origin/main` and uploads its run_log over the S3 copy, which would drop
+the entry (bucket versioning keeps the old object, but nothing would
+read it).
+
+Preconditions: this change set is merged and pushed to `main`. The
+instance checkout is wherever the last weekly run left it and may not
+have `scripts/recovery.sh` yet, so the preflight is run as `origin/main`
+has it (fetched and read with `git show`); it resets the checkout, and
+every later step uses the reset checkout. The preflight refuses a
+checkout without `recover-week`. Main must also carry
+`data/gaps.jsonl`, which is what turns the W34 health verdict into a
+warning instead of a page. Not Monday 08:00 to 14:00 UTC. The instance
+is stopped; if it is running, it is specter's: wait.
+
+Run from a laptop with AWS access and `gh`, in `bash` (start `bash`
+first if your login shell is fish), from a meridian checkout. Paste one
+block at a time and read its output before the next: each block stops
+at the first step that does not succeed, and the next block refuses to
+start unless the previous one finished.
+
+Block A: setup, read-only checks, start, backstop.
+
+```bash
+cd ~/git/digital-grease/meridian   # your meridian checkout
+I=i-09453a7a969ca4ea5; R=us-east-2; B=s3://meridian-archive-prod/meridian
+STARTED=0; IN_USE=0; OK=none
+# Sends one shell command to the instance, waits, prints status and output.
+# Returns 0 only on Success; otherwise the command's exit code (or 1).
+# The comment is deliberately not the orchestrator's, so the reaper
+# ignores this boot: you stop the instance yourself (block D), and the
+# backstop below stops it if you cannot.
+ssm() {
+  local label=$1 cmd=$2 id s code params
+  params=$(python3 -c 'import json,sys; print(json.dumps({"executionTimeout":["7200"],"commands":[sys.argv[1]]}))' "$cmd")
+  id=$(aws ssm send-command --region "$R" --instance-ids "$I" \
+        --document-name AWS-RunShellScript --comment "meridian manual recovery $label" \
+        --parameters "$params" --query Command.CommandId --output text) || return 1
+  echo "command $id ($label)"
+  while :; do
+    s=$(aws ssm get-command-invocation --region "$R" --command-id "$id" --instance-id "$I" \
+          --query Status --output text 2>/dev/null || echo Pending)
+    case "$s" in Pending|InProgress|Delayed) sleep 15 ;; *) break ;; esac
+  done
+  aws ssm get-command-invocation --region "$R" --command-id "$id" --instance-id "$I" \
+      --query '[Status,ResponseCode,StandardOutputContent,StandardErrorContent]' --output text
+  [ "$s" = Success ] && return 0
+  code=$(aws ssm get-command-invocation --region "$R" --command-id "$id" --instance-id "$I" \
+          --query ResponseCode --output text 2>/dev/null)
+  case "$code" in ''|*[!0-9]*|0) code=1 ;; esac
+  [ "$code" = 75 ] && IN_USE=1
+  echo "STOP: $label did not succeed (status $s, exit ${code:-?})."
+  return "${code:-1}"
+}
+# One recovery step from the reset checkout. The preflight instead runs the
+# script as origin/main has it, because the checkout may predate it.
+step() {
+  local c="sudo -u meridian bash /data/meridian/repo/scripts/recovery.sh $1"
+  if [ "$1" = preflight ]; then
+    c="sudo -u meridian bash -c 'cd /data/meridian/repo && timeout 120 git fetch --quiet origin main && f=\$(mktemp) && git show origin/main:scripts/recovery.sh > \$f && bash \$f preflight; rc=\$?; rm -f \$f; exit \$rc'"
+  fi
+  ssm "$1" "$c"
+}
+
+# 1. Read-only checks. Expect: "stopped"; "stop"; 73; "no manifest"; "same".
+STATE=$(aws ec2 describe-instances --region "$R" --instance-ids "$I" \
+    --query 'Reservations[].Instances[].State.Name' --output text); echo "$STATE"
+SB=$(aws ec2 describe-instance-attribute --region "$R" --instance-id "$I" \
+    --attribute instanceInitiatedShutdownBehavior \
+    --query InstanceInitiatedShutdownBehavior.Value --output text); echo "$SB"
+N=$(aws s3 ls "$B/raw/2026-W34/" --recursive --region "$R" | wc -l); echo "$N"
+M=$(aws s3 ls "$B/manifests/2026-W34.json" --region "$R"); echo "${M:-no manifest}"
+SAME=0; git fetch origin main && cmp <(aws s3 cp "$B/run_log.jsonl" - --region "$R") \
+    <(git show origin/main:data/run_log.jsonl) && SAME=1 && echo same
+
+# 2. Start the instance, only if every check above came out as expected.
+#    Not stopped means it is specter's: stop here and come back later.
+if [ "$STATE" = stopped ] && [ "$SB" = stop ] && [ "$N" -eq 73 ] && [ -z "$M" ] && [ "$SAME" = 1 ]; then
+  aws ec2 start-instances --region "$R" --instance-ids "$I" >/dev/null \
+    && aws ec2 wait instance-status-ok --region "$R" --instance-ids "$I" \
+    && STARTED=1 && echo "started"
+  # Backstop: the instance halts itself (a guest shutdown stops an
+  # EBS-backed instance whose shutdown behaviour is "stop", checked above)
+  # three hours from now, even if this laptop session dies. The reaper
+  # will not cover this boot. To extend: ssm extend "shutdown -c; shutdown -h +120"
+  [ "$STARTED" = 1 ] && ssm backstop "shutdown -h +180" && OK=A
+else
+  echo "STOP: a check above is not as expected; nothing was started."
+fi
+```
+
+Block B: preflight and plan (no API calls). Read the plan before block C.
+
+```bash
+[ "$OK" = A ] || echo "STOP: block A did not finish."
+[ "$OK" = A ] && step preflight && step w34-plan && OK=B
+```
+
+Block C: build and archive W34, then re-classify W36 to W38 stance.
+
+```bash
+[ "$OK" = B ] || echo "STOP: block B did not finish."
+[ "$OK" = B ] && step w34-publish && step stance-classify && OK=C
+```
+
+Block D: stop the instance. Always run it, whatever happened above.
+
+```bash
+if [ "$STARTED" = 1 ] && [ "$IN_USE" = 0 ]; then
+  aws ec2 stop-instances --region "$R" --instance-ids "$I" >/dev/null
+  aws ec2 wait instance-stopped --region "$R" --instance-ids "$I" && echo "stopped"
+elif [ "$STARTED" = 1 ]; then
+  # Specter took the box after we started it: leave it running, and cancel
+  # the backstop so it does not halt specter's work.
+  ssm cancel-backstop "shutdown -c"
+  echo "Not stopping: specter is using the instance. Retry the recovery later."
+else
+  echo "Not stopping: this session did not start the instance."
+fi
+```
+
+Block E: publish W34 (only after block C printed nothing with STOP).
+
+```bash
+[ "$OK" = C ] || echo "STOP: block C did not finish; do not publish."
+if [ "$OK" = C ]; then
+  prev=$(gh run list --workflow weekly-pipeline.yml --event workflow_dispatch --limit 1 \
+           --json databaseId -q '.[0].databaseId // 0')
+  gh workflow run weekly-pipeline.yml --ref main -f week=2026-W34
+  run=$prev
+  for _ in $(seq 1 30); do
+    sleep 5
+    run=$(gh run list --workflow weekly-pipeline.yml --event workflow_dispatch --limit 1 \
+            --json databaseId -q '.[0].databaseId // 0')
+    [ "$run" != "$prev" ] && break
+  done
+  if [ "$run" = "$prev" ]; then
+    echo "STOP: the dispatched run did not appear; find it with gh run list."
+  else
+    gh run watch "$run" --exit-status
+  fi
+fi
+```
+
+Expected output, step by step:
+
+- **1.** `stopped`, `stop`, `73`, `no manifest`, `same`. Step 2 starts
+  nothing unless all five hold. If the run_log comparison fails, find
+  out why main and S3 disagree before anything appends to either. If the
+  shutdown behaviour is not `stop`, the backstop is unsafe (a
+  `terminate` would destroy the instance); fix the attribute first.
+- **2.** `started`, then the backstop's `Success` with the shutdown
+  scheduled. The reaper will not stop or alert on this boot; the
+  backstop and block D are the only stops.
+- **Block B, preflight.** `GPU memory used: 0 MB`, a `run_log:` line
+  (`matches origin/main`, or `origin/main is ahead of the local copy`,
+  which is the normal state after a weekly run), `repo at <sha of
+  main>`, `preflight ok`. `REFUSED` on the GPU or specter exits 75:
+  specter took the box after you started it; run block D, which leaves
+  it running and cancels the backstop. `REFUSED: data/run_log.jsonl has
+  rows origin/main does not have` means an unpublished row (for example
+  a W34 reconstruction from an earlier attempt): publish it before
+  anything else.
+- **Block B, w34-plan.** `local raw files for 2026-W34: 73`, then per
+  model `claude-opus-4-8: 600 samples`, `claude-opus-5: 259 samples`,
+  `llama3.2:3b: 750 samples`. `inspect-week` shows opus as `/750`
+  because it assumes 25 per pair; read the counts. Then recover-week:
+
+  ```
+  anthropic/claude-opus-4-8         600/600  samples  complete complete=30 partial=0 missing=0
+  anthropic/claude-opus-5           259/600  samples  partial  complete=12 partial=1 missing=17
+      cut short: sci-iq-heritability 19/20
+  ollama/llama3.2:3b                750/750  samples  complete complete=30 partial=0 missing=0
+  run_log entry: pairs_complete=72 pairs_failed=18 pairs_skipped=0 samples=1609 recovery=true
+  captured 2026-08-24T09:... to 2026-08-24T10:...
+  s3: no manifest for this week yet; local run_log matches S3
+  dry run: nothing written. Re-run with --write to build and archive.
+  ```
+
+  The `note:` line ends with `runners is the roster due in 2026-W34`,
+  `config_hash e78efdfab25cd47d is the hash logged by the scheduled runs
+  either side of 2026-W34` and `host and pid are those of the
+  recover-week invocation`. Any `REFUSED` line: stop and read it;
+  nothing was written.
+- **Block C, w34-publish.** `stance: classified 73 pair(s)` (every
+  stored pair: 30 + 13 + 30; about 30 are stance-bearing and reach the
+  classifier) with no `STANCE CLASSIFIER DEGRADED` line, `wrote partial
+  manifest`, `responses snapshot: 1609 sample(s)`, `run log: appended
+  2026-W34 reconstruction (recovery=true, pairs_complete=72,
+  pairs_failed=18, actual $...)`, three `s3:` lines with `uploaded 1`
+  (the run log line too), `archived 2026-W34`, the two `aws s3 ls`
+  lines, and the run_log summary dict with `'runners':
+  ['anthropic/claude-opus-4-8', 'anthropic/claude-opus-5',
+  'ollama/llama3.2:3b']` and `'config_hash': 'e78efdfab25cd47d'`. If it
+  says `REFUSED: the stance classifier failed`, the Anthropic balance or
+  key is the problem; nothing was written: fix it, then run `step
+  w34-publish && step stance-classify && OK=C` again. If it says
+  `ARCHIVE INCOMPLETE`, copy the three files up by hand with `aws s3 cp`
+  as the message says; do not re-run w34-publish.
+- **Block C, stance-classify.** `2026-W36: 13 unmeasured cell(s)
+  re-classified: {...}`, `2026-W37: 19 ...`, `2026-W38: 10 ...`, `wrote
+  42 result(s)`, a `results:
+  s3://.../corrections/stance-<timestamp>/stance-results.jsonl` line
+  (note the path for the local step), and a graft dry run that ends with
+  three `diff check passed` lines, a Markdown table of 42 rows with a
+  `Response SHA-256` column, and `dry run: nothing written.` `CLASSIFIER
+  STILL FAILING` means the key or balance is still bad; fix it and run
+  `step stance-classify && OK=C` again, which writes a new timestamped
+  directory (successful calls are cached and not repeated).
+- **Block D.** `stopped`.
+- **Block E.** The watch ends green. The publish commits
+  `chore(pipeline): publish 2026-W34 from S3` (manifest, fixture,
+  snapshot, run_log), and its health job logs `WARN 2026-W34
+  anthropic/claude-opus-5 ACKNOWLEDGED: 259/600 samples`. A `PAGE` means
+  `data/gaps.jsonl` was not on main: it does not block the site; push
+  the ledger and re-run the health check by hand (`python3
+  scripts/check_run_health.py 2026-W34`).
+
+Then, locally on an up-to-date `main` (pull the publish commit first),
+in a fresh `bash`:
+
+```bash
+cd ~/git/digital-grease/meridian   # your meridian checkout
+R=us-east-2
+D=YYYY-MM-DD      # the date of the stance-classify step; it becomes both report slugs
+RESULTS=s3://...  # the results: path stance-classify printed
+mkdir -p /tmp/stance-$D
+aws s3 cp "$RESULTS" /tmp/stance-$D/stance-results.jsonl --region "$R"
+uv run python scripts/backfill_stance.py graft --results /tmp/stance-$D/stance-results.jsonl --date "$D" --dry-run
+uv run python scripts/backfill_stance.py graft --results /tmp/stance-$D/stance-results.jsonl --date "$D" --write
+git diff --stat   # exactly six files: data/manifests and site/fixtures for W36, W37, W38
+uv run python scripts/check_run_health.py 2026-W37 --manifest data/manifests/2026-W37.json   # no CLASSIFIER-DEAD
+```
+
+Then publish the two notices and the ledger lines. The drafts are kept
+out of git until this point (the repo is public, and nobody sees a
+report before it is published), so they are moved with a plain `mv`:
+
+1. `mv site/content/drafts/stance-classifier-correction.md
+   site/content/reports/$D-stance-classifier-correction.md`, replace both
+   `YYYY-MM-DD`, and paste the graft's table (with its `Response
+   SHA-256` column) over the placeholder table (delete the HTML comment
+   above it). The manifests' `corrections` entries already point at
+   `/reports/$D-stance-classifier-correction/`.
+2. `mv site/content/drafts/w34-partial-week-notice.md
+   site/content/reports/$D-w34-partial-week.md` and replace the three
+   `YYYY-MM-DD` (publication date, the run_log entry's build date and the
+   W34 stance classification date, both the w34-publish date).
+3. Append, never edit, one ledger line per corrected week to
+   `data/gaps.jsonl`, with `kind: "corrected"` and `scope: "stance"`, so
+   the week pages and `/data/coverage/` show the correction next to the
+   original `lost` record and stop counting it as an open warning:
+   `{"week_id": "2026-W36", "scope": "stance", "kind": "corrected", "reason": "Stance for the 13 unmeasured cells was re-classified on <D> from the published responses and grafted as a versioned correction; only the stance fields changed.", "evidence": ["/reports/<D>-stance-classifier-correction/"], "recorded_at": "<D>"}`
+   (W37: 19 cells; W38: 10 cells).
+4. In `site/src/templates/data_schema.html`, the `stance_confidence`
+   entry says W36 to W38 carry 0.0 on almost every stance-bearing cell
+   in their manifests; change it to say they did as first published and
+   were corrected on `<D>` (see each manifest's `corrections`). The
+   paragraph above the `partial`/`notes`/`coverage`/`corrections` list
+   already allows for keys added to an older manifest by a correction;
+   check it still reads true.
+5. `uv run python -m pytest --tb=short -q`, build the site
+   (`uv run python site/src/build.py --manifest site/fixtures/manifest-2026-W40.json --out /tmp/meridian-dist`),
+   check `/reports/` lists both, and that `/data/2026-W37/` shows the
+   correction, then commit and push.
+
+Never re-dispatch the publish workflow for 2026-W36, W37 or W38 after
+this: it copies the S3 manifest, which keeps the stance as first
+published, back over the correction. That is the same rule as for every
+earlier correction.
+
+Cost: well under $1 in API calls: about 72 Haiku 4.5 calls (30 for W34,
+42 for W36 to W38) at $1 and $5 per million input and output tokens,
+with inputs of up to a few thousand tokens each (the classified response
+is the longest non-refusal sample, and Opus answers run long) and up to
+20 output tokens, so roughly $0.10 to $0.30. The instance is billed while
+it runs, about $1.21/hour for the g5.2xlarge; the whole sequence takes
+well under an hour after boot, so about $1 to $2, and the backstop caps
+it at about $4. No Opus or GPT request is made.
 
 ## Provider probe
 

@@ -80,9 +80,20 @@ lost, and append-only like everything else under ``data/``::
 
 ``week_id`` is required; ``reason`` is required in spirit (a gap nobody
 can explain is not acknowledged). ``scope`` is ``"all"`` (the default,
-the whole week is missing) or a ``"provider/model"`` key, which is
-recorded for the public disclosure and not used by this check yet. Any
-other field is ignored. An acknowledged gap in the week immediately
+the whole week is missing), a ``"provider/model"`` key, a bare provider,
+or ``"stance"``. ``kind`` is ``lost``, ``partial``, ``degraded`` or
+``note`` (absent means ``lost``). A ``lost`` or ``partial`` record for
+the target week itself acknowledges the runners its scope covers, so a
+coverage shortfall or failed pairs on those runners warn instead of
+failing, and a ``"stance"`` record does the same for a dead classifier
+(see :func:`acknowledged_runners`); this is what lets a week published
+after the fact as a disclosed partial week, 2026-W34, publish without
+paging. Any other field is ignored here. The site build (``site/src/data_coverage.py``)
+reads the same lines for ``/data/coverage/`` and ``/methodology/#data-gaps``
+and also reads ``kind`` (``lost``, ``partial``, ``degraded`` or ``note``;
+absent means ``lost``), ``evidence`` (a list such as ``["issue #36",
+"commit de2ec54"]``), ``runners`` (the roster due in a week with no
+run_log entry), and two more scopes: a bare provider and ``"stance"``. An acknowledged gap in the week immediately
 before the target downgrades from failure to warning, because the alert
 has already been answered; an acknowledged older gap is not re-announced.
 A line that does not parse is skipped and reported.
@@ -594,6 +605,51 @@ def _gap_reason(records: list[dict]) -> str:
     return "; ".join(reasons) if reasons else "no reason recorded"
 
 
+#: Ledger kinds that acknowledge lost data. ``degraded`` and ``note``
+#: describe a week that still measured what it owed, so they acknowledge
+#: nothing; a record with no ``kind`` predates the field and meant lost.
+_ACKNOWLEDGING_KINDS = frozenset({"lost", "partial"})
+
+
+def acknowledged_runners(records: list[dict], runners: list[str]) -> dict[str, str]:
+    """Runners whose loss this week's ledger records already disclose.
+
+    ``{runner: reason}`` for every runner covered by a ``lost`` or
+    ``partial`` record, matched on scope: ``"all"``, the runner's own
+    ``"provider/model"`` key, or its bare provider. ``"stance"`` matches
+    no runner; see :func:`stance_acknowledged`.
+
+    Exists for weeks published after the fact. 2026-W34 is published as
+    a disclosed partial week, months after the run was killed; without
+    this its publish would page about a loss that the ledger, the
+    coverage page and the methodology already state. The ledger is
+    written by hand after an alert has been read, so a live week never
+    has a matching record and is judged exactly as before.
+    """
+    out: dict[str, list[str]] = {}
+    for rec in records:
+        if not isinstance(rec, dict):
+            continue
+        kind = rec.get("kind") or "lost"
+        if kind not in _ACKNOWLEDGING_KINDS:
+            continue
+        scope = str(rec.get("scope") or "all")
+        for runner in runners:
+            if scope in ("all", runner, runner.split("/", 1)[0]):
+                out.setdefault(runner, []).append(rec)
+    return {r: _gap_reason(recs) for r, recs in out.items()}
+
+
+def stance_acknowledged(records: list[dict]) -> str | None:
+    """The ledger reason when this week's stance loss is recorded, else None."""
+    recs = [
+        r for r in records
+        if isinstance(r, dict) and r.get("scope") == "stance"
+        and (r.get("kind") or "lost") in _ACKNOWLEDGING_KINDS
+    ]
+    return _gap_reason(recs) if recs else None
+
+
 def cadence_health(
     entries: list[dict],
     target: str,
@@ -782,7 +838,7 @@ def _unusable_detail(n: int, week: str, breakdown: str, verdict: str) -> str:
     )
 
 
-def evaluate(entry: dict) -> RunHealth:
+def evaluate(entry: dict, acknowledged: dict[str, str] | None = None) -> RunHealth:
     """Return the health verdict for a single run_log entry.
 
     Unhealthy when any pair failed, any error was recorded, a whole
@@ -801,6 +857,12 @@ def evaluate(entry: dict) -> RunHealth:
     measure and still has to reach a human. It was given a tolerance on
     2026-08-15, for the opposite reason: as a hard gate it fired on a
     single dead sample, which is noise at N=20 per cell.
+
+    ``acknowledged`` is :func:`acknowledged_runners` for the week. When
+    every failure is attributable (through its errors, error summary or
+    runner halt) to a runner the ledger already records as partial or
+    lost, the failure warns instead, and the unusable-sample checks still
+    run over the rest.
     """
     failed = int(entry.get("pairs_failed", 0) or 0)
     errors = entry.get("errors") or []
@@ -810,7 +872,8 @@ def evaluate(entry: dict) -> RunHealth:
     total = _total_samples(entry)
     summary = (
         f"week={week} pairs_complete={entry.get('pairs_complete')} "
-        f"pairs_failed={failed} pairs_skipped={entry.get('pairs_skipped')} "
+        f"pairs_failed={entry.get('_acknowledged_failed', failed)} "
+        f"pairs_skipped={entry.get('pairs_skipped')} "
         f"errors={len(errors)} unusable_samples={n_unusable} "
         f"total_samples={total}"
     )
@@ -842,6 +905,29 @@ def evaluate(entry: dict) -> RunHealth:
             detail += f" Errors by runner: {by_runner}."
         cls = classify_error(first.get("error_type"), first.get("message"))
         subject = str(first.get("provider") or "pipeline")
+        blamed = {
+            _runner_key(e.get("provider"), e.get("model_id"))
+            for e in real if isinstance(e, dict)
+        }
+        blamed.update(str(r) for r in (entry.get("runner_halts") or {}))
+        blamed.update(
+            str(r) for r, by_type in (entry.get("error_summary") or {}).items()
+            if isinstance(by_type, dict) and any(
+                classify_error(t) != "POLICY" for t in by_type
+            )
+        )
+        if acknowledged and blamed and blamed <= set(acknowledged):
+            known = "; ".join(f"{r} ({acknowledged[r]})" for r in sorted(blamed))
+            ack = RunHealth(
+                "warn",
+                f"{failed} failed pair(s) in {week}, all on runner(s) the gap "
+                f"ledger already records as partial or lost for this week: "
+                f"{known}. Reported, not failed: the loss is disclosed.",
+            )
+            rest = dict(
+                entry, pairs_failed=0, errors=policy, _acknowledged_failed=failed,
+            )
+            return combine(ack, evaluate(rest))
         return RunHealth(
             "fail", detail, (subject, cls, f"{failed} failed pair(s)")
         )
@@ -1038,7 +1124,9 @@ def _runner_class(entry: dict, runner: str, got: int) -> str:
     return "NO-DATA" if got == 0 else "LOSS"
 
 
-def coverage_health(entry: dict) -> RunHealth:
+def coverage_health(
+    entry: dict, acknowledged: dict[str, str] | None = None,
+) -> RunHealth:
     """Judge every runner that was due against what it owed.
 
     Fails when the week holds no samples at all, or when any expected
@@ -1052,7 +1140,12 @@ def coverage_health(entry: dict) -> RunHealth:
     check read failed pairs, errors and unusable samples, so a run that
     wrote nothing and recorded nothing was clean, and 2026-W38, Anthropic
     at 0 of 1200, failed only because its errors happened to be logged.
+
+    A short runner that ``acknowledged`` (:func:`acknowledged_runners`)
+    covers warns instead of failing: its loss is already recorded in the
+    gap ledger, which only happens after a human has read the alert.
     """
+    acknowledged = acknowledged or {}
     week = entry.get("week_id", "?")
     expected = entry.get("expected_samples") or {}
     per_runner = entry.get("per_runner_samples") or {}
@@ -1109,7 +1202,28 @@ def coverage_health(entry: dict) -> RunHealth:
             f"predates expected_samples)"
         )
 
+    known = [item for item in short if item[0] in acknowledged]
+    short = [item for item in short if item[0] not in acknowledged]
+    known_note = ""
+    if known:
+        known_note = (
+            " Acknowledged in the gap ledger, so reported and not failed: "
+            + "; ".join(
+                f"{r} {got}/{owed} ({acknowledged[r]})"
+                for r, got, owed, _cls in known
+            )
+            + "."
+        )
+
     if not short:
+        if known:
+            runner, got, owed, _cls = known[0]
+            return RunHealth(
+                "warn",
+                "coverage: " + ", ".join(lines) + basis + "." + known_note,
+                (runner, "ACKNOWLEDGED",
+                 f"{sum(k[1] for k in known)}/{sum(k[2] for k in known)} samples"),
+            )
         return RunHealth("ok", "coverage: " + ", ".join(lines) + basis)
 
     # One headline per provider, worst share first. The subject is the
@@ -1150,14 +1264,16 @@ def coverage_health(entry: dict) -> RunHealth:
         + f". This is lost data, not a tolerance question: those cells have "
         f"no measurement, or too little to compare, for {week}{basis}."
     )
-    detail += " Coverage: " + ", ".join(lines) + "."
+    detail += " Coverage: " + ", ".join(lines) + "." + known_note
     return RunHealth("fail", detail, (subject, cls, f"{got_sum}/{owed_sum} samples"))
 
 
 STANCE_AXES = frozenset({"political", "historical-contested"})
 
 
-def stance_health(manifest: dict | None, week: str) -> RunHealth:
+def stance_health(
+    manifest: dict | None, week: str, acknowledged: str | None = None,
+) -> RunHealth:
     """Fail when a model's stance classifier was evidently dead.
 
     A stance-bearing cell at ``stance="na"`` with ``stance_confidence``
@@ -1172,6 +1288,9 @@ def stance_health(manifest: dict | None, week: str) -> RunHealth:
 
     More than half of a model's cells in that state warns. A manifest
     that is missing or carries no stance-bearing cells is not judged.
+    ``acknowledged`` is the ledger reason when a ``"stance"`` record
+    already discloses the week's loss (:func:`stance_acknowledged`); a
+    dead classifier then warns.
     """
     if not isinstance(manifest, dict):
         return RunHealth("ok", "")
@@ -1220,6 +1339,12 @@ def stance_health(manifest: dict | None, week: str) -> RunHealth:
         )
         if weak:
             detail += f" Mostly failed as well: {cells(weak)}."
+        if acknowledged:
+            return RunHealth(
+                "warn",
+                detail + f" Acknowledged in the gap ledger ({acknowledged}), "
+                f"so reported and not failed.",
+            )
         return RunHealth(
             "fail", detail, ("stance", "CLASSIFIER-DEAD", f"0/{n} cells scored")
         )
@@ -1549,11 +1674,18 @@ def main(argv: list[str] | None = None) -> int:
     manifest, manifest_problem = _load_manifest(manifest_path)
     ledger, ledger_malformed = load_gap_ledger(gaps_path)
 
-    coverage = coverage_health(entry)
+    week_ledger = ledger.get(args.week, [])
+    runners = sorted(
+        set(entry.get("expected_samples") or {})
+        | set(entry.get("per_runner_samples") or {})
+        | set(entry.get("runner_halts") or {})
+    )
+    acknowledged = acknowledged_runners(week_ledger, runners)
+    coverage = coverage_health(entry, acknowledged)
     verdicts = [
         coverage,
-        evaluate(reconcile_unusable(entry, manifest)),
-        stance_health(manifest, args.week),
+        evaluate(reconcile_unusable(entry, manifest), acknowledged),
+        stance_health(manifest, args.week, stance_acknowledged(week_ledger)),
         cadence_health(entries, args.week, ledger),
         rejection_health(entry),
     ]

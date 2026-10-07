@@ -7,6 +7,11 @@ Subcommands:
   build-manifest   Rebuild the site manifest from existing storage (no new
                    sampling). Useful when metric logic changed but samples
                    did not.
+  recover-week     Build and archive the record of a past week whose run
+                   was killed before it logged itself, from the raw
+                   samples it left: a manifest marked partial, the
+                   responses snapshot, and one run_log entry marked as a
+                   reconstruction. Dry run unless --write.
 
 Run via::
 
@@ -48,6 +53,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import json
+import re
 
 from meridian.analysis.holdout_compare import compare_holdout
 from meridian.analysis.silent_update import detect_silent_updates
@@ -60,6 +66,7 @@ from meridian.pipeline.manifest_writer import (
     write_manifest,
 )
 from meridian.pipeline.embedding_loader import build_embedding_model
+from meridian.pipeline import recovery
 from meridian.pipeline.run_log import append_run_log, read_run_log
 from meridian.pipeline.snapshot import emit_responses_snapshot, snapshot_path
 from meridian.pipeline.stance_collect import (
@@ -706,6 +713,254 @@ def _cmd_build_manifest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _recovery_refusal(message: str) -> int:
+    print(f"REFUSED: {message} Nothing was written.", file=sys.stderr)
+    return 2
+
+
+async def _cmd_recover_week(args: argparse.Namespace) -> int:
+    """Reconstruct a killed run's record from its stored raw samples.
+
+    See :mod:`meridian.pipeline.recovery` for why and what is written.
+    Every refusal below happens before anything is written, and the
+    order matters: the cheap local checks first, then S3, then the one
+    step that calls an API (the stance classifier), then the writes.
+    """
+    from datetime import date as _date
+
+    from meridian.pipeline.manifest_writer import site_schema
+    from meridian.sampling.weeks import iso_week_for as _this_week
+
+    week_id = args.week
+    try:
+        archived_on = _date.fromisoformat(args.archived_on)
+    except ValueError:
+        return _recovery_refusal(f"--archived-on {args.archived_on!r} is not an ISO date.")
+    if args.config_hash is not None and not re.fullmatch(r"[0-9a-f]{16}", args.config_hash):
+        return _recovery_refusal(
+            f"--config-hash {args.config_hash!r} is not a 16-hex-digit run_log config hash."
+        )
+    if week_id >= _this_week():
+        return _recovery_refusal(
+            f"{week_id} is not a past week. recover-week reconstructs a run "
+            f"that already happened; a current week is sampled with `run`."
+        )
+
+    config, store, _ = _build_context(args, need_runners=False)
+    corpus = load_corpus()
+    log_path = REPO_ROOT / "data" / "run_log.jsonl"
+    # Read as plain JSON rather than through RunLogEntry: the question is
+    # only whether any line names this week, and a hand-written or older
+    # line must not be able to crash the check that guards the append.
+    logged = [
+        json.loads(line) for line in (
+            log_path.read_text(encoding="utf-8").splitlines()
+            if log_path.exists() else []
+        ) if line.strip()
+    ]
+    if any(isinstance(e, dict) and e.get("week_id") == week_id for e in logged):
+        return _recovery_refusal(
+            f"data/run_log.jsonl already has an entry for {week_id}. A run that "
+            f"logged itself is not a reconstruction; use build-manifest."
+        )
+    existing = [p for p in _output_paths(week_id) if p.exists()]
+    if existing:
+        return _recovery_refusal(
+            f"a manifest for {week_id} already exists at "
+            f"{', '.join(str(p) for p in existing)}. Published data is never "
+            f"overwritten by a reconstruction."
+        )
+
+    samples_per_pair = config.sampling.n_default_temp + config.sampling.n_zero_temp
+    tplan = _temperature_plan(config.sampling)
+    shims = _enabled_specs_for_week(config, week_id)
+    roster = [
+        (s.provider, s.model_id, calls_per_pair(s, samples_per_pair, tplan))
+        for s in shims
+    ]
+    if not roster:
+        return _recovery_refusal(f"no runners were scheduled for {week_id}.")
+    extra = recovery.unexpected_models(store, week_id, roster)
+    if extra:
+        return _recovery_refusal(
+            f"data/raw/{week_id} holds samples for {', '.join(extra)}, which "
+            f"the {week_id} roster did not run. Find out where they came from "
+            f"before publishing anything."
+        )
+    all_ids = [p.id for p in corpus.all()]
+    tallies = recovery.tally_week(store, week_id, all_ids, roster)
+    if sum(t.captured for t in tallies) == 0:
+        return _recovery_refusal(
+            f"no raw samples for {week_id} under {store.base_dir}. Sync them "
+            f"from S3 first (aws s3 sync s3://<bucket>/<prefix>raw/{week_id}/ "
+            f"data/raw/{week_id}/)."
+        )
+    window = recovery.capture_window(store, week_id, tallies)
+    assert window is not None  # some samples exist
+    built_on = datetime.now(timezone.utc).date()
+    outcome = recovery.reconstructed_outcome(
+        store, week_id, tallies, halt_type=args.halt_type, cause=args.cause,
+    )
+    note = recovery.recovery_note(
+        week_id=week_id, sampled=window, cause=args.cause,
+        archived_on=archived_on, built_on=built_on, tallies=tallies,
+        config_hash=args.config_hash,
+    )
+    public_ids = [p.id for p in corpus.public()]
+    public_tallies = recovery.tally_week(store, week_id, public_ids, roster)
+    notes = recovery.manifest_notes(
+        week_id=week_id, sampled=window, cause=args.cause,
+        archived_on=archived_on, built_on=built_on, tallies=public_tallies,
+    )
+
+    print(f"recover-week {week_id}: reconstruction from {store.base_dir / week_id}")
+    for t in tallies:
+        print(
+            f"  {t.key:<32} {t.captured:>4}/{t.expected:<4} samples  "
+            f"{t.status:<8} complete={len(t.complete_prompts)} "
+            f"partial={len(t.partial_prompts)} missing={len(t.missing_prompts)}"
+        )
+        for pid in t.partial_prompts:
+            print(f"      cut short: {pid} {t.counts[pid]}/{t.per_pair}")
+    print(
+        f"  run_log entry: pairs_complete={outcome.pairs_complete} "
+        f"pairs_failed={outcome.pairs_failed} pairs_skipped=0 "
+        f"samples={outcome.total_samples_written} recovery=true"
+    )
+    print(f"  captured {window[0].isoformat()} to {window[1].isoformat()}")
+    print(f"  note: {note}")
+    for n in notes:
+        print(f"  manifest note: {n}")
+
+    uploader = None if args.no_archive else maybe_build_uploader(config.storage.s3)
+    if uploader is not None:
+        if uploader.object_exists("manifests", f"{week_id}.json"):
+            return _recovery_refusal(
+                f"s3 already holds manifests/{week_id}.json. Published data is "
+                f"never overwritten by a reconstruction."
+            )
+        remote_log = uploader.fetch_bytes("run_log.jsonl")
+        local_log = log_path.read_bytes() if log_path.exists() else b""
+        if remote_log is not None and remote_log != local_log:
+            return _recovery_refusal(
+                "the local data/run_log.jsonl differs from the run_log in S3. "
+                "Uploading after the append would overwrite the S3 copy with "
+                "this one and could drop entries. Reset the repo to "
+                "origin/main, or reconcile the two by hand, first."
+            )
+        print("  s3: no manifest for this week yet; local run_log matches S3")
+    else:
+        print("  s3: not archiving (--no-archive, or no storage.s3 in config)")
+
+    if not args.write:
+        print("dry run: nothing written. Re-run with --write to build and archive.")
+        return 0
+
+    stance_by_key = await _maybe_collect_stance(
+        config=config, store=store, corpus=corpus, week_id=week_id,
+    )
+    if stance_by_key is not None:
+        health = stance_call_health(stance_by_key)
+        if health.errored:
+            return _recovery_refusal(
+                f"the stance classifier failed on {health.errored} of "
+                f"{health.attempted} call(s) ({(health.first_error or '')[:120]}). "
+                f"A reconstruction must not publish another week of unmeasured "
+                f"stance; fix the classifier key and re-run (successful calls "
+                f"are cached)."
+            )
+    embedding_model = build_embedding_model(config.embedding)
+    display_info = _display_info_for(config)
+    prior_manifests_dir = REPO_ROOT / "data" / "manifests"
+    coverage = recovery.coverage_records(public_tallies)
+
+    manifest = build_manifest(
+        store=store, corpus=corpus, week_id=week_id, display_info=display_info,
+        prior_manifests_dir=prior_manifests_dir,
+        stance_by_key=stance_by_key, embedding_model=embedding_model,
+        rejections_by_key={}, bootstrap_seed=recovery.RECOVERY_SEED,
+    )
+    recovery.annotate_partial(manifest, notes=notes, coverage=coverage)
+    site_schema.Manifest.model_validate(manifest)
+    paths = _output_paths(week_id)
+    write_manifest(manifest, paths)
+    print(f"wrote partial manifest for {week_id} to:")
+    for p in paths:
+        print(f"  {p}")
+    if corpus.has_held_out:
+        internal = build_manifest(
+            store=store, corpus=corpus, week_id=week_id,
+            display_info=display_info, include_held_out=True,
+            prior_manifests_dir=prior_manifests_dir,
+            stance_by_key=stance_by_key, embedding_model=embedding_model,
+            rejections_by_key={}, bootstrap_seed=recovery.RECOVERY_SEED,
+        )
+        recovery.annotate_partial(
+            internal, notes=notes, coverage=recovery.coverage_records(tallies),
+        )
+        write_manifest(internal, [_internal_manifest_path(week_id)])
+    responses_gz = _emit_public_responses_snapshot(store, corpus, week_id)
+
+    all_samples = [
+        s for t in tallies for pid, n in t.counts.items() if n
+        for s in store.read(week_id, t.model_id, pid)
+    ]
+    est = estimate_cost(
+        shims, n_prompts=len(corpus.all()), samples_per_pair=samples_per_pair,
+        default_max_tokens=config.sampling.max_tokens, temperature_plan=tplan,
+    )
+    entry = append_run_log(
+        log_path,
+        started_at=window[0],
+        finished_at=window[1],
+        week_id=week_id,
+        config=config,
+        outcome=outcome,
+        estimated_cost_usd=est.total,
+        actual_cost_usd=compute_actual_cost(all_samples).total_usd,
+        note=note,
+        expected_samples={t.key: t.expected for t in tallies},
+        stored_samples={t.key: t.captured for t in tallies},
+        recovery=True,
+        # The week's roster and the config of its time, not today's: see
+        # append_run_log and the note.
+        runners=[t.key for t in tallies],
+        config_hash=args.config_hash,
+    )
+    print(
+        f"run log: appended {week_id} reconstruction (recovery=true, "
+        f"pairs_complete={entry.pairs_complete}, pairs_failed={entry.pairs_failed}, "
+        f"actual ${entry.actual_cost_usd:.2f})"
+    )
+
+    if uploader is None:
+        return 0
+    reports = [
+        ("manifest", uploader.upload_manifest(paths[0], week_id, publish_latest=False)),
+        ("responses", uploader.upload_responses_snapshot(responses_gz, week_id)),
+        ("run log", uploader.upload_run_log(log_path)),
+    ]
+    failed = False
+    for label, r in reports:
+        print(f"s3: {label:<10} {r.pretty()}")
+        for err in r.errors:
+            failed = True
+            print(f"  s3 error: {err}", file=sys.stderr)
+    if failed:
+        print(
+            "ARCHIVE INCOMPLETE: fix the error and upload the files above by "
+            "hand (aws s3 cp); do not re-run recover-week, which now refuses "
+            "because the local run_log has the entry.",
+            file=sys.stderr,
+        )
+        return 1
+    print(
+        f"archived {week_id}. Publish with: gh workflow run weekly-pipeline.yml "
+        f"--ref main -f week={week_id}"
+    )
+    return 0
+
+
 def _inspect_status(actual: int, expected: int) -> str:
     if actual == 0:
         return "missing"
@@ -1044,6 +1299,33 @@ def main(argv: list[str] | None = None) -> int:
     p_mf.add_argument("--week", required=True, help="ISO week id to (re)build")
     p_mf.add_argument("--history-weeks", type=int, default=8)
 
+    p_rw = sub.add_parser(
+        "recover-week",
+        help="Reconstruct a killed past week's manifest, snapshot and run_log "
+             "entry from its stored raw samples (dry run unless --write)",
+    )
+    p_rw.add_argument("--week", required=True, help="ISO week id to reconstruct")
+    p_rw.add_argument("--archived-on", required=True, metavar="YYYY-MM-DD",
+                      help="date the raw samples were archived to S3, for the note")
+    p_rw.add_argument("--cause", required=True,
+                      help="why the run left no record, as a clause that reads "
+                           "after 'the week was sampled <date> and', e.g. "
+                           "'was killed at the one-hour SSM execution timeout'")
+    p_rw.add_argument("--config-hash", default=None, metavar="HEX16",
+                      help="config_hash for the reconstructed row: the hash the "
+                           "scheduled runs either side of the week logged "
+                           "(2026-W34: e78efdfab25cd47d, from W33 and W35). "
+                           "Omitted, the row records null and its note says "
+                           "the run's config is not known. Never today's hash.")
+    p_rw.add_argument("--halt-type", default="ExecutionTimeout",
+                      help="error_type recorded in runner_halts for each "
+                           "runner that did not finish (default: ExecutionTimeout)")
+    p_rw.add_argument("--write", action="store_true",
+                      help="classify stance, build and write the manifest, "
+                           "snapshot and run_log entry, and archive them to S3")
+    p_rw.add_argument("--no-archive", action="store_true",
+                      help="never touch S3, even with storage.s3 configured")
+
     p_ho = sub.add_parser(
         "holdout-report",
         help="Per-axis divergence between public and held-out drift (internal use only)",
@@ -1082,6 +1364,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_estimate(args)
     if args.cmd == "build-manifest":
         return _cmd_build_manifest(args)
+    if args.cmd == "recover-week":
+        return asyncio.run(_cmd_recover_week(args))
     if args.cmd == "holdout-report":
         return _cmd_holdout_report(args)
     if args.cmd == "silent-update-check":

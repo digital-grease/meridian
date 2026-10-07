@@ -150,11 +150,19 @@ class S3SampleUploader:
         return report
 
     def upload_manifest(
-        self, manifest_path: Path, week_id: str
+        self,
+        manifest_path: Path,
+        week_id: str,
+        *,
+        publish_latest: bool | None = None,
     ) -> UploadReport:
         """Upload the public manifest to ``manifests/{week_id}.json`` and,
         when configured, also to ``manifests/latest.json`` as a pointer
-        to the most recent published snapshot."""
+        to the most recent published snapshot.
+
+        ``publish_latest=False`` skips the pointer whatever the config
+        says. A week published after later weeks (a recovered partial
+        week) must never become "latest"."""
         report = UploadReport()
         self._put_file(
             manifest_path,
@@ -162,7 +170,9 @@ class S3SampleUploader:
             report=report,
             content_type="application/json",
         )
-        if self.spec.publish_latest_pointer:
+        if publish_latest is None:
+            publish_latest = self.spec.publish_latest_pointer
+        if publish_latest:
             self._put_file(
                 manifest_path,
                 _s3_key(self.spec.prefix, "manifests", "latest.json"),
@@ -203,6 +213,40 @@ class S3SampleUploader:
             content_type="application/x-ndjson",
         )
         return report
+
+
+    def object_exists(self, *parts: str) -> bool:
+        """True when ``{prefix}/{parts...}`` exists in the bucket.
+
+        Unlike :meth:`_already_uploaded`, an error other than a 404 is
+        raised, not read as "absent": the callers use this to refuse an
+        overwrite, and an access error must not look like permission.
+        """
+        from botocore.exceptions import ClientError  # noqa: PLC0415
+
+        key = _s3_key(self.spec.prefix, *parts)
+        try:
+            self._client.head_object(Bucket=self.spec.bucket, Key=key)
+        except ClientError as e:
+            code = str(e.response.get("Error", {}).get("Code", ""))
+            if code in ("404", "NoSuchKey", "NotFound"):
+                return False
+            raise
+        return True
+
+    def fetch_bytes(self, *parts: str) -> bytes | None:
+        """The object's body, or None when it does not exist."""
+        from botocore.exceptions import ClientError  # noqa: PLC0415
+
+        key = _s3_key(self.spec.prefix, *parts)
+        try:
+            resp = self._client.get_object(Bucket=self.spec.bucket, Key=key)
+        except ClientError as e:
+            code = str(e.response.get("Error", {}).get("Code", ""))
+            if code in ("404", "NoSuchKey", "NotFound"):
+                return None
+            raise
+        return resp["Body"].read()
 
 
 def maybe_build_uploader(spec: S3StorageSpec | None) -> S3SampleUploader | None:
