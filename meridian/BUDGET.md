@@ -146,16 +146,16 @@ The penultimate option is the recommended target when the corpus grows.
 ### Level 3 — Expand corpus
 - 50–75 prompts on Level 2 roster.
 - ~$231–$346/mo before Gemini.
-- Value: credible axis coverage (~10 per axis), approaches CLAUDE.md v0.2 target.
+- Value: credible axis coverage (~10 per axis), halfway to the design target of 20–30 prompts per axis.
 - Suggested trigger: methodology credibility becomes a gating factor for press/research engagement.
 
 ### Level 4 — v1.0 target
 - 150 prompts on full roster.
 - **~$700/mo** ($8,300/yr) before Gemini.
-- Value: the CLAUDE.md-spec corpus. Journalism-quality evidence base.
+- Value: the full v1.0 corpus. Journalism-quality evidence base.
 - Suggested trigger: grant-funded, or institutional patronage landed.
 
-### Level 5 — CLAUDE.md full spec
+### Level 5 — Full design-scale corpus
 - 200–300 prompts on full roster.
 - **~$900–$1,400/mo** before Gemini.
 - Suggested trigger: sustained institutional funding.
@@ -181,7 +181,7 @@ changes. The gate is funding.
 - **Level 4 (+$650/mo over Level 0, before Gemini)**: full v1.0 corpus (150 prompts)
   plus durable storage (S3 uploader + IPFS pinning, Phase 4). Makes the
   &ldquo;retention forever&rdquo; guarantee real.
-- **Level 5 (+$1,300/mo over Level 0, before Gemini)**: CLAUDE.md spec corpus
+- **Level 5 (+$1,300/mo over Level 0, before Gemini)**: full design-scale corpus
   (200&ndash;300 prompts) plus trained refusal classifier (Phase 5.4)
   plus Postgres index for researchers (Phase 4.6).
 
