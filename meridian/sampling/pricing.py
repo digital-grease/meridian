@@ -84,14 +84,16 @@ from dataclasses import dataclass, field
 # A "*" model_id is a wildcard for any model under that provider (used when
 # a provider's whole family is priced the same, e.g. self-hosted Ollama).
 # Values checked 2026-06 from each provider's pricing page / model docs;
-# claude-opus-5-5 and gpt-6-astra added 2026-10-06 from the same sources.
+# claude-opus-5-5 and gpt-6-astra added 2026-10-06 from the same sources;
+# claude-haiku-4-5 corrected 2026-10-06 from 0.80/4.00 (an older Haiku's
+# price) to Haiku 4.5's 1.00/5.00.
 PRICING: dict[tuple[str, str], tuple[float, float]] = {
     ("anthropic", "claude-opus-5-5"):          ( 4.00, 20.00),
     ("anthropic", "claude-opus-5"):            ( 5.00, 25.00),
     ("anthropic", "claude-opus-4-8"):          ( 5.00, 25.00),
     ("anthropic", "claude-opus-4-7"):          ( 5.00, 25.00),
     ("anthropic", "claude-sonnet-4-6"):        ( 3.00, 15.00),
-    ("anthropic", "claude-haiku-4-5-20251001"):( 0.80,  4.00),
+    ("anthropic", "claude-haiku-4-5-20251001"):( 1.00,  5.00),
     ("openai",    "gpt-6-astra"):              (10.00, 50.00),
     ("openai",    "gpt-5.5"):                  ( 5.00, 30.00),
     ("openai",    "gpt-5.1"):                  (10.00, 30.00),

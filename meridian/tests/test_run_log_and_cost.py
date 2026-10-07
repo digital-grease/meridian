@@ -121,13 +121,13 @@ def test_cost_sum_matches_pricing():
         _s("ollama",    "llama3.2:3b",             1_000_000, 1_000_000),
     ]
     report = compute_actual_cost(samples)
-    # Claude Haiku: 0.80 + 4.00 = 4.80
+    # Claude Haiku 4.5: 1.00 + 5.00 = 6.00
     # GPT-4.1-mini: 0.15 + 0.60 = 0.75
     # Ollama: 0
-    assert report.total_usd == 5.55
+    assert report.total_usd == 6.75
     assert report.samples_priced == 3
     assert report.samples_skipped_no_tokens == 0
-    assert report.by_runner["anthropic/claude-haiku-4-5-20251001"] == 4.80
+    assert report.by_runner["anthropic/claude-haiku-4-5-20251001"] == 6.00
     assert report.by_runner["openai/gpt-4.1-mini"] == 0.75
 
 
