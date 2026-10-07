@@ -41,6 +41,7 @@ def test_openai_runner_constructs():
     "model_id,expected",
     [
         ("gpt-5.5", "max_completion_tokens"),
+        ("gpt-6-astra", "max_completion_tokens"),
         ("gpt-5-nano", "max_completion_tokens"),
         ("gpt-5", "max_completion_tokens"),
         ("o1-preview", "max_completion_tokens"),
@@ -65,6 +66,8 @@ def test_openai_token_kwarg_for_model(model_id: str, expected: str):
     [
         # Opus 4.7+ accepts the API default (1.0) and rejects anything else
         # with "`temperature` is deprecated for this model".
+        ("claude-opus-5-5", 1.0, True),
+        ("claude-opus-5-5", 0.0, False),
         ("claude-opus-4-8", 1.0, True),
         ("claude-opus-4-8", 0.0, False),
         ("claude-opus-4-7", 1.0, True),
@@ -99,6 +102,9 @@ def test_anthropic_supports_temperature(model_id: str, temp: float, supported: b
         ("gpt-5.5", 0.5, False),
         ("gpt-5.5", 1.0, True),
         ("gpt-5.5-2026-04-23", 0.0, False),  # date-pinned alias
+        # gpt-6 family: parameter support undocumented, treated as gpt-5.5.
+        ("gpt-6-astra", 0.0, False),
+        ("gpt-6-astra", 1.0, True),
         # Legacy GPT-4 family accepts temperature.
         ("gpt-4o", 0.0, True),
         ("gpt-4.1-mini", 1.0, True),

@@ -326,21 +326,54 @@ log "running pipeline for ISO week $WEEK"
 # MERIDIAN_SECRETS_SSM=1 was set in /etc/meridian/config.env.
 PIPELINE_START_EPOCH=$(date -u +%s)
 set +e
-# --max-cost is a hard ceiling in USD for this invocation, gating the
-# pre-flight ESTIMATE rather than actual spend.
+# --max-cost is a hard ceiling in USD for this invocation, enforced
+# twice: once against the pre-flight ESTIMATE (an estimate above it exits
+# 2 with nothing sampled, and --yes does not waive that) and again in the
+# run against money actually spent, through the per-sample budget ledger
+# (once spend reaches it, every remaining request is refused).
 #
-# The headroom is no longer generous. As of 2026-08-16 an even week
-# estimates $27.45 (Opus 4.8 plus Opus 5) and an odd week $22.91
-# (gpt-5.5), so 40 leaves 31% on the even week rather than the
-# comfortable margin this comment used to claim. Raising a completion
-# cap or adding a fourth paid runner will cross it.
+# The ceiling is DERIVED from this week's configured roster rather than
+# fixed. A single fixed number stopped working with the 2026-10 roster
+# succession: the overlap weeks run the old and new models side by side
+# (2026-W41 estimates $61.11, 2026-W42 $42.73) while the steady-state
+# weeks estimate $38.20 (odd) and $15.28 (even), so any one figure is
+# either too low for the overlaps or loose for the even weeks. Rule:
 #
-# That is the intended behaviour, not a misconfiguration: an unattended
-# job that has become several times more expensive should stop and ask.
-# If a run aborts here, find out WHICH change moved the number before
-# raising the ceiling. See meridian/BUDGET.md for the current per-week
-# figures.
-MAX_COST_USD="${MAX_COST_USD:-40}"
+#   ceiling = clamp(ceil(estimate x MAX_COST_MARGIN), MAX_COST_FLOOR_USD,
+#                   MAX_COST_HARD_MAX_USD)
+#
+# The 1.5 margin is headroom for actual spend running above the estimate:
+# Opus weeks have come in at about 1.15x it (2026-W40: $31.45 against
+# $27.45), so a ceiling equal to the estimate would trip the in-run
+# ledger part way through a normal week. The $40 floor keeps the cheap
+# weeks from being cut off by a few dollars of noise. The $100 hard max
+# is the part that still stops and asks: a roster or cap change that
+# pushes the estimate past about $66 gets a ceiling below 1.5x, and past
+# $100 the run aborts at pre-flight. If that happens, find out WHICH
+# change moved the number before raising anything. See meridian/BUDGET.md
+# for the current per-week figures.
+#
+# Setting MAX_COST_USD explicitly overrides the derivation entirely. If
+# the estimate cannot be computed the floor is used, which fails closed:
+# the pipeline's own pre-flight then aborts any week estimating above it.
+MAX_COST_MARGIN="${MAX_COST_MARGIN:-1.5}"
+MAX_COST_FLOOR_USD="${MAX_COST_FLOOR_USD:-40}"
+MAX_COST_HARD_MAX_USD="${MAX_COST_HARD_MAX_USD:-100}"
+if [ -z "${MAX_COST_USD:-}" ]; then
+  RUN_ESTIMATE_USD=$(uv run python -m meridian.pipeline.cli estimate --week "$WEEK" --run-total 2>/dev/null | tail -1)
+  if [[ "$RUN_ESTIMATE_USD" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    MAX_COST_USD=$(awk -v e="$RUN_ESTIMATE_USD" -v m="$MAX_COST_MARGIN" \
+      -v f="$MAX_COST_FLOOR_USD" -v h="$MAX_COST_HARD_MAX_USD" 'BEGIN {
+        c = e * m; i = int(c); if (i < c) i++;
+        if (i < f) i = f; if (i > h) i = h; print i }')
+    log "pre-flight estimate for $WEEK: \$${RUN_ESTIMATE_USD}; --max-cost ceiling \$${MAX_COST_USD} (x${MAX_COST_MARGIN}, floor \$${MAX_COST_FLOOR_USD}, hard max \$${MAX_COST_HARD_MAX_USD})"
+  else
+    MAX_COST_USD="$MAX_COST_FLOOR_USD"
+    log "WARN: could not compute the pre-flight estimate for $WEEK; using the floor ceiling \$${MAX_COST_USD}"
+  fi
+else
+  log "MAX_COST_USD set explicitly: --max-cost ceiling \$${MAX_COST_USD}"
+fi
 
 # A hang is the one runaway shape the EXIT trap cannot catch: a wedged
 # process never exits, so the trap never fires, and the instance bills at
@@ -354,11 +387,15 @@ MAX_COST_USD="${MAX_COST_USD:-40}"
 #
 # Sized against the real run, which is no longer the 26 minutes an earlier
 # version of this comment assumed: ca9b0cc put opus-5 alongside opus-4-8
-# and took the run to about 2h10m. 5h is a bit over 2x that and still an
-# hour clear of SSM's ceiling. --kill-after escalates to KILL if the
-# pipeline ignores TERM. timeout exits 124 on expiry, which lands in the
-# FAILED branch below and sends the usual SNS alert, so a timed-out week
-# is loud rather than silent.
+# and took the run to about 2h10m, and 2026-W40 (both Opus models) ran in
+# 61 minutes. Runners sample concurrently, each in its own lane, so the
+# three-Opus overlap week 2026-W42 adds a parallel lane rather than
+# serial time; its main risk is the shared Anthropic rate limit, which
+# 5h still covers several times over. 5h is over 2x the slowest run seen
+# and still an hour clear of SSM's ceiling. --kill-after escalates to
+# KILL if the pipeline ignores TERM. timeout exits 124 on expiry, which
+# lands in the FAILED branch below and sends the usual SNS alert, so a
+# timed-out week is loud rather than silent.
 PIPELINE_TIMEOUT="${PIPELINE_TIMEOUT:-5h}"
 
 # Run the pipeline in the BACKGROUND and `wait` on it, rather than as an

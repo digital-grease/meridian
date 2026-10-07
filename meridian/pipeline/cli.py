@@ -546,11 +546,12 @@ class _RunnerSpecShim:
 
 
 def _enabled_specs_for_week(config: PipelineConfig, week_id: str) -> list[_RunnerSpecShim]:
-    from meridian.config import should_run_in_week
+    # Same filter as build_runners, first/last week bounds included, so
+    # the estimate for a week prices exactly the roster that week runs.
     return [
         _RunnerSpecShim(s.provider, s.model_id, s.max_tokens)
         for s in config.runners
-        if s.enabled and should_run_in_week(s.cadence, week_id)
+        if s.enabled and s.runs_in_week(week_id)
     ]
 
 
@@ -561,6 +562,29 @@ def _cmd_estimate(args: argparse.Namespace) -> int:
         return 2
     corpus = load_corpus()
     plan_samples = config.sampling.n_default_temp + config.sampling.n_zero_temp
+    temperature_plan = _temperature_plan(config.sampling)
+
+    if getattr(args, "run_total", False):
+        # The number `run` prices before its --max-cost check, computed
+        # without credentials: corpus.all() rather than the public subset,
+        # and the week's bounded roster. Kept on stdout alone so a shell
+        # can capture it; anything else goes to stderr.
+        run_week = _resolve_week(args.week)
+        run_est = estimate_cost(
+            _enabled_specs_for_week(config, run_week),
+            n_prompts=len(corpus.all()),
+            samples_per_pair=plan_samples,
+            default_max_tokens=config.sampling.max_tokens,
+            temperature_plan=temperature_plan,
+        )
+        if run_est.unpriced:
+            print(
+                "unpriced: " + ", ".join(run_est.unpriced)
+                + " (a run with --max-cost will refuse to start)",
+                file=sys.stderr,
+            )
+        print(f"{run_est.total:.2f}")
+        return 0
     # Public-only on purpose, unlike `run`, which prices corpus.all().
     # This subcommand is the source of the published tables in
     # meridian/BUDGET.md and of the public per-tier figures on /funding/,
@@ -568,7 +592,6 @@ def _cmd_estimate(args: argparse.Namespace) -> int:
     # It gates nothing, so under-counting here costs credibility rather
     # than money. Say so in BUDGET.md if the two numbers ever diverge.
     n_prompts = len(corpus.public())
-    temperature_plan = _temperature_plan(config.sampling)
 
     this_week = _resolve_week(args.week)
     week_specs = _enabled_specs_for_week(config, this_week)
@@ -1008,6 +1031,13 @@ def main(argv: list[str] | None = None) -> int:
     p_est = sub.add_parser("estimate", help="Show pre-flight cost estimate")
     p_est.add_argument("--week", default=None,
                        help="ISO week id for this-week total (default: this week)")
+    p_est.add_argument("--run-total", action="store_true",
+                       help="Print only the pre-flight estimate that `run "
+                            "--week W` will compute (every prompt, held-out "
+                            "included, same per-runner caps and temperature "
+                            "rules), as a bare USD number. Machine-readable; "
+                            "scripts/run-weekly.sh derives its --max-cost "
+                            "ceiling from it.")
 
     p_mf = sub.add_parser("build-manifest",
                           help="Rebuild the site manifest from existing storage")

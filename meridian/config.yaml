@@ -8,10 +8,18 @@
 # tier ladder and the rationale for this schedule.
 #
 #   Ollama:        every week         (free, local baseline)
-#   Claude Opus:   even ISO weeks     (W16, W18, ... newest Opus until Fable unlocks)
-#   GPT-5.5:       odd ISO weeks      (W15, W17, ... alternating with Opus)
+#   Claude Opus:   even ISO weeks     (claude-opus-5-5 from 2026-W42)
+#   OpenAI GPT:    odd ISO weeks      (gpt-6-astra from 2026-W41)
 #
-# Average monthly cost: ~$45 on a 30-prompt corpus at N=25 samples/pair.
+# Roster succession of 2026-10 (weeks are run LABELS, see first_week /
+# last_week in meridian/config.py):
+#   2026-W41  gpt-5.5 + gpt-6-astra          last gpt-5.5 week, overlap
+#   2026-W42  opus-4-8 + opus-5 + opus-5-5   last opus-4-8/opus-5 week, overlap
+#   2026-W43+ gpt-6-astra on odd weeks, claude-opus-5-5 on even weeks
+# Retired entries stay below with their last_week; never delete them.
+#
+# Steady-state estimate from 2026-W43: ~$27/week, ~$116/month on a
+# 30-prompt corpus. See meridian/BUDGET.md for the per-week figures.
 
 sampling:
   n_default_temp: 20
@@ -57,6 +65,9 @@ runners:
     model_id: "claude-opus-4-8"
     enabled: true
     cadence: even_weeks
+    # Succeeded by claude-opus-5-5. Retired after the 2026-W42 overlap
+    # week; the entry stays as the record of when the series ended.
+    last_week: "2026-W42"
 
   # Added 2026-08-16. Runs the SAME weeks as claude-opus-4-8 rather than
   # replacing it or alternating with it, for two reasons.
@@ -89,6 +100,44 @@ runners:
     enabled: true
     cadence: even_weeks
     max_tokens: 8192
+    # Succeeded by claude-opus-5-5. Retired after the 2026-W42 overlap
+    # week, together with claude-opus-4-8.
+    last_week: "2026-W42"
+
+  # Added 2026-10-06, first run 2026-W42 (Monday 2026-10-19). Succeeds
+  # claude-opus-4-8 and claude-opus-5, which both run alongside it in
+  # 2026-W42 only, so the three can be compared on the same week before
+  # the older series end.
+  #
+  # Request shape. Thinking cannot be disabled on this model: a
+  # `thinking: {type: "disabled"}` or a `budget_tokens` value is a 400,
+  # so the runner sends no `thinking` parameter at all, exactly as it
+  # does for claude-opus-5. temperature, top_p and top_k are rejected
+  # too; the "claude-opus-5" prefix in runners/anthropic.py already
+  # covers this id, which omits temperature and skips the zero-
+  # temperature batch.
+  #
+  # Effort is left at the provider default. Meridian measures what a
+  # caller gets by default, so it does not set `effort`. Note for
+  # comparisons: the default is "medium" on this model where it was
+  # "high" on claude-opus-5. Part of any difference between the two
+  # series in the overlap week is that default, not only the weights;
+  # the 2026-10-06 roster notice on the site says so.
+  #
+  # max_tokens matches claude-opus-5 for the same reason: thinking
+  # tokens count against it, and the shared 1024 would be spent on
+  # reasoning and return empty completions (the 2026-W27 failure).
+  # check_run_health.py reports cap exhaustion; raise this if it does.
+  #
+  # The server-side `fallbacks` parameter is never sent (see
+  # runners/anthropic.py). Every sample in this series comes from this
+  # model or is recorded as a refusal.
+  - provider: anthropic
+    model_id: "claude-opus-5-5"
+    enabled: true
+    cadence: even_weeks
+    max_tokens: 8192
+    first_week: "2026-W42"
 
   - provider: openai
     model_id: "gpt-5.5"
@@ -110,6 +159,27 @@ runners:
     # cap. Re-check this if a future reasoning model exhausts it —
     # check_run_health.py will now say so instead of publishing green.
     max_tokens: 8192
+    # Succeeded by gpt-6-astra. Retired after the 2026-W41 overlap week.
+    last_week: "2026-W41"
+
+  # Added 2026-10-06, first run 2026-W41 (Monday 2026-10-12), the one
+  # week it overlaps gpt-5.5. OpenAI's flagship, a reasoning model.
+  #
+  # Its parameter support is not documented, so it is treated like
+  # gpt-5.5: the "gpt-6" prefix in runners/openai.py sends
+  # max_completion_tokens rather than max_tokens and omits temperature,
+  # which also skips the zero-temperature batch, and it is priced as a
+  # reasoning-default model. Reasoning tokens bill against the
+  # completion cap, so it gets gpt-5.5's 8192 for the reason documented
+  # on that entry above: at the shared 1024 the model can reason to the
+  # limit and return an empty body. Effort is left at the provider
+  # default, as for every runner.
+  - provider: openai
+    model_id: "gpt-6-astra"
+    enabled: true
+    cadence: odd_weeks
+    max_tokens: 8192
+    first_week: "2026-W41"
 
 # Stance classifier — pinned to Haiku 4.5 for stability:
 #   - Cheapest reasonable Claude tier (~$0.80/MT input).

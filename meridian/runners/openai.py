@@ -43,8 +43,15 @@ _TEMPERATURE_UNSUPPORTED_PREFIXES: tuple[str, ...] = (
 #: supported." gpt-5.5 joined this class on the 2026-06-30 cadence swap;
 #: gpt-5.1 (the prior frontier) still accepted any value. Extend this
 #: list when that specific 400 appears for a new GPT-5.x model.
+#:
+#: "gpt-6" is a family prefix, added 2026-10-06 with gpt-6-astra. Its
+#: parameter support is not documented, so the family is treated like
+#: gpt-5.5, the reasoning model it succeeds. Erring this way costs at
+#: most the zero-temperature batch on a model that would have accepted
+#: it; erring the other way loses it to 400s, as 2026-W27 did.
 _TEMPERATURE_DEFAULT_ONLY_PREFIXES: tuple[str, ...] = (
     "gpt-5.5",
+    "gpt-6",
 )
 
 #: OpenAI chat-completions treats 1.0 as the default temperature; only
@@ -61,6 +68,22 @@ def _openai_supports_temperature(model_id: str, temperature: float) -> bool:
     if any(mid.startswith(p) for p in _TEMPERATURE_DEFAULT_ONLY_PREFIXES):
         return temperature == _OPENAI_DEFAULT_TEMPERATURE
     return True
+
+
+def _openai_sends_temperature(model_id: str) -> bool:
+    """Whether ``temperature`` goes on the request at all.
+
+    The o-series and the default-only families above never get it: the
+    only value they could take is the API default, and leaving the
+    parameter out yields that default without betting on how a family
+    with undocumented parameter support (gpt-6) treats an explicit
+    value. ``Sample.temperature`` still records the intended 1.0.
+    """
+    mid = model_id.lower()
+    return not any(
+        mid.startswith(p)
+        for p in _TEMPERATURE_UNSUPPORTED_PREFIXES + _TEMPERATURE_DEFAULT_ONLY_PREFIXES
+    )
 
 
 class OpenAIRunner(Runner):
@@ -122,7 +145,9 @@ class OpenAIRunner(Runner):
         temperature: float,
         max_tokens: int = 1024,
     ) -> Sample:
-        token_kwarg = _token_kwarg_for(self.model_id)
+        request_kwargs: dict = {_token_kwarg_for(self.model_id): max_tokens}
+        if _openai_sends_temperature(self.model_id):
+            request_kwargs["temperature"] = temperature
 
         async def one_call() -> Sample:
             started = time.monotonic()
@@ -130,8 +155,7 @@ class OpenAIRunner(Runner):
                 resp = await self.client.chat.completions.create(
                     model=self.model_id,
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=temperature,
-                    **{token_kwarg: max_tokens},
+                    **request_kwargs,
                 )
             except openai.APIError as e:
                 raise _map_error(e) from e
@@ -264,6 +288,13 @@ def _is_content_policy_rejection(e: APIStatusError) -> bool:
     return any(marker in message for marker in _CONTENT_POLICY_MESSAGE_MARKERS)
 
 
+#: Model families that take ``max_completion_tokens``. "gpt-6" was added
+#: 2026-10-06 with gpt-6-astra, a reasoning model; every OpenAI reasoning
+#: family since GPT-5 rejects ``max_tokens``, and sending it would 400
+#: every request of the week.
+_COMPLETION_TOKENS_PREFIXES: tuple[str, ...] = ("gpt-5", "gpt-6", "o1", "o3", "o4")
+
+
 def _token_kwarg_for(model_id: str) -> str:
     """Return the token-cap parameter name the model's API accepts.
 
@@ -275,7 +306,7 @@ def _token_kwarg_for(model_id: str) -> str:
     extend this list when new model families ship.
     """
     mid = model_id.lower()
-    if mid.startswith(("gpt-5", "o1", "o3", "o4")):
+    if mid.startswith(_COMPLETION_TOKENS_PREFIXES):
         return "max_completion_tokens"
     return "max_tokens"
 

@@ -127,6 +127,8 @@ def test_reasoning_classification_is_prefix_matched():
     """A point release must inherit the classification rather than
     silently fall back to the cheaper assumption on release week."""
     assert is_reasoning_default("openai", "gpt-5.9-preview")
+    assert is_reasoning_default("openai", "gpt-6-astra")
+    assert is_reasoning_default("anthropic", "claude-opus-5-5")
     assert is_reasoning_default("anthropic", "claude-opus-4-8-20260801")
 
 
@@ -345,3 +347,12 @@ def test_assumptions_are_reported_per_runner():
     assert "reasoning-default" in note
     assert "no price on file" in est.assumptions["openai/totally-unknown"]
     assert "max_tokens=8192" in est.pretty()
+
+
+def test_succession_models_have_published_prices():
+    """Added 2026-10-06. An unknown model must not silently cost $0."""
+    from meridian.sampling.pricing import PRICING
+
+    assert PRICING[("anthropic", "claude-opus-5-5")] == (4.00, 20.00)
+    assert PRICING[("openai", "gpt-6-astra")] == (10.00, 50.00)
+    assert not is_priceable("openai", "gpt-6-astra-mini")

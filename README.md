@@ -11,8 +11,9 @@ version metadata; a public dashboard publishes statistically rigorous drift
 reports with receipts.
 
 The project is volunteer-maintained and API-cost-dominated. Current
-runtime is a **$45/mo** Level 0 configuration: 30 prompts, the newest
-Claude Opus and GPT-5.5 alternating biweekly, Ollama as a weekly baseline.
+runtime is a **~$116/mo** Level 0 configuration: 30 prompts, Claude Opus
+5.5 and GPT-6 Astra alternating biweekly (from October 2026, replacing
+Claude Opus 4.8, Claude Opus 5 and GPT-5.5), Ollama as a weekly baseline.
 Broadening the corpus, unalternating the frontier models, adding Gemini,
 and standing up durable S3 / IPFS / Postgres storage each require
 sustained monthly sponsorship. Full tier ladder at

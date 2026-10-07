@@ -83,13 +83,16 @@ from dataclasses import dataclass, field
 # (provider, model_id) -> (input_usd_per_mm, output_usd_per_mm).
 # A "*" model_id is a wildcard for any model under that provider (used when
 # a provider's whole family is priced the same, e.g. self-hosted Ollama).
-# Values checked 2026-06 from each provider's pricing page / model docs.
+# Values checked 2026-06 from each provider's pricing page / model docs;
+# claude-opus-5-5 and gpt-6-astra added 2026-10-06 from the same sources.
 PRICING: dict[tuple[str, str], tuple[float, float]] = {
+    ("anthropic", "claude-opus-5-5"):          ( 4.00, 20.00),
     ("anthropic", "claude-opus-5"):            ( 5.00, 25.00),
     ("anthropic", "claude-opus-4-8"):          ( 5.00, 25.00),
     ("anthropic", "claude-opus-4-7"):          ( 5.00, 25.00),
     ("anthropic", "claude-sonnet-4-6"):        ( 3.00, 15.00),
     ("anthropic", "claude-haiku-4-5-20251001"):( 0.80,  4.00),
+    ("openai",    "gpt-6-astra"):              (10.00, 50.00),
     ("openai",    "gpt-5.5"):                  ( 5.00, 30.00),
     ("openai",    "gpt-5.1"):                  (10.00, 30.00),
     ("openai",    "gpt-4o"):                   ( 2.50, 10.00),
@@ -127,8 +130,11 @@ REASONING_DEFAULT_PREFIXES: dict[str, tuple[str, ...]] = {
     # what bounds spend. Sampling it at the shared 1024 would reproduce
     # the 2026-W27 truncated-completion failure by construction, which
     # is why its runner carries an explicit cap in meridian/config.yaml.
+    # The "claude-opus-5" prefix also covers claude-opus-5-5, on which
+    # thinking cannot be disabled at all.
     "anthropic": ("claude-opus-5", "claude-opus-4-7", "claude-opus-4-8"),
-    "openai": ("gpt-5", "o1", "o3", "o4"),
+    # "gpt-6" added 2026-10-06 with gpt-6-astra, a reasoning model.
+    "openai": ("gpt-5", "gpt-6", "o1", "o3", "o4"),
 }
 
 #: Output tokens a response runs to when the completion cap is not the

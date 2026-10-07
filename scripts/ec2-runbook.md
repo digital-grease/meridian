@@ -220,6 +220,27 @@ SSM Session). If a run fails:
    with `WE_OWN_LIFECYCLE=0`) or accept the gap and document it on
    the methodology page (per the no-backfill policy).
 
+### The run stopped on its cost ceiling
+
+`run-weekly.sh` derives `--max-cost` from that week's roster rather than
+using a fixed number: `ceil(estimate x 1.5)`, at least $40 and at most
+$100. The log line `pre-flight estimate for <week>: $X; --max-cost
+ceiling $Y` records both figures. Two shapes:
+
+- `ABORT: estimated $X exceeds the --max-cost ceiling`: nothing was
+  sampled. Only an estimate above $100 can do this, so a config change
+  (a new runner, a raised `max_tokens`, a price) moved it. Find that
+  change with `uv run python -m meridian.pipeline.cli estimate --week
+  <week>` before raising anything.
+- `BUDGET CEILING HIT`: actual spend reached the ceiling mid-run and the
+  remaining requests were refused. Everything captured before the stop
+  is stored. Actual spend at 1.5x the estimate means a model is billing
+  far above its cost model; read the run log's per-runner figures.
+
+A deliberate one-off override is `MAX_COST_USD=<n>` in the environment
+of a manual re-run. Per-week estimates and the ceiling rule are in
+`meridian/BUDGET.md`.
+
 ## Recovery: instance won't start (capacity)
 
 Alert subject: `[meridian] capacity unavailable — instance did not start`.

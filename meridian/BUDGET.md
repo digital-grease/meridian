@@ -8,8 +8,10 @@ context that explains why that config looks the way it does.
 All numbers from `meridian.sampling.pricing.estimate_cost` at the
 default sampling plan (`n_default_temp=20`, `n_zero_temp=5`,
 `avg_input_chars=80`) and at the completion caps in
-`meridian/config.yaml` (shared 1024, gpt-5.5 pinned to 8192). Provider
-pricing as of 2026-06.
+`meridian/config.yaml` (shared 1024; gpt-5.5, gpt-6-astra, claude-opus-5
+and claude-opus-5-5 pinned to 8192). Provider pricing as of 2026-06,
+plus claude-opus-5-5 ($4/$20 per MTok) and gpt-6-astra ($10/$50) as of
+2026-10-06.
 
 Two things changed in 2026-08 and every figure below is on the new
 basis. There is no longer a flat `avg_output_tokens=500`: expected
@@ -34,37 +36,79 @@ what you expect the invoice to say.
 ## Current configuration (Level 0 — alternation)
 
 - Corpus: 30 prompts public
-- Ollama `llama3.2:3b` — every week (free, local baseline)
-- Claude Opus 4.8 — **even ISO weeks only**
-- Claude Opus 5 — **even ISO weeks only**, alongside 4.8 rather than
-  replacing it, so the 4-8 series continues and the two versions are
-  compared within a week rather than across one
-- GPT-5.5 — **odd ISO weeks only**
+- Ollama `llama3.2:3b`: every week (free, local baseline)
+- Claude Opus 5.5: **even ISO weeks only**, from 2026-W42
+- GPT-6 Astra: **odd ISO weeks only**, from 2026-W41
 
-**Weekly cost: $0 (Ollama) + $27.45 (even: $8.35 Opus 4.8 + $19.10 Opus 5)
-OR $22.91 (odd: GPT-5.5).**
-**Monthly average: ~$109 ($1,309/yr.)**
+**Weekly cost from 2026-W43: $0 (Ollama) + $15.28 (even: Opus 5.5) OR
+$38.20 (odd: GPT-6 Astra).**
+**Monthly average: ~$116 ($1,390/yr.)**
 
-Both alternating weeks now sit under the $40 `--max-cost` ceiling in
-`scripts/run-weekly.sh`, the even week at 69% of it. That margin is
-thinner than it looks: raising Opus 5's completion cap, or adding a
-fourth paid runner, would put an even week through the ceiling and stop
-the run rather than overspend. Raise the ceiling deliberately if either
-happens; do not raise it in response to an abort without checking which.
+### Roster succession, 2026-10
 
-The GPT-5.5 week is now the expensive one, which reverses the old
-ordering. That is the 8192 completion cap: gpt-5.5 bills reasoning
-tokens against it, so the same 600 calls carry roughly 1,270 expected
-billed output tokens each against Opus's 552 at the shared 1024. The old
-figures here ($9.45 / $11.32, ~$45/mo) predate both the cap change and
-the cap-aware estimator and should not be quoted.
+Opus 5.5 succeeds both Opus 4.8 and Opus 5, and GPT-6 Astra succeeds
+GPT-5.5, each with one overlap week so the old and new model are
+compared on the same week. The bounds are `first_week` / `last_week` on
+the runners in `meridian/config.yaml`, evaluated against the run label,
+so the handover needs no edit on the day. Retired entries stay in the
+config with their `last_week`.
+
+| Run label | Paid runners | Pre-flight estimate | `--max-cost` ceiling |
+|---|---|---:|---:|
+| 2026-W41 | GPT-5.5 $22.91 + GPT-6 Astra $38.20 | **$61.11** | $92 |
+| 2026-W42 | Opus 4.8 $8.35 + Opus 5 $19.10 + Opus 5.5 $15.28 | **$42.73** | $65 |
+| 2026-W43 | GPT-6 Astra | **$38.20** | $58 |
+| 2026-W44 | Opus 5.5 | **$15.28** | $40 |
+
+Pre-flight estimates from `uv run python -m meridian.pipeline.cli
+estimate --week <W> --run-total`. Expect the actual bill to differ in
+both directions: Opus weeks have come in above the estimate (2026-W40
+billed $31.45 against $27.45, about 1.15x, so 2026-W42 plausibly lands
+near $49), while GPT-5.5 weeks have billed about a quarter of theirs.
+GPT-6 Astra has no actuals yet and its parameter support is not
+documented, so treat its $38.20 as the least certain number here.
+
+### The `--max-cost` ceiling
+
+`scripts/run-weekly.sh` passes `--max-cost`, which is enforced twice: a
+pre-flight estimate above it aborts the run with nothing sampled (`--yes`
+does not waive it), and during the run the budget ledger refuses every
+further request once actual spend reaches it. Until 2026-10 the ceiling
+was a fixed $40. The overlap weeks both estimate above that, and a single
+fixed number cannot fit both a $61 overlap and a $15 steady-state week,
+so the ceiling is now derived from each week's estimate:
+
+    ceiling = clamp(ceil(estimate x 1.5), floor $40, hard max $100)
+
+The 1.5 margin covers actuals running above the estimate (the Opus 1.15x
+above). The $100 hard max keeps the "stop and ask" property: a roster or
+cap change that pushes an estimate past about $66 gets less than 1.5x
+headroom, and past $100 the run aborts at pre-flight. Do not raise the
+hard max in response to an abort without first finding which change
+moved the number. `MAX_COST_USD` set in the environment overrides the
+derivation; `MAX_COST_MARGIN`, `MAX_COST_FLOOR_USD` and
+`MAX_COST_HARD_MAX_USD` tune it.
+
+### Before the succession (through 2026-W40)
+
+- Claude Opus 4.8 and Claude Opus 5: even ISO weeks, side by side
+- GPT-5.5: odd ISO weeks
+- Weekly: $27.45 (even) or $22.91 (odd); ~$109/month; fixed $40 ceiling
+
+In that configuration the GPT-5.5 week was the expensive one, which
+reversed the older ordering, and GPT-6 Astra's week is the expensive
+one now for the same reason. That is the 8192 completion cap: gpt-5.5
+bills reasoning tokens against it, so the same 600 calls carry roughly
+1,270 expected billed output tokens each against Opus's 552 at the
+shared 1024. The old figures here ($9.45 / $11.32, ~$45/mo) predate both
+the cap change and the cap-aware estimator and should not be quoted.
 
 This gives us frontier-model coverage on both OpenAI and Anthropic
 without paying for both every week. Ollama produces a continuous
 baseline every week so the silent-update detector has a stable
-reference. Alternation halves the time-resolution on Opus and GPT-5.5
-individually — acceptable when drift on the frontier models is a
-months-scale story, not a weeks-scale one.
+reference. Alternation halves the time-resolution on Opus 5.5 and GPT-6
+Astra individually, which is acceptable when drift on the frontier
+models is a months-scale story, not a weeks-scale one.
 
 ---
 

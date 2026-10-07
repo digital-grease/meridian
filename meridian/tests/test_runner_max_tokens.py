@@ -57,6 +57,18 @@ def test_shipped_config_raises_the_cap_for_gpt_5_5():
     assert gpt.max_tokens is not None and gpt.max_tokens > config.sampling.max_tokens
 
 
+@pytest.mark.parametrize("model_id", ["gpt-6-astra", "claude-opus-5-5", "claude-opus-5"])
+def test_shipped_config_raises_the_cap_for_thinking_models(model_id):
+    """Same guard for the models whose reasoning bills against the cap.
+    claude-opus-5-5 cannot disable thinking at all, so at the shared cap
+    it would return empty completions by construction."""
+    from meridian.config import load_config
+    config = load_config()
+    spec = next((s for s in config.runners if s.model_id == model_id), None)
+    assert spec is not None, f"{model_id} missing from config.yaml"
+    assert spec.max_tokens is not None and spec.max_tokens >= 8192
+
+
 class _RecordingRunner(Runner):
     provider = "fake"
 

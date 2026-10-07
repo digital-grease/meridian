@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 Provider = Literal["anthropic", "openai", "ollama"]
 
@@ -27,6 +27,11 @@ Provider = Literal["anthropic", "openai", "ollama"]
 Cadence = Literal["every_week", "even_weeks", "odd_weeks"]
 
 _DIGEST_RE = re.compile(r"^[a-f0-9]{64}$")
+
+#: ISO week label, the form every run is labelled with ("2026-W41").
+#: Zero-padded, so two valid labels compare correctly as plain strings,
+#: which is what the first_week / last_week bounds rely on.
+_ISO_WEEK_RE = re.compile(r"^\d{4}-W(0[1-9]|[1-4]\d|5[0-3])$")
 
 
 class RunnerSpec(BaseModel):
@@ -50,6 +55,67 @@ class RunnerSpec(BaseModel):
     # match. Bare 64-char hex (no "sha256:" prefix) — that's the form
     # ollama's API emits.
     digest: str | None = None
+    # Optional inclusive bounds on the run LABELS this runner belongs to,
+    # as ISO weeks ("2026-W41"). Cadence still applies inside them. They
+    # exist so a model succession happens on schedule without anyone
+    # editing this file on the Monday it takes effect: the successor
+    # carries a first_week, the retiring model a last_week, and the
+    # overlap between them is the comparison window.
+    #
+    # A retired runner keeps its entry, with its last_week, rather than
+    # being deleted. The config is part of the record of what ran when,
+    # and a deleted entry would erase that record.
+    #
+    # Bounds are compared against the run label, which run-weekly.sh
+    # sets to the ISO week of the day BEFORE the run starts (Monday
+    # 2026-10-19 runs as 2026-W42), never against the calendar week the
+    # requests are sent in.
+    first_week: str | None = None
+    last_week: str | None = None
+
+    @field_validator("first_week", "last_week")
+    @classmethod
+    def _validate_week_bound(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not _ISO_WEEK_RE.match(v):
+            raise ValueError(
+                "first_week / last_week must be an ISO week label like "
+                "'2026-W41' (week 01-53, zero-padded); got " + repr(v)
+            )
+        return v
+
+    @model_validator(mode="after")
+    def _validate_week_order(self) -> "RunnerSpec":
+        if (
+            self.first_week is not None
+            and self.last_week is not None
+            and self.first_week > self.last_week
+        ):
+            raise ValueError(
+                f"first_week {self.first_week} is after last_week "
+                f"{self.last_week} for {self.provider}/{self.model_id}; "
+                f"the runner would never run"
+            )
+        return self
+
+    def runs_in_week(self, week_id: str) -> bool:
+        """Is this runner due in the run labelled ``week_id``?
+
+        Cadence plus the optional first/last week bounds. ``enabled`` is
+        deliberately not consulted: callers filter on it themselves, and
+        keeping the two apart lets a caller ask "was this model on the
+        schedule that week" of a disabled entry too.
+        """
+        if not should_run_in_week(self.cadence, week_id):
+            return False
+        if not _ISO_WEEK_RE.match(week_id):
+            raise ValueError(f"unparseable week_id: {week_id!r}")
+        if self.first_week is not None and week_id < self.first_week:
+            return False
+        if self.last_week is not None and week_id > self.last_week:
+            return False
+        return True
 
     @field_validator("digest")
     @classmethod
@@ -164,8 +230,9 @@ def load_config(path: Path | None = None) -> PipelineConfig:
 def build_runners(config: PipelineConfig, *, week_id: str | None = None):
     """Instantiate enabled runners from config.
 
-    If ``week_id`` is given, runners whose cadence excludes that week are
-    also filtered out. Passing ``None`` disables cadence filtering and
+    If ``week_id`` is given, runners whose cadence or first/last week
+    bounds exclude that week are also filtered out (see
+    ``RunnerSpec.runs_in_week``). Passing ``None`` disables cadence filtering and
     returns every enabled runner (useful for the ``estimate`` subcommand's
     "monthly average" view).
 
@@ -194,7 +261,7 @@ def build_runners(config: PipelineConfig, *, week_id: str | None = None):
                 file=sys.stderr,
             )
             continue
-        if week_id is not None and not should_run_in_week(spec.cadence, week_id):
+        if week_id is not None and not spec.runs_in_week(week_id):
             continue
         if spec.provider == "anthropic":
             out.append(AnthropicRunner(

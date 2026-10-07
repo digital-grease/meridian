@@ -40,6 +40,9 @@ _TEMPERATURE_DEPRECATED_PREFIXES: tuple[str, ...] = (
     # samples per prompt and fail every one of them, which is exactly
     # how 2026-W27 lost 150 gpt-5.5 samples before openai.py grew the
     # equivalent list.
+    #
+    # This is a prefix match, so it also covers claude-opus-5-5, which
+    # rejects temperature, top_p and top_k the same way.
     "claude-opus-5",
     "claude-opus-4-7",
     "claude-opus-4-8",
@@ -81,6 +84,20 @@ def _build_message_kwargs(
     intended (1.0 in this case), even though the API call did not
     include it; that field documents our sampling intent, not the
     bytes on the wire.
+
+    Nothing else is ever added here: no ``thinking``, no ``effort`` and
+    no sampling parameters, so every model is measured at its provider
+    defaults. On claude-opus-5-5 that omission is also a requirement,
+    since thinking cannot be disabled there and an explicit
+    ``{type: "disabled"}`` or ``budget_tokens`` is a 400.
+
+    NEVER send the server-side ``fallbacks`` parameter or its beta
+    header (``server-side-fallback-*``). A fallback re-runs a refused
+    request on a different model inside the same call, so the answer
+    stored under this model id would have been written by another
+    model, and the refusal the project exists to measure would be
+    replaced by someone else's answer. A refusal must come back as
+    ``stop_reason="refusal"`` and be recorded as one.
     """
     kwargs: dict = {
         "model": model_id,
@@ -165,6 +182,9 @@ class AnthropicRunner(Runner):
 
             latency_ms = int((time.monotonic() - started) * 1000)
             text = _extract_text(resp)
+            # The served model must be the one asked for. Fallbacks are
+            # never requested (see _build_message_kwargs), and
+            # model_version_string below records what actually answered.
             return Sample(
                 prompt_id=prompt_id,
                 model_id=self.model_id,

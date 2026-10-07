@@ -107,8 +107,9 @@
     rewritten &mdash; only extended.
   </p>
   <p id="thinking-models">
-    <strong>Thinking-by-default models.</strong> Some frontier models &mdash;
-    Claude Opus 4.8 and the OpenAI o-series among them &mdash; have
+    <strong>Thinking-by-default models.</strong> Some frontier models,
+    among them Claude Opus 4.8 and later, GPT-5.5, GPT-6 Astra and the
+    OpenAI o-series, have
     <a href="https://platform.claude.com/docs/en/api/messages">deprecated the
     <code>temperature</code>, <code>top_p</code>, and <code>top_k</code>
     parameters</a>: any non-default value returns a 400 error. For these
@@ -137,6 +138,57 @@
     move to thinking-by-default, this asymmetry becomes the new
     baseline rather than an exception.
   </p>
+
+  <p id="roster-changes">
+    <strong>Roster changes.</strong> From October 2026, when a
+    provider&rsquo;s flagship changes, the new model starts a new series
+    rather than continuing the old one, and the two run side by side for
+    one week so the handover can be compared on the same prompts in the
+    same week. The retired series stays published; it stops gaining weeks.
+    Each such change is announced with its dates in a
+    <a href="/reports/">report</a>. Earlier changes did not follow this
+    rule: they had no overlap week and no notice, and are listed last
+    below so the full record is in one place. Weeks below are run labels:
+    a run is labelled with the ISO week that ended the day before it
+    starts.
+  </p>
+  <dl class="metric-glossary">
+    <dt>2026-10-06 &middot; <code>gpt-5.5</code> &rarr; <code>gpt-6-astra</code></dt>
+    <dd>Overlap in <code>2026-W41</code>, which is the last
+      <code>gpt-5.5</code> week and the first <code>gpt-6-astra</code>
+      week. Odd weeks only. <code>gpt-6-astra</code> is sent the same
+      request settings as <code>gpt-5.5</code>: no temperature, so no
+      temperature-0 leg, and the same 8192-token response limit.
+      <a href="/reports/2026-10-06-roster-succession/">Notice</a>.</dd>
+
+    <dt>2026-10-06 &middot; <code>claude-opus-4-8</code>, <code>claude-opus-5</code> &rarr; <code>claude-opus-5-5</code></dt>
+    <dd>Overlap in <code>2026-W42</code>, which is the last week of both
+      older series and the first <code>claude-opus-5-5</code> week. Even
+      weeks only. Its thinking cannot be switched off, and we leave
+      reasoning effort at the provider default, which Anthropic sets to
+      &ldquo;medium&rdquo; on this model where Claude Opus 5 defaulted to
+      &ldquo;high&rdquo;; some of any difference in the overlap week may
+      come from that default. Server-side fallback to another model is
+      never enabled, for this or any model, so every response stored
+      under a model&rsquo;s name came from that model.
+      <a href="/reports/2026-10-06-roster-succession/">Notice</a>.</dd>
+
+    <dt>2026-W36 &middot; <code>claude-opus-5</code> added</dt>
+    <dd>Began in <code>2026-W36</code>, sampled alongside
+      <code>claude-opus-4-8</code> on even weeks rather than replacing
+      it. No notice was published.</dd>
+
+    <dt>2026-W28 &middot; <code>claude-opus-4-7</code> &rarr; <code>claude-opus-4-8</code></dt>
+    <dd><code>claude-opus-4-8</code> began in <code>2026-W28</code> and
+      <code>claude-opus-4-7</code>, whose last week was
+      <code>2026-W26</code>, was not run again. No overlap week and no
+      notice.</dd>
+
+    <dt>2026-W27 &middot; <code>gpt-5.1</code> &rarr; <code>gpt-5.5</code></dt>
+    <dd><code>gpt-5.5</code> began in <code>2026-W27</code> and
+      <code>gpt-5.1</code>, whose last week was <code>2026-W25</code>,
+      was not run again. No overlap week and no notice.</dd>
+  </dl>
 
   <h2 id="metrics">Metrics</h2>
   <dl class="metric-glossary">
