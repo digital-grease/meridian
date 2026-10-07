@@ -263,3 +263,70 @@ variable "gpu_memory_threshold_mb" {
     error_message = "gpu_memory_threshold_mb must be between 0 and 24000 (a g5.2xlarge A10G has 24 GB)."
   }
 }
+
+# ------------------------------------------------------------------------
+# Provider probe (provider_probe.tf) - Sunday credit and credential check
+# ------------------------------------------------------------------------
+
+variable "provider_probe_targets" {
+  description = <<-EOT
+    Models the Sunday provider probe sends one minimal request to: every
+    enabled commercial runner in meridian/config.yaml plus the stance
+    classifier. `role` is "runner" or "stance"; `cadence` is copied from
+    the config so the alert can say whether a failing model is in the
+    coming Monday's run.
+
+    `first_week` and `last_week` are the runner's optional inclusive
+    bounds from the config, as ISO week run labels ("2026-W41"), or null.
+    A target whose last_week is before the coming run's label is retired:
+    it is not probed and never pages. A target before its first_week is
+    still probed, so a new model's access is proven the Sunday before it
+    first runs, but it is reported as not in Monday's run.
+
+    This MUST match meridian/config.yaml. The probe cannot read the
+    config (it ships alone in a zip), so the list is restated here and
+    meridian/tests/test_lambda_provider_probe.py fails when the two
+    disagree. Change both in the same commit. Retired runners stay in
+    both lists with their last_week, as they do in the config.
+  EOT
+  type = list(object({
+    provider   = string
+    model_id   = string
+    role       = string
+    cadence    = string
+    first_week = optional(string)
+    last_week  = optional(string)
+  }))
+  default = [
+    { provider = "anthropic", model_id = "claude-opus-4-8", role = "runner", cadence = "even_weeks", first_week = null, last_week = "2026-W42" },
+    { provider = "anthropic", model_id = "claude-opus-5", role = "runner", cadence = "even_weeks", first_week = null, last_week = "2026-W42" },
+    { provider = "anthropic", model_id = "claude-opus-5-5", role = "runner", cadence = "even_weeks", first_week = "2026-W42", last_week = null },
+    { provider = "openai", model_id = "gpt-5.5", role = "runner", cadence = "odd_weeks", first_week = null, last_week = "2026-W41" },
+    { provider = "openai", model_id = "gpt-6-astra", role = "runner", cadence = "odd_weeks", first_week = "2026-W41", last_week = null },
+    { provider = "anthropic", model_id = "claude-haiku-4-5-20251001", role = "stance", cadence = "every_week", first_week = null, last_week = null },
+  ]
+
+  validation {
+    # The probe holds keys for exactly these two providers. A third
+    # needs its own SSM parameter, IAM grant and request shape first.
+    condition = length(var.provider_probe_targets) > 0 && alltrue([
+      for t in var.provider_probe_targets :
+      contains(["anthropic", "openai"], t.provider)
+      && contains(["runner", "stance"], t.role)
+      && contains(["every_week", "even_weeks", "odd_weeks"], t.cadence)
+    ])
+    error_message = "provider_probe_targets must be non-empty, with provider in [anthropic, openai], role in [runner, stance] and cadence in [every_week, even_weeks, odd_weeks]."
+  }
+
+  validation {
+    # Same rule as RunnerSpec in meridian/config.py. Zero-padded labels
+    # compare correctly as strings, which the probe relies on.
+    condition = alltrue([
+      for t in var.provider_probe_targets : alltrue([
+        for w in [t.first_week, t.last_week] :
+        w == null ? true : can(regex("^[0-9]{4}-W(0[1-9]|[1-4][0-9]|5[0-3])$", w))
+      ])
+    ])
+    error_message = "provider_probe_targets first_week / last_week must be null or an ISO week label like \"2026-W41\" (week 01-53, zero-padded)."
+  }
+}

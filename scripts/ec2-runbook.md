@@ -352,6 +352,78 @@ A run killed part-way writes no manifest, so the publish workflow will
 publish it with
 `gh workflow run weekly-pipeline.yml -f week=<ISO week>`.
 
+## Provider probe
+
+Alert subjects look like:
+
+- `PAGE provider-probe anthropic BILLING (opus-5-5, haiku-4-5)`
+- `PAGE provider-probe openai AUTH (gpt-6-astra)`
+- `WARN provider-probe openai INCONCLUSIVE (gpt-6-astra)`
+
+`meridian-provider-probe` (infra/terraform/ec2-cohabit/provider_probe.tf)
+runs Sunday 12:00 UTC and sends one tiny real request per model with the
+same SSM keys the instance uses. A clean Sunday sends nothing. The email
+body lists every target with its status, HTTP code and the provider's
+message (keys redacted), and says whether that model is in Monday's run.
+Credit is account-wide, so a billing failure matters even for a model
+that is off this week; the stance classifier runs every week.
+
+Targets follow the runners' `first_week` / `last_week` bounds in
+`meridian/config.yaml`, compared against the label of the coming run. A
+model whose `last_week` has passed is retired: it is not probed and
+cannot page (after 2026-W42, `claude-opus-4-8`, `claude-opus-5` and
+`gpt-5.5`). A model before its `first_week` is still probed, so its
+access is proven before its first run, and is listed as not in Monday's
+run.
+
+What to do, by status:
+
+- **BILLING**: top up before Monday 09:00 UTC. Anthropic credit is
+  prepaid and auto-reload is off on purpose, so nothing else will.
+  OpenAI: add credit or raise the project's usage limit. Leave at least
+  a week of headroom (see `meridian/BUDGET.md` for the per-week
+  estimate): the probe spends almost nothing, so a balance that only
+  just passes on Sunday can still run dry during Monday's run.
+- **AUTH**: the key was rejected, or its SSM parameter is missing. Put a
+  working key back with the `aws ssm put-parameter` command from
+  `terraform output set_anthropic_key_command` (or the OpenAI one).
+- **MODEL-GONE**: the provider no longer serves that model id, or the
+  key's project has lost access to it (OpenAI reports that as a 403 with
+  `model_not_found`; the key itself is fine). Update
+  `runners:` (or `stance:`) in `meridian/config.yaml` and
+  `provider_probe_targets` in `infra/terraform/ec2-cohabit/variables.tf`
+  in the same change, then apply. A replaced model is a new series:
+  give the old entry a `last_week` and the new one a `first_week` (never
+  delete the old entry), and record the change as a dated notice under
+  `site/content/reports/` (see `2026-10-06-roster-succession.md`).
+- **INCONCLUSIVE**: a timeout, a 5xx that survived the one retry, or an
+  unfamiliar 400. Usually transient. A 400 that repeats every Sunday on
+  one model, with the others OK, more likely means the 16-token probe
+  request does not suit that model (for example one that always thinks,
+  such as `claude-opus-5-5`) than that Monday will fail; the run's own
+  requests carry an 8192 cap. Re-run the probe and only act if it
+  repeats. The exception is "could not read SSM parameter": nothing was
+  sent to the provider, so check the `meridian-provider-probe` role's
+  `ssm:GetParameter` (and `kms:Decrypt`) grant. When every key read
+  fails the probe has checked nothing, and the email is a `PAGE`.
+
+Re-run by hand after fixing anything (the result prints per target; it
+emails only if something is still not OK):
+
+```bash
+aws lambda invoke \
+    --function-name meridian-provider-probe \
+    --region us-east-2 \
+    /tmp/meridian-provider-probe.json
+cat /tmp/meridian-provider-probe.json
+```
+
+`meridian-provider-probe-errors` firing means the probe itself did not
+finish (bad target list, timeout, or an SNS publish that failed), so
+this Sunday's check did not happen. Read
+`aws logs tail /aws/lambda/meridian-provider-probe --since 24h --region us-east-2`
+and run it by hand.
+
 ## When a run finishes after 13:00 UTC
 
 The publish workflow reads S3 on a fixed schedule and does not come back

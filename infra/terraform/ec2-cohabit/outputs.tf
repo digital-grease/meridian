@@ -56,3 +56,13 @@ output "set_openai_key_command" {
   description = "Run this (with the real key) to populate the SSM parameter."
   value       = "aws ssm put-parameter --type SecureString --overwrite --name ${aws_ssm_parameter.openai_api_key.name} --value <OPENAI_API_KEY> --region ${var.region}"
 }
+
+output "provider_probe_function_name" {
+  description = "Sunday provider probe. Invoke by hand to re-check credit and keys after a top-up."
+  value       = aws_lambda_function.provider_probe.function_name
+}
+
+output "provider_probe_invoke_command" {
+  description = "Convenience: run the provider probe now. Prints the per-target result; emails only if something is not OK."
+  value       = "aws lambda invoke --function-name ${aws_lambda_function.provider_probe.function_name} --region ${var.region} /tmp/meridian-provider-probe.json"
+}

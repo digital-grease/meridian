@@ -113,11 +113,13 @@ resource "aws_cloudwatch_metric_alarm" "orchestrator_errors" {
 #    else, which would page us for a stranger's failure; keep those out
 #    of the default group.
 #
-#    The description therefore names the group and both candidates
-#    rather than asserting which run was lost.
+#    The group has since grown to four: the hourly meridian-reaper and
+#    the Sunday meridian-provider-probe joined it on the same reasoning.
+#    The description therefore names the group and every candidate
+#    rather than asserting which one failed to start.
 resource "aws_cloudwatch_metric_alarm" "scheduler_target_errors" {
   alarm_name          = "meridian-scheduler-target-errors"
-  alarm_description   = "EventBridge Scheduler failed to deliver to a target in group ${coalesce(aws_scheduler_schedule.weekly.group_name, "default")}. Either the Monday orchestrator run (${aws_scheduler_schedule.weekly.name}) or the Tuesday dead man's switch (${aws_scheduler_schedule.canary.name}) did not start; the metric has no per-schedule dimension, so check both."
+  alarm_description   = "EventBridge Scheduler failed to deliver to a target in group ${coalesce(aws_scheduler_schedule.weekly.group_name, "default")}. One of ${aws_scheduler_schedule.weekly.name} (Monday run), ${aws_scheduler_schedule.canary.name} (Tuesday dead man's switch), ${aws_scheduler_schedule.reaper.name} (hourly) or ${aws_scheduler_schedule.provider_probe.name} (Sunday credit check) did not start; the metric has no per-schedule dimension, so check by day and time."
   namespace           = "AWS/Scheduler"
   metric_name         = "TargetErrorCount"
   dimensions          = { ScheduleGroup = coalesce(aws_scheduler_schedule.weekly.group_name, "default") }

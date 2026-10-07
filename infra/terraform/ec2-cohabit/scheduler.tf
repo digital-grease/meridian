@@ -28,9 +28,10 @@ data "aws_iam_policy_document" "scheduler_invoke" {
   statement {
     effect  = "Allow"
     actions = ["lambda:InvokeFunction"]
-    # All three scheduled functions run under this one role: the Monday
-    # orchestrator, the Tuesday dead man's switch (canary.tf) and the
-    # hourly instance reaper (reaper.tf). The policy resource keeps its
+    # All four scheduled functions run under this one role: the Monday
+    # orchestrator, the Tuesday dead man's switch (canary.tf), the
+    # hourly instance reaper (reaper.tf) and the Sunday provider probe
+    # (provider_probe.tf). The policy resource keeps its
     # original "invoke-orchestrator" name so adding to it does not churn
     # an inline policy that predates it; the name is now narrower than
     # the grant.
@@ -43,6 +44,7 @@ data "aws_iam_policy_document" "scheduler_invoke" {
       aws_lambda_function.orchestrator.arn,
       aws_lambda_function.canary.arn,
       aws_lambda_function.reaper.arn,
+      aws_lambda_function.provider_probe.arn,
     ]
   }
 }

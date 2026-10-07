@@ -38,6 +38,18 @@ The companion modules are:
   pipeline to finish (Lambda's 15-min hard timeout cannot sit through a
   ~30-90 min run); the wrapper handles its own outcome reporting and
   self-shutdown.
+- **Lambda** `meridian-provider-probe`, scheduled Sunday 12:00 UTC
+  (`provider_probe.tf`). Reads the two SSM keys and sends one 16-token
+  request to every commercial model in the roster plus the stance
+  classifier, about 21 hours before Monday's run. Models whose
+  `last_week` has passed are retired and skipped; models before their
+  `first_week` are probed but reported as not in Monday's run. Emails the alerts
+  topic only when a target is not OK: `PAGE` for BILLING, AUTH or
+  MODEL-GONE, `WARN` for INCONCLUSIVE (`PAGE` if no key could be
+  read, since then nothing was checked). Never touches the instance. The
+  target list is `var.provider_probe_targets` and must match
+  `meridian/config.yaml`; a test fails when they disagree. What to do
+  on each status is in `scripts/ec2-runbook.md` under "Provider probe".
 - **EventBridge Scheduler** schedule `meridian-weekly` at
   `cron(0 4 ? * MON *)` in `America/Chicago` by default. Timezone-aware
   via the AWS-native `schedule_expression_timezone` field — no manual
