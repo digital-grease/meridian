@@ -6,6 +6,11 @@ those cells from the published responses and grafts three fields back.
 These tests pin that it touches nothing else, refuses a half-done
 correction, and is idempotent. The real manifests and snapshots are read,
 never written: every write goes to tmp_path copies.
+
+The correction was applied on 2026-10-07, so the committed W36 to W38
+manifests are now the corrected ones. The tests that exercise the
+correction itself read the manifests as first published, kept gzipped in
+meridian/tests/fixtures; the last test pins the committed files to them.
 """
 from __future__ import annotations
 
@@ -35,10 +40,21 @@ from schema import Manifest  # noqa: E402
 
 MANIFESTS = ROOT / "data" / "manifests"
 SNAPSHOTS = ROOT / "data" / "snapshots"
+AS_PUBLISHED = Path(__file__).resolve().parent / "fixtures"
+CORRECTED_WEEKS = ("2026-W36", "2026-W37", "2026-W38")
+
+
+def _published_bytes(week: str) -> bytes:
+    """The manifest as first published: the pre-correction copy for the
+    corrected weeks, the committed file for every other week."""
+    if week in CORRECTED_WEEKS:
+        return gzip.decompress(
+            (AS_PUBLISHED / f"manifest_as_published_{week}.json.gz").read_bytes())
+    return (MANIFESTS / f"{week}.json").read_bytes()
 
 
 def _published(week: str) -> dict:
-    return json.loads((MANIFESTS / f"{week}.json").read_text())
+    return json.loads(_published_bytes(week))
 
 
 def _results(manifest: dict, *, stance: str = "neutral", conf: float = 0.85,
@@ -136,8 +152,8 @@ def _tmp_tree(tmp_path: Path, weeks: list[str]) -> tuple[Path, Path]:
     manifests.mkdir()
     fixtures.mkdir()
     for w in weeks:
-        shutil.copy(MANIFESTS / f"{w}.json", manifests / f"{w}.json")
-        shutil.copy(MANIFESTS / f"{w}.json", fixtures / f"manifest-{w}.json")
+        (manifests / f"{w}.json").write_bytes(_published_bytes(w))
+        (fixtures / f"manifest-{w}.json").write_bytes(_published_bytes(w))
     return manifests, fixtures
 
 
@@ -246,16 +262,17 @@ def test_classify_cells_uses_the_pipelines_representative_response(tmp_path: Pat
 
 
 def test_classify_command_end_to_end_on_the_published_w38(tmp_path: Path, monkeypatch):
-    """Real W38 manifest and snapshot (read only), fake classifier."""
+    """W38 as first published and its real snapshot (read only), fake classifier."""
     from meridian.pipeline import stance_runner
 
     fake = _FakeClassifier()
     monkeypatch.setattr(stance_runner, "build_stance_classifier",
                         lambda spec, repo_root: fake)
     monkeypatch.delenv("MERIDIAN_SECRETS_SSM", raising=False)
+    manifests, fixtures = _tmp_tree(tmp_path, ["2026-W38"])
     out = tmp_path / "out"
     rc = bs.main(["classify", "--weeks", "2026-W38", "--out", str(out),
-                  "--manifests-dir", str(MANIFESTS), "--snapshots-dir", str(SNAPSHOTS)])
+                  "--manifests-dir", str(manifests), "--snapshots-dir", str(SNAPSHOTS)])
     assert rc == 0
     lines = [json.loads(x) for x in (out / bs.RESULTS_NAME).read_text().splitlines()]
     assert len(lines) == 10
@@ -264,6 +281,21 @@ def test_classify_command_end_to_end_on_the_published_w38(tmp_path: Path, monkey
     # Results never overwrite.
     assert bs.main(["classify", "--weeks", "2026-W38", "--out", str(out)]) == 2
 
-    manifests, fixtures = _tmp_tree(tmp_path, ["2026-W38"])
     assert _graft(out / bs.RESULTS_NAME, manifests, fixtures, "--write") == 0
     assert bs.unmeasured_cells(json.loads((manifests / "2026-W38.json").read_text())) == []
+
+
+@pytest.mark.parametrize("week", CORRECTED_WEEKS)
+def test_committed_manifest_is_the_published_one_with_only_stance_corrected(week):
+    """The 2026-10-07 correction, as committed: both copies identical, no
+    unmeasured cell left, a corrections entry naming the report, and every
+    field outside stance exactly as first published."""
+    committed = (MANIFESTS / f"{week}.json").read_bytes()
+    assert committed == (ROOT / "site" / "fixtures" / f"manifest-{week}.json").read_bytes()
+    corrected, published = json.loads(committed), _published(week)
+    assert bs.unmeasured_cells(published)
+    assert bs.unmeasured_cells(corrected) == []
+    assert [c["report"] for c in corrected["corrections"]] == [
+        "/reports/2026-10-07-stance-classifier-correction/"
+    ]
+    assert bs.strip_stance(corrected) == bs.strip_stance(published)

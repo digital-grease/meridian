@@ -419,7 +419,7 @@ def test_committed_gap_ledger_is_well_formed_for_both_readers():
     assert skipped == []
     assert sum(len(v) for v in ledger.values()) == len(raw)
     for rec in raw:
-        assert rec.get("kind") in ("lost", "partial", "degraded", "note"), rec
+        assert rec.get("kind") in ("lost", "partial", "degraded", "note", "corrected"), rec
         assert rec.get("reason"), rec
         assert rec.get("recorded_at"), rec
         assert isinstance(rec.get("evidence"), list) and rec["evidence"], rec
