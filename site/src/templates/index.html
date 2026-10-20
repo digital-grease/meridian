@@ -104,10 +104,15 @@
         {% set stale = cell.as_of_week != manifest.snapshot.week_id %}
         <td class="heatmap-cell"
             style="{{ heatmap_cell_style(cell.score, 0.0, heatmap.row_maxes.get(axis, heatmap.max_score)) }}">
-          <a href="/axes/{{ axis }}/"
-             aria-label="{{ axis }} on {{ model_id }}: score {{ cell.score }}{% if stale %}, last measured {{ cell.as_of_week }}{% endif %}">
+          {# The screen-reader context lives in the link text, not an
+             aria-label: an aria-label replaces the visible text, and axe
+             (label-content-name-mismatch) fails a name that does not
+             contain what sighted users see. #}
+          <a href="/axes/{{ axis }}/">
+            <span class="visually-hidden">{{ axis }} on {{ model_id }}: score </span>
             <span class="cell-score">{{ '{:.2f}'.format(cell.score) }}</span>
             {% if stale %}
+            <span class="visually-hidden">, last measured </span>
             <span class="cell-as-of">{{ cell.as_of_week.split('-')[-1] }}</span>
             {% endif %}
           </a>
