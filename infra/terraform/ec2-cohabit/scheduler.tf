@@ -87,7 +87,8 @@ resource "aws_scheduler_schedule" "weekly" {
       # These values are generous because delivery retries are cheap and
       # idempotent at this point in the flow (nothing has started yet).
       # The event-age cap keeps a late delivery from starting a run so
-      # close to the 13:00 UTC publish read that it cannot finish.
+      # close to the 18:00 UTC publish read that it cannot finish (a 3h
+      # cap plus the ~3.5h run fits before it).
       maximum_retry_attempts       = 4
       maximum_event_age_in_seconds = 10800
     }

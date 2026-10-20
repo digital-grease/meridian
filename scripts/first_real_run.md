@@ -117,7 +117,7 @@ sparklines and the comparison analyzer produce meaningful output.
 
 For the routine weekly cadence, the EC2 path (`scripts/ec2-runbook.md`
 plus the Lambda + Scheduler in `infra/terraform/ec2-cohabit/`) replaces
-this runbook. CI fires Mon 13:00 UTC and only publishes — it pulls the
+this runbook. CI fires Mon 18:00 UTC and only publishes — it pulls the
 manifest, snapshot, and run-log entry that the EC2 wrapper has already
 uploaded to S3 and commits them to `main`. No `meridian run` invocation
 on a GitHub-hosted runner.

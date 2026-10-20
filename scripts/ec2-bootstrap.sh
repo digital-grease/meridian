@@ -9,7 +9,8 @@
 #   2. Format with ext4 if blank, mount at /data/meridian.
 #   3. Create the meridian system user.
 #   4. Install ollama, configure it to put model files on the data
-#      volume, enable on boot.
+#      volume, enable on boot. 4b adds a second, version-pinned ollama
+#      engine on :11435 (scripts/install-ollama-pinned.sh).
 #   5. Install uv (system-wide) so `uv run` works for the meridian user.
 #   6. Place /etc/meridian/config.env from a template; the operator fills
 #      in real values after running this script (see ec2-runbook.md).
@@ -161,6 +162,19 @@ systemctl enable ollama
 # ollama installer starts it before we lay down the meridian override),
 # so use restart to force the env vars to take effect on this run.
 systemctl restart ollama
+
+# 4b. The second, version-pinned ollama engine on :11435, for local
+# models that need a newer engine than the one above. The system engine
+# is never upgraded; see the script for why. The runbook pipes this file
+# from GitHub before the repo is cloned, so fetch the sibling the same way
+# when it is not next to us.
+PINNED_SH="$(dirname "$0")/install-ollama-pinned.sh"
+if [ ! -f "$PINNED_SH" ]; then
+  PINNED_SH="$(mktemp)"
+  curl -fsSL -o "$PINNED_SH" \
+    https://raw.githubusercontent.com/digital-grease/meridian/main/scripts/install-ollama-pinned.sh
+fi
+bash "$PINNED_SH"
 
 # 5. Install uv system-wide (idempotent — installer skips if same version).
 if ! command -v uv >/dev/null 2>&1; then

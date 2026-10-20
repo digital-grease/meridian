@@ -59,7 +59,10 @@ variable "instance_availability_zone" {
 variable "data_volume_size_gb" {
   description = "Size of the meridian-owned EBS data volume (model files + raw samples + run-log). gp3."
   type        = number
-  default     = 30
+  # 30 -> 60 on 2026-10-20 for qwen3.6:27b (19 GB) on the pinned ollama
+  # engine. Growing is in place (no detach); run `resize2fs` on the
+  # instance afterwards. EBS volumes can never shrink.
+  default = 60
 }
 
 variable "data_volume_device_name" {

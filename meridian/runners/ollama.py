@@ -11,6 +11,7 @@ Returns JSON with ``response``, ``model``, ``done_reason``, ``prompt_eval_count`
 """
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime, timezone
 
@@ -24,6 +25,8 @@ from meridian.runners.base import (
     UpstreamError,
 )
 
+_log = logging.getLogger(__name__)
+
 
 class OllamaRunner(Runner):
     provider = "ollama"
@@ -34,17 +37,30 @@ class OllamaRunner(Runner):
         *,
         base_url: str = "http://localhost:11434",
         client: httpx.AsyncClient | None = None,
-        timeout: float = 120.0,
+        # Per request. qwen3.6:27b on the A10G serves one request at a time
+        # (measured 2026-10-20, OLLAMA_NUM_PARALLEL had no effect), so the
+        # runner's 4 in-flight requests queue: the 4th waits for up to three
+        # 1024-token answers at ~49 tok/s, about 84 s before its own begins.
+        timeout: float = 300.0,
+        # For the one-off model load in prepare(). Reading 17 GB of weights
+        # from gp3 into the GPU took 140-228 s on a fresh boot.
+        load_timeout: float = 900.0,
         expected_digest: str | None = None,
         max_tokens: int | None = None,
+        think: bool | None = None,
     ) -> None:
         self.model_id = model_id
         self.base_url = base_url.rstrip("/")
         self._client = client
         self._owns_client = client is None
         self.timeout = timeout
+        self.load_timeout = load_timeout
         self.expected_digest = expected_digest
         self.max_tokens_override = max_tokens
+        # None omits `think` from the request (the model's default). Engines
+        # older than thinking support reject the field, so it is only sent
+        # when a runner's config sets it.
+        self.think = think
 
     async def aclose(self) -> None:
         if self._owns_client and self._client is not None:
@@ -57,6 +73,38 @@ class OllamaRunner(Runner):
         return self._client
 
     async def prepare(self) -> None:
+        await self._verify_digest()
+        await self._load_model()
+
+    async def _load_model(self) -> None:
+        """Load the weights before sampling starts.
+
+        A generate request with no prompt only loads the model. Without
+        this the first sampling requests of a cold boot wait out the load
+        and hit the per-request timeout.
+
+        A failed load is logged, not raised: an error from prepare() halts
+        the runner for the week, and a load that merely failed to finish
+        here may still succeed on the first sample, whose own retries
+        surface a real failure.
+        """
+        client = self._get_client()
+        try:
+            resp = await client.post(
+                f"{self.base_url}/api/generate",
+                json={"model": self.model_id},
+                timeout=self.load_timeout,
+            )
+        except httpx.HTTPError as e:
+            _log.warning("ollama: loading %s failed, sampling anyway: %s", self.model_id, e)
+            return
+        if resp.status_code != 200:
+            _log.warning(
+                "ollama: loading %s returned %s, sampling anyway: %s",
+                self.model_id, resp.status_code, resp.text[:200],
+            )
+
+    async def _verify_digest(self) -> None:
         # No digest pinned → nothing to verify, behave as before.
         if self.expected_digest is None:
             return
@@ -104,18 +152,20 @@ class OllamaRunner(Runner):
         async def one_call() -> Sample:
             started = time.monotonic()
             client = self._get_client()
+            payload: dict = {
+                "model": self.model_id,
+                "prompt": prompt,
+                "stream": False,
+                "options": {
+                    "temperature": temperature,
+                    "num_predict": max_tokens,
+                },
+            }
+            if self.think is not None:
+                payload["think"] = self.think
             try:
                 resp = await client.post(
-                    f"{self.base_url}/api/generate",
-                    json={
-                        "model": self.model_id,
-                        "prompt": prompt,
-                        "stream": False,
-                        "options": {
-                            "temperature": temperature,
-                            "num_predict": max_tokens,
-                        },
-                    },
+                    f"{self.base_url}/api/generate", json=payload,
                 )
             except httpx.HTTPError as e:
                 raise UpstreamError(f"ollama transport error: {e}") from e

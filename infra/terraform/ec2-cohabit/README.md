@@ -203,7 +203,7 @@ assumes the previous succeeded.
    `/etc/meridian/config.env`, smoke-test the wrapper, end-to-end
    Lambda test.
 10. **Wait for the first scheduled fire** (Mon 04:00 America/Chicago).
-    Confirm CI's Mon 13:00 UTC publish step picks up the artifact and
+    Confirm CI's Mon 18:00 UTC publish step picks up the artifact and
     the dashboard renders.
 11. **Delete the now-unused GitHub Secrets** (manually — only the user
     can do this, the GitHub UI doesn't expose a Terraform path):

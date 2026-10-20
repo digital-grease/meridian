@@ -153,6 +153,21 @@
     starts.
   </p>
   <dl class="metric-glossary">
+    <dt>2026-10-20 &middot; <code>qwen3.6:27b</code> added</dt>
+    <dd>A second local model from <code>2026-W43</code>, every week,
+      sampled alongside <code>llama3.2:3b</code> rather than replacing it,
+      so the noise-floor series continues unbroken. It is run from the
+      published 4-bit weights (Q4_K_M) pinned by digest, at temperature 1
+      and temperature 0 like the llama baseline (N = 25). It needs a newer
+      ollama than the one serving <code>llama3.2:3b</code>, and we do not
+      upgrade that one: a new inference engine can change a model&rsquo;s
+      outputs even when its weights are identical. So it runs on a second
+      engine, pinned to ollama 0.40.6. Its thinking is switched off. Left
+      on, it spent the whole 1024-token response limit on reasoning and
+      returned no answer, so unlike <code>claude-opus-5-5</code>, whose
+      thinking cannot be switched off, it answers directly.
+      <a href="/reports/2026-10-20-qwen-local-model/">Notice</a>.</dd>
+
     <dt>2026-10-06 &middot; <code>gpt-5.5</code> &rarr; <code>gpt-6-astra</code></dt>
     <dd>Overlap in <code>2026-W41</code>, which is the last
       <code>gpt-5.5</code> week and the first <code>gpt-6-astra</code>

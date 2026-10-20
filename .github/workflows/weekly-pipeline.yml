@@ -33,9 +33,13 @@ name: Weekly pipeline publish
 
 on:
   schedule:
-    # Mon 13:00 UTC = Mon 07:00 CDT / 06:00 CST. Buffers >=2h after the
-    # EC2 wrapper finishes and uploads (Mon ~04:30-05:30 local).
-    - cron: "0 13 * * 1"
+    # Mon 18:00 UTC = Mon 13:00 CDT / 12:00 CST. The run starts at 04:00
+    # America/Chicago (09:00 UTC in CDT, 10:00 UTC in CST), may start up
+    # to 3h late on scheduler retries (maximum_event_age_in_seconds in
+    # infra/terraform/ec2-cohabit/scheduler.tf), and takes about 3.5h
+    # since qwen3.6:27b joined in 2026-W43, so the latest normal finish
+    # is about 16:30 UTC. Was 13:00 until 2026-10-20, when runs took 1h.
+    - cron: "0 18 * * 1"
   workflow_dispatch:
     inputs:
       week:

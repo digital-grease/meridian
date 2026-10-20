@@ -55,6 +55,12 @@ class RunnerSpec(BaseModel):
     # match. Bare 64-char hex (no "sha256:" prefix) — that's the form
     # ollama's API emits.
     digest: str | None = None
+    # Optional reasoning switch, honoured by the ollama runner, which sends
+    # it as the request's `think` field. None leaves the field out, so the
+    # model runs at its default. A thinking-default model spends
+    # `num_predict` on reasoning before any answer, so a local thinking
+    # model that is meant to answer directly sets this to False.
+    think: bool | None = None
     # Optional inclusive bounds on the run LABELS this runner belongs to,
     # as ISO weeks ("2026-W41"). Cadence still applies inside them. They
     # exist so a model succession happens on schedule without anyone
@@ -281,6 +287,7 @@ def build_runners(config: PipelineConfig, *, week_id: str | None = None):
                 base_url=spec.base_url or "http://localhost:11434",
                 expected_digest=spec.digest,
                 max_tokens=spec.max_tokens,
+                think=spec.think,
             ))
         else:  # pragma: no cover
             raise ValueError(f"unknown provider: {spec.provider}")

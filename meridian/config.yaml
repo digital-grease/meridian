@@ -8,6 +8,7 @@
 # tier ladder and the rationale for this schedule.
 #
 #   Ollama:        every week         (free, local baseline)
+#                  llama3.2:3b, plus qwen3.6:27b from 2026-W43
 #   Claude Opus:   even ISO weeks     (claude-opus-5-5 from 2026-W42)
 #   OpenAI GPT:    odd ISO weeks      (gpt-6-astra from 2026-W41)
 #
@@ -58,6 +59,24 @@ runners:
     digest: "a80c4f17acd55265feec403c7aef86be0c25983ab279d83f3bcd3abbcb5b8b72"
     enabled: true
     cadence: every_week
+
+  # Second local model, added 2026-10 alongside (not instead of)
+  # llama3.2:3b. A current open-weight model, and Chinese-trained, which
+  # matters for the historical-contested axis. It needs a newer ollama
+  # than the 0.23.1 engine the llama baseline runs on, and upgrading that
+  # engine could move the baseline with identical weights, so it is
+  # served by a second, version-pinned engine on :11435
+  # (scripts/install-ollama-pinned.sh). Thinking is on by default for
+  # this model; it is switched off so that num_predict buys answer text,
+  # as it does for the llama baseline.
+  - provider: ollama
+    model_id: "qwen3.6:27b"
+    base_url: "http://127.0.0.1:11435"
+    digest: "bcbdbd4bcf86f2c4a56cd1698fb31f9434f7dd99752f71b636c750aaa67a49a5"
+    think: false
+    enabled: true
+    cadence: every_week
+    first_week: "2026-W43"
 
   # Frontier models, alternating to halve the monthly bill on the two
   # line items that dominate it.

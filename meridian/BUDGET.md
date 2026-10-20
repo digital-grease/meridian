@@ -37,6 +37,8 @@ what you expect the invoice to say.
 
 - Corpus: 30 prompts public
 - Ollama `llama3.2:3b`: every week (free, local baseline)
+- Ollama `qwen3.6:27b`: every week from 2026-W43 (free in API terms; about
+  3.3 GPU-hours a week on the cohabit instance, the long pole of the run)
 - Claude Opus 5.5: **even ISO weeks only**, from 2026-W42
 - GPT-6 Astra: **odd ISO weeks only**, from 2026-W41
 

@@ -132,6 +132,47 @@ check will pass. If they don't, **stop**: either the upstream model has
 been re-pushed, or you pulled a different tag — investigate before
 running the pipeline.
 
+### qwen3.6:27b on the pinned engine
+
+From 2026-W43 the roster has a second local model, `qwen3.6:27b`. It
+needs a newer ollama than the system engine above, and that engine is
+never upgraded: new kernels or a new sampler could move llama3.2:3b's
+outputs with byte-identical weights, which would put a step in the
+noise floor. So qwen runs on a second engine, ollama v0.40.6, installed
+by `scripts/install-ollama-pinned.sh` (bootstrap step 4b) as the
+`ollama-pinned` systemd unit on `127.0.0.1:11435`, with its own model
+store at `/data/meridian/ollama-models-pinned`.
+
+```bash
+sudo bash /data/meridian/repo/scripts/install-ollama-pinned.sh   # idempotent
+curl -s -X POST localhost:11435/api/pull -d '{"model":"qwen3.6:27b","stream":false}'
+curl -s localhost:11435/api/tags | python3 -c "
+import json, sys
+for m in json.load(sys.stdin)['models']:
+    print(m['name'], m['digest'])
+"
+```
+
+Check the digest against the qwen entry in `meridian/config.yaml` the
+same way. The model is 17.8 GB: check `df -h /data/meridian` first,
+which is meridian's own volume. (`df -h /data` shows specter's, and
+mixing them up filled the volume mid-run on 2026-10-20.) Never pull
+while a run is sampling.
+
+Measured on the A10G on 2026-10-20:
+
+- The engine serves this model one request at a time, and
+  `OLLAMA_NUM_PARALLEL` made no difference, at about 49 output tok/s.
+  750 samples a week take about 3.3 hours, which makes qwen the long
+  pole of the run.
+- A cold load (17 GB from gp3 into the GPU) took 140 to 228 s. The
+  runner loads the model in `prepare()` so the first requests do not
+  hit the per-request timeout.
+- Peak VRAM was 18.0 GB of 23 GB.
+- With thinking at the model's default, all 1024 tokens went to
+  reasoning and the answer was empty, so the runner sends
+  `think: false`.
+
 ## Step 6 — Smoke test the wrapper (manually, no Lambda)
 
 This bypasses the Lambda entirely; we run the wrapper directly to
@@ -276,9 +317,9 @@ only lever.
    no `--payload`: the handler logs the event but reads nothing from it,
    and on AWS CLI v2 a raw JSON payload needs
    `--cli-binary-format raw-in-base64-out` or the call fails outright.
-3. Watch the clock. The publish workflow reads S3 at 13:00 UTC and the
-   run takes 30-90 minutes, so a start after roughly 11:30 UTC will not
-   publish the same day. It is still worth running: re-trigger the
+3. Watch the clock. The publish workflow reads S3 at 18:00 UTC and the
+   run takes about 3.5 hours (qwen3.6:27b on the pinned engine is the long
+   pole), so a start after roughly 14:30 UTC will not publish the same day. It is still worth running: re-trigger the
    publish afterwards with `gh workflow run weekly-pipeline.yml -f week=<ISO week>`.
 4. If capacity does not return the same morning, the week is lost.
    Append a line for it to `data/gaps.jsonl` (`week_id`, `scope`,
@@ -737,7 +778,7 @@ this Sunday's check did not happen. Read
 `aws logs tail /aws/lambda/meridian-provider-probe --since 24h --region us-east-2`
 and run it by hand.
 
-## When a run finishes after 13:00 UTC
+## When a run finishes after 18:00 UTC
 
 The publish workflow reads S3 on a fixed schedule and does not come back
 later. A run that finishes after it has already gone red leaves a
@@ -746,7 +787,7 @@ and the dashboard silently keeps serving the previous week.
 
 This is not hypothetical and it is easy to miss: 2026-W33 sampled
 successfully at 16:31 UTC after capacity retries pushed the start to
-16:04, three hours after the 13:00 publish had already 404'd and filed
+16:04, three hours after the publish (then at 13:00 UTC) had already 404'd and filed
 its issue. The manifest sat unpublished for eight days while the failure
 looked identical to a week that produced no data at all.
 

@@ -30,10 +30,11 @@ SHIPPED_ROSTER = {
     "2026-W40": {"llama3.2:3b", "claude-opus-4-8", "claude-opus-5"},
     "2026-W41": {"llama3.2:3b", "gpt-5.5", "gpt-6-astra"},
     "2026-W42": {"llama3.2:3b", "claude-opus-4-8", "claude-opus-5", "claude-opus-5-5"},
-    "2026-W43": {"llama3.2:3b", "gpt-6-astra"},
-    "2026-W44": {"llama3.2:3b", "claude-opus-5-5"},
-    "2026-W45": {"llama3.2:3b", "gpt-6-astra"},
-    "2027-W02": {"llama3.2:3b", "claude-opus-5-5"},
+    # qwen3.6:27b joins the local roster from 2026-W43, next to llama3.2:3b.
+    "2026-W43": {"llama3.2:3b", "qwen3.6:27b", "gpt-6-astra"},
+    "2026-W44": {"llama3.2:3b", "qwen3.6:27b", "claude-opus-5-5"},
+    "2026-W45": {"llama3.2:3b", "qwen3.6:27b", "gpt-6-astra"},
+    "2027-W02": {"llama3.2:3b", "qwen3.6:27b", "claude-opus-5-5"},
 }
 
 
