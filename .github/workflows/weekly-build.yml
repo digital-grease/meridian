@@ -235,7 +235,12 @@ jobs:
             exit 1
           fi
           echo "using chromedriver: $CHROMEDRIVER_PATH"
-          npx --yes -p @axe-core/cli@4 axe \
+          # Exact versions, CLI and engine both. "@4" floated, and the
+          # axe-core 4.13 -> 4.14 release added a failing rule that broke
+          # deploys on 2026-10-18/19 with no site change. The CLI only
+          # pins the engine to ~4.14.0, so the engine is pinned beside it.
+          # Bump both together, deliberately, after a local axe run.
+          npx --yes -p @axe-core/cli@4.14.0 -p axe-core@4.14.0 axe \
             --chromedriver-path "$CHROMEDRIVER_PATH" \
             "$BASE/" \
             "$BASE/about/" \
