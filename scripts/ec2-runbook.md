@@ -262,6 +262,13 @@ SSM Session). If a run fails:
    `data/gaps.jsonl` (per the no-backfill policy), which the site
    renders under `/methodology/#data-gaps` and `/data/coverage/`.
 
+   A re-run samples only the missing pairs. It keeps samples the failed
+   run stored locally but never uploaded: the pre-run S3 sync goes
+   through `meridian.storage.raw_merge`, which never replaces a local
+   file with a shorter S3 copy. Set `WEEK=<label>` on any re-run that is
+   not on the Monday itself, because the default label is the ISO week of
+   yesterday and moves on at midnight UTC.
+
 ### The run stopped on its cost ceiling
 
 `run-weekly.sh` derives `--max-cost` from that week's roster rather than

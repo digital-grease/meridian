@@ -305,17 +305,38 @@ WEEK="${WEEK:-$(date -u --date='yesterday' +'%G-W%V')}"
 # source of truth. Without this sync, a freshly-provisioned host sees
 # no existing samples and the orchestrator's idempotency check would
 # resample everything — burning API budget on data that already exists.
+#
+# The sync goes into an empty staging directory, never straight into
+# data/raw/: `s3 sync` replaces any file whose size differs, so a local
+# file that grew after a run that died before uploading would be
+# overwritten by the smaller S3 copy (2026-W42, 2026-10-20: three files).
+# meridian.storage.raw_merge then copies in only what local lacks and
+# never replaces a local file that S3 does not fully contain. The staging
+# directory sits next to the repo, on the same volume, and outside
+# data/raw/, where any directory would be read as a week.
 S3_BUCKET="${MERIDIAN_S3_BUCKET:-}"
 S3_PREFIX="${MERIDIAN_S3_PREFIX:-meridian/}"
 if [ -n "$S3_BUCKET" ]; then
-  log "syncing s3://${S3_BUCKET}/${S3_PREFIX}raw/${WEEK}/ → data/raw/${WEEK}/"
+  log "syncing s3://${S3_BUCKET}/${S3_PREFIX}raw/${WEEK}/ → data/raw/${WEEK}/ (via staging)"
   mkdir -p "${REPO_DIR}/data/raw/${WEEK}"
-  if ! timeout "${S3_SYNC_TIMEOUT:-30m}" aws --region "$AWS_REGION" s3 sync \
+  # No `set -e` here: an unchecked mktemp failure (a full disk, as on
+  # 2026-10-20) would leave RAW_STAGE empty and point the sync at "/".
+  if ! RAW_STAGE=$(mktemp -d "${REPO_DIR%/*}/.raw-stage.XXXXXX") || [ ! -d "$RAW_STAGE" ]; then
+    log "WARN: could not create a raw staging directory; continuing with local raw only — orchestrator may resample"
+  elif timeout "${S3_SYNC_TIMEOUT:-30m}" aws --region "$AWS_REGION" s3 sync \
         "s3://${S3_BUCKET}/${S3_PREFIX}raw/${WEEK}/" \
-        "${REPO_DIR}/data/raw/${WEEK}/" \
+        "${RAW_STAGE}/" \
         --no-progress; then
+    if ! uv run python -m meridian.storage.raw_merge \
+          "$RAW_STAGE" "${REPO_DIR}/data/raw/${WEEK}"; then
+      log "WARN: raw merge failed; continuing with local raw only — orchestrator may resample"
+    fi
+  else
     log "WARN: s3 sync failed; continuing with local raw only — orchestrator may resample"
   fi
+  case "${RAW_STAGE:-}" in
+    "${REPO_DIR%/*}"/.raw-stage.*) rm -rf "$RAW_STAGE" ;;
+  esac
 else
   log "MERIDIAN_S3_BUCKET unset; skipping pre-run S3 sync (idempotency is host-local only)"
 fi
