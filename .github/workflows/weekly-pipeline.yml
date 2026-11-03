@@ -39,6 +39,9 @@ on:
     # infra/terraform/ec2-cohabit/scheduler.tf), and takes about 3.5h
     # since qwen3.6:27b joined in 2026-W43, so the latest normal finish
     # is about 16:30 UTC. Was 13:00 until 2026-10-20, when runs took 1h.
+    # GitHub often starts this hours late (4h on 2026-10-26, 6h13m on
+    # 2026-11-02), which can push it past midnight UTC into Tuesday; the
+    # "Resolve target week" step below is written to survive that.
     - cron: "0 18 * * 1"
   workflow_dispatch:
     inputs:
@@ -92,9 +95,18 @@ jobs:
           if [ -n "${{ inputs.week }}" ]; then
             echo "week=${{ inputs.week }}" >> "$GITHUB_OUTPUT"
           else
-            # Default to the previous ISO week — matches the EC2
-            # wrapper's `date -u --date='yesterday' +'%G-W%V'` calc.
-            echo "week=$(date -u --date='yesterday' +'%G-W%V')" >> "$GITHUB_OUTPUT"
+            # Default to the ISO week before the one this job runs in.
+            # The EC2 wrapper labels Monday's run with
+            # `date -u --date='yesterday' +'%G-W%V'`, i.e. Sunday, the
+            # week that just ended. Do NOT copy that rule here: GitHub
+            # starts scheduled jobs late, and on 2026-11-02 the 18:00 UTC
+            # cron began at 00:13 UTC Tuesday, where "yesterday" is Monday
+            # of the NEW week. It asked S3 for 2026-W45 instead of
+            # 2026-W44 and failed on the 404 (issue #47). Seven days back
+            # from any day of an ISO week lands in the previous ISO week,
+            # so this equals the wrapper's label on Monday and stays right
+            # however late in the week the job starts.
+            echo "week=$(date -u --date='7 days ago' +'%G-W%V')" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Configure AWS credentials (OIDC)
